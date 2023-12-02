@@ -1,0 +1,69 @@
+linters-settings:
+  modules-download-mode: vendor
+  dupl:
+    threshold: 400
+  funlen:
+    lines: 400
+    statements: 200
+  gocritic:
+    enabled-tags:
+      - performance
+    disabled-tags:
+      - diagnostic
+      - experimental
+      - opinionated
+      - style
+  misspell:
+    locale: US
+  revive:
+    rules:
+      - name: blank-imports
+      - name: context-as-argument
+      - name: context-keys-type
+      - name: dot-imports
+      - name: error-return
+      - name: error-naming
+      - name: exported
+      - name: var-naming
+      - name: var-declaration
+      - name: package-comments
+      - name: range
+      - name: receiver-naming
+      - name: time-naming
+      - name: unexported-return
+      - name: errorf
+      - name: empty-block
+      - name: unreachable-code
+      - name: redefines-builtin-id
+
+linters:
+  disable-all: true
+  enable:
+    - bodyclose
+    - dupl
+    - errcheck
+    - exportloopref
+    - funlen
+    - gocritic
+    - gofmt
+    - goimports
+    - govet
+    - ineffassign
+    - misspell
+    - nakedret
+    - revive
+    - staticcheck
+    - typecheck
+    - unconvert
+    - unparam
+    - unused
+    - stylecheck
+    - gosimple
+    - whitespace
+
+run:
+  go: 1.21
+  timeout: 5m
+
+severity:
+  default-severity: error

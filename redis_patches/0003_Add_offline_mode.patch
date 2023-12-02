@@ -1,0 +1,132 @@
+diff --git a/src/config.c b/src/config.c
+index 1d720132a..a7231868c 100644
+--- a/src/config.c
++++ b/src/config.c
+@@ -628,6 +628,8 @@ void loadServerConfigFromString(char *config) {
+     if (server.config_hz < CONFIG_MIN_HZ) server.config_hz = CONFIG_MIN_HZ;
+     if (server.config_hz > CONFIG_MAX_HZ) server.config_hz = CONFIG_MAX_HZ;
+ 
++    server.offline_initial = server.offline;
++
+     sdsfreesplitres(lines,totlines);
+     reading_config_file = 0;
+     return;
+@@ -3066,6 +3068,31 @@ static int applyClientMaxMemoryUsage(const char **err) {
+     return 1;
+ }
+ 
++static int setOfflineMode(standardConfig *config, sds *argv, int argc, const char **err) {
++    UNUSED(config);
++    if (argc != 1) {
++        *err = "wrong number of arguments";
++        return 0;
++    }
++    int offline = yesnotoi(argv[0]);
++    if (offline == -1) {
++        *err = "argument must be 'yes' or 'no'";
++        return 0;
++    }
++    server.offline = offline;
++    return 1;
++}
++
++static sds getOfflineMode(standardConfig *config) {
++    UNUSED(config);
++    return sdsnew(server.offline ? "yes" : "no");
++}
++
++static void rewriteConfigOfflineMode(standardConfig *config, const char *name, struct rewriteConfigState *state) {
++    UNUSED(config);
++    rewriteConfigYesNoOption(state, name, server.offline_initial, 0);
++}
++
+ standardConfig static_configs[] = {
+     /* Bool configs */
+     createBoolConfig("rdbchecksum", NULL, IMMUTABLE_CONFIG, server.rdb_checksum, 1, NULL, NULL),
+@@ -3281,6 +3308,7 @@ standardConfig static_configs[] = {
+     createSpecialConfig("bind", NULL, MODIFIABLE_CONFIG | MULTI_ARG_CONFIG, setConfigBindOption, getConfigBindOption, rewriteConfigBindOption, applyBind),
+     createSpecialConfig("replicaof", "slaveof", IMMUTABLE_CONFIG | MULTI_ARG_CONFIG, setConfigReplicaOfOption, getConfigReplicaOfOption, rewriteConfigReplicaOfOption, NULL),
+     createSpecialConfig("latency-tracking-info-percentiles", NULL, MODIFIABLE_CONFIG | MULTI_ARG_CONFIG, setConfigLatencyTrackingInfoPercentilesOutputOption, getConfigLatencyTrackingInfoPercentilesOutputOption, rewriteConfigLatencyTrackingInfoPercentilesOutputOption, NULL),
++    createSpecialConfig("offline", NULL, MODIFIABLE_CONFIG, setOfflineMode, getOfflineMode, rewriteConfigOfflineMode, applyBind),
+ 
+     /* NULL Terminator, this is dropped when we convert to the runtime array. */
+     {NULL}
+diff --git a/src/server.c b/src/server.c
+index 438325f28..2aa63df77 100644
+--- a/src/server.c
++++ b/src/server.c
+@@ -2447,11 +2447,17 @@ int listenToPort(connListener *sfd) {
+     int j;
+     int port = sfd->port;
+     char **bindaddr = sfd->bindaddr;
++    int bindaddr_count = sfd->bindaddr_count;
++    char *offline_bindaddr[2] = {"127.0.0.1", "-::1"};
+ 
++    if (server.offline && (port == server.port || port == server.tls_port)) {
++        bindaddr_count = 2;
++        bindaddr = offline_bindaddr;
++    }
+     /* If we have no bind address, we don't listen on a TCP socket */
+-    if (sfd->bindaddr_count == 0) return C_OK;
++    if (bindaddr_count == 0) return C_OK;
+ 
+-    for (j = 0; j < sfd->bindaddr_count; j++) {
++    for (j = 0; j < bindaddr_count; j++) {
+         char* addr = bindaddr[j];
+         int optional = *addr == '-';
+         if (optional) addr++;
+diff --git a/src/server.h b/src/server.h
+index be2405170..05bdf5c0c 100644
+--- a/src/server.h
++++ b/src/server.h
+@@ -1908,6 +1908,9 @@ struct redisServer {
+     list *clients_waiting_acks;         /* Clients waiting in WAIT or WAITAOF. */
+     int get_ack_from_slaves;            /* If true we send REPLCONF GETACK. */
+     int repl_paused;                    /* If true we don't try to connect to master */
++    /* Offline mode */
++    int offline;                        /* If true only localhost connectiona are accepted */
++    int offline_initial;                /* Initial state of offline mode (from config) */
+     /* Limits */
+     unsigned int maxclients;            /* Max number of simultaneous clients */
+     unsigned long long maxmemory;   /* Max number of memory bytes to use */
+diff --git a/tests/test_helper.tcl b/tests/test_helper.tcl
+index ad7707a29..a5447701e 100644
+--- a/tests/test_helper.tcl
++++ b/tests/test_helper.tcl
+@@ -104,6 +104,7 @@ set ::all_tests {
+     unit/cluster/links
+     unit/cluster/cluster-response-tls
+     integration/yandex-cloud-patches
++    unit/yandex-cloud-patches
+ }
+ # Index to the next test to run in the ::all_tests list.
+ set ::next_test 0
+diff --git a/tests/unit/yandex-cloud-patches.tcl b/tests/unit/yandex-cloud-patches.tcl
+new file mode 100644
+index 000000000..b8c3ba453
+--- /dev/null
++++ b/tests/unit/yandex-cloud-patches.tcl
+@@ -0,0 +1,23 @@
++start_server {config "minimal.conf" tags {"external:skip"}} {
++    test {Offline mode works as expected} {
++        # Get a non-loopback address of this instance for this test.
++        set myaddr [get_nonloopback_addr]
++        if {$myaddr != "" && ![string match {127.*} $myaddr]} {
++            # Disable protected mode
++            assert_equal {OK} [r config set protected-mode no]
++            # Enable offline mode
++            assert_equal {OK} [r config set offline yes]
++            catch {set r2 [get_nonloopback_client]} err
++            assert_match {*connection refused*} $err
++
++            # CONFIG REWRITE does not persist runtime change of offline mode
++            r CONFIG REWRITE
++            assert_equal 0 [count_message_lines [srv 0 config_file] offline]
++
++            # Disable offline mode
++            assert_equal {OK} [r config set offline no]
++            set r2 [get_nonloopback_client]
++            assert_equal {PONG} [$r2 ping]
++        }
++    }
++}

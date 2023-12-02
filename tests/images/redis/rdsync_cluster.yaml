@@ -1,0 +1,21 @@
+mode: Cluster
+loglevel: Debug
+pprof_addr: ":8081"
+info_file: /var/run/rdsync.info
+maintenance_file: /var/run/rdsync.maintenance
+daemon_lock_file: /var/run/rdsync.lock
+redis:
+  auth_password: functestpassword
+  restart_command: supervisorctl restart redis
+zookeeper:
+  session_timeout: 3s
+  namespace: /test
+  hosts: [ zoo1:2281, zoo2:2281, zoo3:2281 ]
+  auth: true
+  username: testuser
+  password: testpassword123
+  use_ssl: true
+  keyfile: /etc/zk-ssl/server.key
+  certfile: /etc/zk-ssl/server.crt
+  ca_cert: /etc/zk-ssl/ca.cert.pem
+  verify_certs: true

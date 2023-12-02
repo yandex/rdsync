@@ -1,0 +1,107 @@
+version: '2.3'
+
+services:
+  zoo1:
+    build:
+      context: ./zookeeper
+    hostname: zoo1
+    ports:
+      - 2181
+      - 2281
+      - 2888
+      - 3888
+    privileged: true
+    environment:
+      ZK_MYID: 1
+    networks:
+      rdsync_net:
+        ipv4_address: 192.168.234.10
+
+  zoo2:
+    build:
+      context: ./zookeeper
+    hostname: zoo2
+    ports:
+      - 2181
+      - 2281
+      - 2888
+      - 3888
+    privileged: true
+    environment:
+      ZK_MYID: 2
+    networks:
+      rdsync_net:
+        ipv4_address: 192.168.234.11
+
+  zoo3:
+    build:
+      context: ./zookeeper
+    hostname: zoo3
+    ports:
+      - 2181
+      - 2281
+      - 2888
+      - 3888
+    privileged: true
+    environment:
+      ZK_MYID: 3
+    networks:
+      rdsync_net:
+        ipv4_address: 192.168.234.12
+
+  redis1:
+    build:
+      context: ./redis
+    hostname: redis1
+    ports:
+      - 6379
+      - 26379
+      - 8081
+    privileged: true
+    networks:
+      rdsync_net:
+        ipv4_address: 192.168.234.13
+
+  redis2:
+    build:
+      context: ./redis
+    hostname: redis2
+    ports:
+      - 6379
+      - 26379
+      - 8081
+    privileged: true
+    networks:
+      rdsync_net:
+        ipv4_address: 192.168.234.14
+
+  redis3:
+    build:
+      context: ./redis
+    hostname: redis3
+    ports:
+      - 6379
+      - 26379
+      - 8081
+    privileged: true
+    networks:
+      rdsync_net:
+        ipv4_address: 192.168.234.15
+
+  jepsen:
+    build:
+      context: ./jepsen
+    hostname: jepsen
+    privileged: true
+    networks:
+      rdsync_net:
+        ipv4_address: 192.168.234.16
+
+networks:
+  rdsync_net:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+       - subnet: 192.168.234.0/24
+         gateway: 192.168.234.1

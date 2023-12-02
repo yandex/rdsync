@@ -1,0 +1,48 @@
+diff --git a/src/cluster.c b/src/cluster.c
+index 6b34b72c2..b01695db7 100644
+--- a/src/cluster.c
++++ b/src/cluster.c
+@@ -6282,12 +6282,6 @@ NULL
+             return;
+         }
+ 
+-        /* Can't replicate a slave. */
+-        if (nodeIsSlave(n)) {
+-            addReplyError(c,"I can only replicate a master, not a replica.");
+-            return;
+-        }
+-
+         /* If the instance is currently a master, it should have no assigned
+          * slots nor keys to accept to replicate some other node.
+          * Slaves can switch to another master without issues. */
+diff --git a/tests/cluster/tests/99-yandex-cloud-patches.tcl b/tests/cluster/tests/99-yandex-cloud-patches.tcl
+index 6d0c1007b..3a0d580d9 100644
+--- a/tests/cluster/tests/99-yandex-cloud-patches.tcl
++++ b/tests/cluster/tests/99-yandex-cloud-patches.tcl
+@@ -13,8 +13,8 @@ proc kill_clustered_redis {id} {
+     set ::pids [lsearch -all -inline -not -exact $::pids $pid]
+ }
+ 
+-test "Create a 2 node cluster (1 master and 1 replica)" {
+-    create_cluster 1 1
++test "Create a 3 node cluster (1 master and 2 replicas)" {
++    create_cluster 1 2
+ }
+ 
+ test "Cluster is up" {
+@@ -38,6 +38,15 @@ test "Replication pause on instance #1 works" {
+     }
+ }
+ 
++test "Replication cascade with paused instance works" {
++    assert {[R 2 cluster replicate [R 1 CLUSTER MYID]] eq {OK}}
++    wait_for_condition 1000 50 {
++        [RI 2 master_link_status] eq {up}
++    } else {
++        fail "Instance #2 master link status is not up"
++    }
++}
++
+ test "Replication resume on instance #1 works" {
+     assert {[R 1 config set repl-paused no] eq {OK}}
+     wait_for_condition 1000 50 {

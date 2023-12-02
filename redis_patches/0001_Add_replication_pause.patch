@@ -1,0 +1,217 @@
+diff --git a/src/config.c b/src/config.c
+index b26704283..1d720132a 100644
+--- a/src/config.c
++++ b/src/config.c
+@@ -2525,6 +2525,25 @@ static int updateAofAutoGCEnabled(const char **err) {
+     return 1;
+ }
+ 
++static int updateReplPaused(const char **err) {
++    UNUSED(err);
++
++    if (server.repl_paused) {
++        if (server.masterhost) {
++            if (server.repl_state == REPL_STATE_CONNECTING || slaveIsInHandshakeState() ||
++                    server.repl_state == REPL_STATE_TRANSFER) {
++                cancelReplicationHandshake(0);
++            }
++            if (server.master) {
++                freeClient(server.master);
++            }
++            server.repl_state = REPL_STATE_CONNECT;
++        }
++    }
++
++    return 1;
++}
++
+ static int updateSighandlerEnabled(const char **err) {
+     UNUSED(err);
+     if (server.crashlog_enabled)
+@@ -3095,6 +3114,7 @@ standardConfig static_configs[] = {
+     createBoolConfig("latency-tracking", NULL, MODIFIABLE_CONFIG, server.latency_tracking_enabled, 1, NULL, NULL),
+     createBoolConfig("aof-disable-auto-gc", NULL, MODIFIABLE_CONFIG | HIDDEN_CONFIG, server.aof_disable_auto_gc, 0, NULL, updateAofAutoGCEnabled),
+     createBoolConfig("replica-ignore-disk-write-errors", NULL, MODIFIABLE_CONFIG, server.repl_ignore_disk_write_error, 0, NULL, NULL),
++    createBoolConfig("repl-paused", NULL, MODIFIABLE_CONFIG, server.repl_paused, 0, NULL, updateReplPaused),
+ 
+     /* String Configs */
+     createStringConfig("aclfile", NULL, IMMUTABLE_CONFIG, ALLOW_EMPTY_STRING, server.acl_filename, "", NULL, NULL),
+diff --git a/src/replication.c b/src/replication.c
+index fbd9b0a99..47172dba3 100644
+--- a/src/replication.c
++++ b/src/replication.c
+@@ -47,7 +47,6 @@ void replicationResurrectCachedMaster(connection *conn);
+ void replicationSendAck(void);
+ int replicaPutOnline(client *slave);
+ void replicaStartCommandStream(client *slave);
+-int cancelReplicationHandshake(int reconnect);
+ 
+ /* We take a global flag to remember if this instance generated an RDB
+  * because of replication, so that we can remove the RDB file in case
+@@ -970,7 +969,7 @@ void syncCommand(client *c) {
+ 
+     /* Refuse SYNC requests if we are a slave but the link with our master
+      * is not ok... */
+-    if (server.masterhost && server.repl_state != REPL_STATE_CONNECTED) {
++    if (server.masterhost && server.repl_state != REPL_STATE_CONNECTED && !server.repl_paused) {
+         addReplyError(c,"-NOMASTERLINK Can't SYNC while not connected with my master");
+         return;
+     }
+@@ -3743,7 +3742,7 @@ void replicationCron(void) {
+     }
+ 
+     /* Check if we should connect to a MASTER */
+-    if (server.repl_state == REPL_STATE_CONNECT) {
++    if (server.repl_state == REPL_STATE_CONNECT && !server.repl_paused) {
+         serverLog(LL_NOTICE,"Connecting to MASTER %s:%d",
+             server.masterhost, server.masterport);
+         connectWithMaster();
+diff --git a/src/server.h b/src/server.h
+index cb555031e..be2405170 100644
+--- a/src/server.h
++++ b/src/server.h
+@@ -1907,6 +1907,7 @@ struct redisServer {
+     /* Synchronous replication. */
+     list *clients_waiting_acks;         /* Clients waiting in WAIT or WAITAOF. */
+     int get_ack_from_slaves;            /* If true we send REPLCONF GETACK. */
++    int repl_paused;                    /* If true we don't try to connect to master */
+     /* Limits */
+     unsigned int maxclients;            /* Max number of simultaneous clients */
+     unsigned long long maxmemory;   /* Max number of memory bytes to use */
+@@ -2826,6 +2827,8 @@ void clearFailoverState(void);
+ void updateFailoverStatus(void);
+ void abortFailover(const char *err);
+ const char *getFailoverStateString(void);
++int cancelReplicationHandshake(int reconnect);
++int slaveIsInHandshakeState(void);
+ 
+ /* Generic persistence functions */
+ void startLoadingFile(size_t size, char* filename, int rdbflags);
+diff --git a/tests/cluster/tests/99-yandex-cloud-patches.tcl b/tests/cluster/tests/99-yandex-cloud-patches.tcl
+new file mode 100644
+index 000000000..6d0c1007b
+--- /dev/null
++++ b/tests/cluster/tests/99-yandex-cloud-patches.tcl
+@@ -0,0 +1,48 @@
++# Test Yandex Cloud patches on cluster
++
++source "../tests/includes/init-tests.tcl"
++
++proc kill_clustered_redis {id} {
++    set pid [get_instance_attrib redis $id pid]
++
++    stop_instance $pid
++    set_instance_attrib redis $id pid -1
++    set_instance_attrib redis $id link you_tried_to_talk_with_killed_instance
++
++    # Remove the PID from the list of pids to kill at exit.
++    set ::pids [lsearch -all -inline -not -exact $::pids $pid]
++}
++
++test "Create a 2 node cluster (1 master and 1 replica)" {
++    create_cluster 1 1
++}
++
++test "Cluster is up" {
++    assert_cluster_state ok
++}
++
++test "Instance #1 synced with the master" {
++    wait_for_condition 1000 50 {
++        [RI 1 master_link_status] eq {up}
++    } else {
++        fail "Instance #1 master link status is not up"
++    }
++}
++
++test "Replication pause on instance #1 works" {
++    assert {[R 1 config set repl-paused yes] eq {OK}}
++    wait_for_condition 1000 50 {
++        [RI 1 master_link_status] eq {down}
++    } else {
++        fail "Instance #1 master link status is not down"
++    }
++}
++
++test "Replication resume on instance #1 works" {
++    assert {[R 1 config set repl-paused no] eq {OK}}
++    wait_for_condition 1000 50 {
++        [RI 1 master_link_status] eq {up}
++    } else {
++        fail "Instance #1 master link status is not up"
++    }
++}
+diff --git a/tests/integration/yandex-cloud-patches.tcl b/tests/integration/yandex-cloud-patches.tcl
+new file mode 100644
+index 000000000..a2c9bb949
+--- /dev/null
++++ b/tests/integration/yandex-cloud-patches.tcl
+@@ -0,0 +1,56 @@
++start_server {tags {"repl network external:skip"}} {
++    set slave [srv 0 client]
++    set slave_host [srv 0 host]
++    set slave_port [srv 0 port]
++    start_server {} {
++        set master_host [srv 0 host]
++        set master_port [srv 0 port]
++
++        # Start the replication process...
++        $slave replicaof $master_host $master_port
++
++        test {Replication pause works} {
++            wait_for_condition 50 1000 {
++                [lindex [$slave role] 0] eq {slave} &&
++                [string match {*master_link_status:up*} [$slave info replication]]
++            } else {
++                fail "Replication did not start"
++            }
++
++            $slave config set repl-paused yes
++
++            wait_for_condition 50 1000 {
++                [lindex [$slave role] 0] eq {slave} &&
++                [string match {*master_link_status:down*} [$slave info replication]]
++            } else {
++                fail "Replication did not enter paused state"
++            }
++        }
++
++        start_server {} {
++            set cascade_slave [srv 0 client]
++
++            $cascade_slave replicaof $slave_host $slave_port
++
++            test {Cascade replication from paused slave works} {
++                wait_for_condition 50 1000 {
++                    [lindex [$cascade_slave role] 0] eq {slave} &&
++                    [string match {*master_link_status:up*} [$cascade_slave info replication]]
++                } else {
++                    fail "Replication did not start"
++                }
++            }
++        }
++
++        test {Replication resume works} {
++            $slave config set repl-paused no
++
++            wait_for_condition 50 1000 {
++                [lindex [$slave role] 0] eq {slave} &&
++                [string match {*master_link_status:up*} [$slave info replication]]
++            } else {
++                fail "Replication did not start after pause"
++            }
++        }
++    }
++}
+diff --git a/tests/test_helper.tcl b/tests/test_helper.tcl
+index 21fa35d4d..ad7707a29 100644
+--- a/tests/test_helper.tcl
++++ b/tests/test_helper.tcl
+@@ -103,6 +103,7 @@ set ::all_tests {
+     unit/cluster/slot-ownership
+     unit/cluster/links
+     unit/cluster/cluster-response-tls
++    integration/yandex-cloud-patches
+ }
+ # Index to the next test to run in the ::all_tests list.
+ set ::next_test 0

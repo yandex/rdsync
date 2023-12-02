@@ -1,0 +1,483 @@
+diff --git a/src/commands.def b/src/commands.def
+index 10fbd9f4a..ce071e85a 100644
+--- a/src/commands.def
++++ b/src/commands.def
+@@ -2703,6 +2703,26 @@ struct COMMAND_ARG WAITAOF_Args[] = {
+ {MAKE_ARG("timeout",ARG_TYPE_INTEGER,-1,NULL,NULL,NULL,CMD_ARG_NONE,0,NULL)},
+ };
+ 
++/********** WAITQUORUM ********************/
++
++#ifndef SKIP_CMD_HISTORY_TABLE
++/* WAITQUORUM history */
++#define WAITQUORUM_History NULL
++#endif
++
++#ifndef SKIP_CMD_TIPS_TABLE
++/* WAITQUORUM tips */
++const char *WAITQUORUM_Tips[] = {
++"request_policy:all_shards",
++"response_policy:agg_min",
++};
++#endif
++
++#ifndef SKIP_CMD_KEY_SPECS_TABLE
++/* WAITQUORUM key specs */
++#define WAITQUORUM_Keyspecs NULL
++#endif
++
+ /********** GEOADD ********************/
+ 
+ #ifndef SKIP_CMD_HISTORY_TABLE
+@@ -10688,6 +10708,7 @@ struct COMMAND_STRUCT redisCommandTable[] = {
+ {MAKE_CMD("unlink","Asynchronously deletes one or more keys.","O(1) for each key removed regardless of its size. Then the command does O(N) work in a different thread in order to reclaim memory, where N is the number of allocations the deleted objects where composed of.","4.0.0",CMD_DOC_NONE,NULL,NULL,"generic",COMMAND_GROUP_GENERIC,UNLINK_History,0,UNLINK_Tips,2,unlinkCommand,-2,CMD_WRITE|CMD_FAST,ACL_CATEGORY_KEYSPACE,UNLINK_Keyspecs,1,NULL,1),.args=UNLINK_Args},
+ {MAKE_CMD("wait","Blocks until the asynchronous replication of all preceding write commands sent by the connection is completed.","O(1)","3.0.0",CMD_DOC_NONE,NULL,NULL,"generic",COMMAND_GROUP_GENERIC,WAIT_History,0,WAIT_Tips,2,waitCommand,3,0,ACL_CATEGORY_CONNECTION,WAIT_Keyspecs,0,NULL,2),.args=WAIT_Args},
+ {MAKE_CMD("waitaof","Blocks until all of the preceding write commands sent by the connection are written to the append-only file of the master and/or replicas.","O(1)","7.2.0",CMD_DOC_NONE,NULL,NULL,"generic",COMMAND_GROUP_GENERIC,WAITAOF_History,0,WAITAOF_Tips,2,waitaofCommand,4,CMD_NOSCRIPT,ACL_CATEGORY_CONNECTION,WAITAOF_Keyspecs,0,NULL,3),.args=WAITAOF_Args},
++{MAKE_CMD("waitquorum","Blocks until the asynchronous replication of all preceding write commands sent by the connection is completed on replicas quorum.","O(1)","6.2.0",CMD_DOC_NONE,NULL,NULL,"generic",COMMAND_GROUP_GENERIC,WAITQUORUM_History,0,WAITQUORUM_Tips,2,waitquorumCommand,1,0,ACL_CATEGORY_CONNECTION,WAITQUORUM_Keyspecs,0,NULL,0)},
+ /* geo */
+ {MAKE_CMD("geoadd","Adds one or more members to a geospatial index. The key is created if it doesn't exist.","O(log(N)) for each item added, where N is the number of elements in the sorted set.","3.2.0",CMD_DOC_NONE,NULL,NULL,"geo",COMMAND_GROUP_GEO,GEOADD_History,1,GEOADD_Tips,0,geoaddCommand,-5,CMD_WRITE|CMD_DENYOOM,ACL_CATEGORY_GEO,GEOADD_Keyspecs,1,NULL,4),.args=GEOADD_Args},
+ {MAKE_CMD("geodist","Returns the distance between two members of a geospatial index.","O(1)","3.2.0",CMD_DOC_NONE,NULL,NULL,"geo",COMMAND_GROUP_GEO,GEODIST_History,0,GEODIST_Tips,0,geodistCommand,-4,CMD_READONLY,ACL_CATEGORY_GEO,GEODIST_Keyspecs,1,NULL,4),.args=GEODIST_Args},
+diff --git a/src/commands/waitquorum.json b/src/commands/waitquorum.json
+new file mode 100644
+index 000000000..dca11ab67
+--- /dev/null
++++ b/src/commands/waitquorum.json
+@@ -0,0 +1,24 @@
++{
++    "WAITQUORUM": {
++        "summary": "Blocks until the asynchronous replication of all preceding write commands sent by the connection is completed on replicas quorum.",
++        "complexity": "O(1)",
++        "group": "generic",
++        "since": "6.2.0",
++        "arity": 1,
++        "function": "waitquorumCommand",
++        "command_flags": [
++        ],
++        "acl_categories": [
++            "CONNECTION"
++        ],
++        "command_tips": [
++            "REQUEST_POLICY:ALL_SHARDS",
++            "RESPONSE_POLICY:AGG_MIN"
++        ],
++        "reply_schema": {
++            "type": "integer",
++            "description": "The number of replicas reached by all the writes performed in the context of the current connection.",
++            "minimum": 0
++        }
++    }
++}
+diff --git a/src/config.c b/src/config.c
+index a7231868c..60e197c36 100644
+--- a/src/config.c
++++ b/src/config.c
+@@ -3093,6 +3093,78 @@ static void rewriteConfigOfflineMode(standardConfig *config, const char *name, s
+     rewriteConfigYesNoOption(state, name, server.offline_initial, 0);
+ }
+ 
++static int setConfigQuorumReplicasOption(standardConfig *config, sds *argv, int argc, const char **err) {
++    UNUSED(config);
++    int j;
++    dictRelease(server.quorum_replicas);
++    server.quorum_replicas = dictCreate(&stringSetDictType);
++
++    for (j = 0; j < argc; j++) {
++        sds quorum_replica = sdsnew(argv[j]);
++        if (dictAdd(server.quorum_replicas, quorum_replica, NULL) == DICT_ERR) {
++            sdsfree(quorum_replica);
++            *err = "Unable to set quorum replicas.";
++            return 0;
++        }
++    }
++
++    updateQuorumReplicas();
++
++    return 1;
++}
++
++static sds getConfigQuorumReplicasOption(standardConfig *config) {
++    UNUSED(config);
++    sds ret = sdsempty();
++    unsigned long counter = 0;
++    dictIterator *di;
++    dictEntry *de;
++
++    di = dictGetIterator(server.quorum_replicas);
++    while ((de = dictNext(di)) != NULL) {
++        ret = sdscatsds(ret, dictGetKey(de));
++        counter++;
++        if (counter < dictSize(server.quorum_replicas)) {
++            ret = sdscat(ret, " ");
++        }
++    }
++    dictReleaseIterator(di);
++
++    return ret;
++}
++
++static void rewriteConfigQuorumReplicasOption(standardConfig *config, const char *name, struct rewriteConfigState *state) {
++    UNUSED(config);
++    sds line;
++    sds replicas = sdsempty();
++    unsigned long counter = 0;
++    dictIterator *di;
++    dictEntry *de;
++
++    if (dictSize(server.quorum_replicas) == 0) {
++        rewriteConfigMarkAsProcessed(state, name);
++        sdsfree(replicas);
++        return;
++    }
++
++    di = dictGetIterator(server.quorum_replicas);
++    while ((de = dictNext(di)) != NULL) {
++        replicas = sdscatsds(replicas, dictGetKey(de));
++        counter++;
++        if (counter < dictSize(server.quorum_replicas)) {
++            replicas = sdscat(replicas, " ");
++        }
++    }
++    dictReleaseIterator(di);
++
++    line = sdsnew(name);
++    line = sdscatlen(line, " ", 1);
++    line = sdscatsds(line, replicas);
++    sdsfree(replicas);
++
++    rewriteConfigRewriteLine(state, name, line, 1);
++}
++
+ standardConfig static_configs[] = {
+     /* Bool configs */
+     createBoolConfig("rdbchecksum", NULL, IMMUTABLE_CONFIG, server.rdb_checksum, 1, NULL, NULL),
+@@ -3309,6 +3381,7 @@ standardConfig static_configs[] = {
+     createSpecialConfig("replicaof", "slaveof", IMMUTABLE_CONFIG | MULTI_ARG_CONFIG, setConfigReplicaOfOption, getConfigReplicaOfOption, rewriteConfigReplicaOfOption, NULL),
+     createSpecialConfig("latency-tracking-info-percentiles", NULL, MODIFIABLE_CONFIG | MULTI_ARG_CONFIG, setConfigLatencyTrackingInfoPercentilesOutputOption, getConfigLatencyTrackingInfoPercentilesOutputOption, rewriteConfigLatencyTrackingInfoPercentilesOutputOption, NULL),
+     createSpecialConfig("offline", NULL, MODIFIABLE_CONFIG, setOfflineMode, getOfflineMode, rewriteConfigOfflineMode, applyBind),
++    createSpecialConfig("quorum-replicas", NULL, MODIFIABLE_CONFIG | MULTI_ARG_CONFIG, setConfigQuorumReplicasOption, getConfigQuorumReplicasOption, rewriteConfigQuorumReplicasOption, NULL),
+ 
+     /* NULL Terminator, this is dropped when we convert to the runtime array. */
+     {NULL}
+diff --git a/src/networking.c b/src/networking.c
+index 7696e8c28..82c6f2b97 100644
+--- a/src/networking.c
++++ b/src/networking.c
+@@ -171,6 +171,7 @@ client *createClient(connection *conn) {
+     c->duration = 0;
+     clientSetDefaultAuth(c);
+     c->replstate = REPL_STATE_NONE;
++    c->quorum = 0;
+     c->repl_start_cmd_stream_on_ack = 0;
+     c->reploff = 0;
+     c->read_reploff = 0;
+diff --git a/src/replication.c b/src/replication.c
+index 47172dba3..6bfb21ef4 100644
+--- a/src/replication.c
++++ b/src/replication.c
+@@ -1285,7 +1285,8 @@ void replconfCommand(client *c) {
+  * It does a few things:
+  * 1) Put the slave in ONLINE state.
+  * 2) Update the count of "good replicas".
+- * 3) Trigger the module event.
++ * 3) Update the quorum replicas state
++ * 4) Trigger the module event.
+  *
+  * the return value indicates that the replica should be disconnected.
+  * */
+@@ -1302,6 +1303,7 @@ int replicaPutOnline(client *slave) {
+     slave->repl_ack_time = server.unixtime; /* Prevent false timeout. */
+ 
+     refreshGoodSlavesCount();
++    updateQuorumReplicas();
+     /* Fire the replica change modules event. */
+     moduleFireServerEvent(REDISMODULE_EVENT_REPLICA_CHANGE,
+                           REDISMODULE_SUBEVENT_REPLICA_CHANGE_ONLINE,
+@@ -3523,6 +3525,23 @@ int replicationCountAOFAcksByOffset(long long offset) {
+     return count;
+ }
+ 
++/* Return the number of quorum replicas that already acknowledged the specified
++ * replication offset being AOF fsynced. */
++int replicationCountQuorumAcksByOffset(long long offset) {
++    listIter li;
++    listNode *ln;
++    int count = 0;
++
++    listRewind(server.slaves,&li);
++    while((ln = listNext(&li))) {
++        client *slave = ln->value;
++
++        if (slave->replstate != SLAVE_STATE_ONLINE || slave->quorum != 1) continue;
++        if (slave->repl_ack_off >= offset) count++;
++    }
++    return count;
++}
++
+ /* WAIT for N replicas to acknowledge the processing of our latest
+  * write command (and all the previous commands). */
+ void waitCommand(client *c) {
+@@ -3557,6 +3576,62 @@ void waitCommand(client *c) {
+     replicationRequestAckFromSlaves();
+ }
+ 
++/* WAITQUORUM for min-replicas-to-write quorum replicas to acknowledge the processing of our latest
++ * write command (and all the previous commands). */
++void waitquorumCommand(client *c) {
++    long ackreplicas;
++    long long offset = c->woff;
++
++    if (server.masterhost) {
++        addReplyError(c,"WAITQUORUM cannot be used with replica instances. Please also note that since Redis 4.0 if a replica is configured to be writable (which is not the default) writes to replicas are just local and are not propagated.");
++        return;
++    }
++
++    /* First try without blocking at all. */
++    ackreplicas = replicationCountQuorumAcksByOffset(c->woff);
++    if (ackreplicas >= server.repl_min_slaves_to_write || c->flags & CLIENT_DENY_BLOCKING) {
++        addReplyLongLong(c,ackreplicas);
++        return;
++    }
++
++    /* Otherwise block the client and put it into our list of clients
++     * waiting for ack from slaves. */
++    blockForReplication(c,0,offset,server.repl_min_slaves_to_write);
++    c->bstate.quorum = 1;
++
++    /* Make sure that the server will send an ACK request to all the slaves
++     * before returning to the event loop. */
++    replicationRequestAckFromSlaves();
++}
++
++/* This function updates connected replicas state to mark quorum ones
++ * according to config value. */
++void updateQuorumReplicas(void) {
++    listIter li;
++    listNode *ln;
++
++    if (server.slaves == NULL || listLength(server.slaves) == 0) {
++        return;
++    }
++
++    listRewind(server.slaves,&li);
++    while((ln = listNext(&li))) {
++        client *slave = ln->value;
++        int config = 0;
++        char *name = replicationGetSlaveName(slave);
++
++        if (slave->replstate != SLAVE_STATE_ONLINE) {
++            slave->quorum = 0;
++            continue;
++        }
++
++        if (dictFind(server.quorum_replicas, name)) {
++            config = 1;
++        }
++        slave->quorum = config;
++    }
++}
++
+ /* WAIT for N replicas and / or local master to acknowledge our latest
+  * write command got synced to the disk. */
+ void waitaofCommand(client *c) {
+@@ -3615,8 +3690,10 @@ void unblockClientWaitingReplicas(client *c) {
+ void processClientsWaitingReplicas(void) {
+     long long last_offset = 0;
+     long long last_aof_offset = 0;
++    long long last_quorum_offset = 0;
+     int last_numreplicas = 0;
+     int last_aof_numreplicas = 0;
++    int last_quorum_numreplicas = 0;
+ 
+     listIter li;
+     listNode *ln;
+@@ -3639,19 +3716,27 @@ void processClientsWaitingReplicas(void) {
+          * offset and number of replicas, we remember it so the next client
+          * may be unblocked without calling replicationCountAcksByOffset()
+          * or calling replicationCountAOFAcksByOffset()
++         * or calling replicationCountQuorumAcksByOffset()
+          * if the requested offset / replicas were equal or less. */
+-        if (!is_wait_aof && last_offset && last_offset >= c->bstate.reploffset &&
+-                           last_numreplicas >= c->bstate.numreplicas)
++        if (c->bstate.quorum == 1 && last_quorum_offset && last_quorum_offset >= c->bstate.reploffset &&
++                                                           last_quorum_numreplicas >= c->bstate.numreplicas) {
++            numreplicas = last_quorum_numreplicas;
++        } else if (!is_wait_aof && c->bstate.quorum == 0 && last_offset && last_offset >= c->bstate.reploffset &&
++                                                                           last_numreplicas >= c->bstate.numreplicas)
+         {
+             numreplicas = last_numreplicas;
+         } else if (is_wait_aof && last_aof_offset && last_aof_offset >= c->bstate.reploffset &&
+-                    last_aof_numreplicas >= c->bstate.numreplicas)
++                                                     last_aof_numreplicas >= c->bstate.numreplicas)
+         {
+             numreplicas = last_aof_numreplicas;
+         } else {
+-            numreplicas = is_wait_aof ?
+-                replicationCountAOFAcksByOffset(c->bstate.reploffset) :
+-                replicationCountAcksByOffset(c->bstate.reploffset);
++            if (is_wait_aof) {
++                numreplicas = replicationCountAOFAcksByOffset(c->bstate.reploffset);
++            } else if (c->bstate.quorum == 1) {
++                numreplicas = replicationCountQuorumAcksByOffset(c->bstate.reploffset);
++            } else {
++                numreplicas = replicationCountAcksByOffset(c->bstate.reploffset);
++            }
+ 
+             /* Check if the number of replicas is satisfied. */
+             if (numreplicas < c->bstate.numreplicas) continue;
+@@ -3659,6 +3744,9 @@ void processClientsWaitingReplicas(void) {
+             if (is_wait_aof) {
+                 last_aof_offset = c->bstate.reploffset;
+                 last_aof_numreplicas = numreplicas;
++            } else if (c->bstate.quorum == 1) {
++                last_quorum_offset = c->bstate.reploffset;
++                last_quorum_numreplicas = numreplicas;
+             } else {
+                 last_offset = c->bstate.reploffset;
+                 last_numreplicas = numreplicas;
+diff --git a/src/server.c b/src/server.c
+index 2aa63df77..4b1f4242a 100644
+--- a/src/server.c
++++ b/src/server.c
+@@ -2091,6 +2091,8 @@ void initServerConfig(void) {
+     server.master_repl_offset = 0;
+     server.fsynced_reploff_pending = 0;
+ 
++    server.quorum_replicas = dictCreate(&stringSetDictType);
++
+     /* Replication partial resync backlog */
+     server.repl_backlog = NULL;
+     server.repl_no_slaves_since = time(NULL);
+@@ -6109,9 +6111,9 @@ sds genRedisInfoString(dict *section_dict, int all_sections, int everything) {
+ 
+                 info = sdscatprintf(info,
+                     "slave%d:ip=%s,port=%d,state=%s,"
+-                    "offset=%lld,lag=%ld\r\n",
++                    "offset=%lld,lag=%ld,quorum=%d\r\n",
+                     slaveid,slaveip,slave->slave_listening_port,state,
+-                    slave->repl_ack_off, lag);
++                    slave->repl_ack_off, lag, slave->quorum);
+                 slaveid++;
+             }
+         }
+diff --git a/src/server.h b/src/server.h
+index 05bdf5c0c..58dbd02b4 100644
+--- a/src/server.h
++++ b/src/server.h
+@@ -1030,6 +1030,7 @@ typedef struct blockingState {
+     int numreplicas;        /* Number of replicas we are waiting for ACK. */
+     int numlocal;           /* Indication if WAITAOF is waiting for local fsync. */
+     long long reploffset;   /* Replication offset to reach. */
++    int quorum;             /* Indication if WAITQUORUM is waiting for quorum. */
+ 
+     /* BLOCKED_MODULE */
+     void *module_blocked_handle; /* RedisModuleBlockedClient structure.
+@@ -1191,6 +1192,7 @@ typedef struct client {
+     time_t obuf_soft_limit_reached_time;
+     int authenticated;      /* Needed when the default user requires auth. */
+     int replstate;          /* Replication state if this is a slave. */
++    int quorum;             /* Replica quorum flag. */
+     int repl_start_cmd_stream_on_ack; /* Install slave write handler on first ACK. */
+     int repldbfd;           /* Replication DB file descriptor. */
+     off_t repldboff;        /* Replication DB file offset. */
+@@ -1599,6 +1601,7 @@ struct redisServer {
+     list *slaves, *monitors;    /* List of slaves and MONITORs */
+     client *current_client;     /* The client that triggered the command execution (External or AOF). */
+     client *executing_client;   /* The client executing the current command (possibly script or module). */
++    dict *quorum_replicas;      /* Replicas that should participate in quorum commit */
+ 
+ #ifdef LOG_REQ_RES
+     char *req_res_logfile; /* Path of log file for logging all requests and their replies. If NULL, no logging will be performed */
+@@ -2804,11 +2807,13 @@ void resizeReplicationBacklog(void);
+ void replicationSetMaster(char *ip, int port);
+ void replicationUnsetMaster(void);
+ void refreshGoodSlavesCount(void);
++void updateQuorumReplicas(void);
+ int checkGoodReplicasStatus(void);
+ void processClientsWaitingReplicas(void);
+ void unblockClientWaitingReplicas(client *c);
+ int replicationCountAcksByOffset(long long offset);
+ int replicationCountAOFAcksByOffset(long long offset);
++int replicationCountQuorumAcksByOffset(long long offset);
+ void replicationSendNewlineToMaster(void);
+ long long replicationGetSlaveOffset(void);
+ char *replicationGetSlaveName(client *c);
+@@ -3654,6 +3659,7 @@ void bitposCommand(client *c);
+ void replconfCommand(client *c);
+ void waitCommand(client *c);
+ void waitaofCommand(client *c);
++void waitquorumCommand(client *c);
+ void georadiusbymemberCommand(client *c);
+ void georadiusbymemberroCommand(client *c);
+ void georadiusCommand(client *c);
+diff --git a/tests/unit/yandex-cloud-patches.tcl b/tests/unit/yandex-cloud-patches.tcl
+index b8c3ba453..0ac84b270 100644
+--- a/tests/unit/yandex-cloud-patches.tcl
++++ b/tests/unit/yandex-cloud-patches.tcl
+@@ -21,3 +21,67 @@ start_server {config "minimal.conf" tags {"external:skip"}} {
+         }
+     }
+ }
++
++start_server {tags {"wait network external:skip"}} {
++start_server {} {
++    set slave [srv 0 client]
++    set slave_host [srv 0 host]
++    set slave_port [srv 0 port]
++    set slave_pid [srv 0 pid]
++    set master [srv -1 client]
++    set master_host [srv -1 host]
++    set master_port [srv -1 port]
++
++    test {Setup slave} {
++        $slave slaveof $master_host $master_port
++        wait_for_condition 50 100 {
++            [s 0 master_link_status] eq {up}
++        } else {
++            fail "Replication not started."
++        }
++    }
++
++    wait_replica_online $master
++    $master config set min-replicas-to-write 1
++    $master config set quorum-replicas $slave_host:$slave_port
++
++    test {WAITQUORUM should acknowledge 1 additional copy of the data} {
++        $master set foo 0
++        $master incr foo
++        $master incr foo
++        $master incr foo
++        assert {[$master waitquorum] == 1}
++        assert {[$slave get foo] == 3}
++    }
++
++    test {WAITQUORUM replica multiple clients unblock - reuse last result} {
++        set rd [redis_deferring_client -1]
++        set rd2 [redis_deferring_client -1]
++
++        pause_process $slave_pid
++
++        $rd incr foo
++        $rd read
++
++        $rd2 incr foo
++        $rd2 read
++
++        $rd waitquorum
++        $rd2 waitquorum
++        wait_for_blocked_clients_count 2 100 10 -1
++
++        resume_process $slave_pid
++
++        assert_equal [$rd read] {1}
++        assert_equal [$rd2 read] {1}
++
++        $rd ping
++        assert_equal [$rd read] {PONG}
++        $rd2 ping
++        assert_equal [$rd2 read] {PONG}
++
++        $rd close
++        $rd2 close
++    }
++}
++}
