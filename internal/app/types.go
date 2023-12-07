@@ -111,6 +111,7 @@ type HostState struct {
 	ReplicationID           string           `json:"replication_id"`
 	ReplicationID2          string           `json:"replication_id2"`
 	Error                   string           `json:"error"`
+	ConnectedReplicas       []string         `json:"connected_replicas"`
 	ReplicaState            *ReplicaState    `json:"replica_state"`
 	SentiCacheState         *SentiCacheState `json:"senticache_state"`
 }

@@ -83,6 +83,7 @@ func (app *App) changeMaster(host, master string) error {
 	}
 
 	node := app.shard.Get(host)
+	masterState := app.getHostState(master)
 	masterNode := app.shard.Get(master)
 	state := app.getHostState(host)
 
@@ -90,28 +91,28 @@ func (app *App) changeMaster(host, master string) error {
 		return fmt.Errorf("changeMaster: replica %s is dead - unable to init repair", host)
 	}
 
-	app.repairReplica(node, state, master)
+	app.repairReplica(node, masterState, state, master, host)
 
 	deadline := time.Now().Add(app.config.Redis.WaitReplicationTimeout)
 	for time.Now().Before(deadline) {
 		state = app.getHostState(host)
 		rs := state.ReplicaState
-		if rs != nil && rs.MasterLinkState && masterNode.MatchHost(rs.MasterHost) {
+		if rs != nil && replicates(masterState, rs, host, masterNode, false) {
 			break
 		}
 		if !state.PingOk {
 			return fmt.Errorf("changeMaster: replica %s died while waiting to start replication from %s", host, master)
 		}
-		masterState := app.getHostState(master)
+		masterState = app.getHostState(master)
 		if !masterState.PingOk {
 			return fmt.Errorf("changeMaster: %s died while waiting to start replication to %s", master, host)
 		}
 		app.logger.Info(fmt.Sprintf("ChangeMaster: waiting for %s to start replication from %s", host, master))
-		app.repairReplica(node, state, master)
+		app.repairReplica(node, masterState, state, master, host)
 		time.Sleep(time.Second)
 	}
 	rs := state.ReplicaState
-	if rs != nil && rs.MasterLinkState && masterNode.MatchHost(rs.MasterHost) {
+	if rs != nil && replicates(masterState, rs, host, masterNode, false) {
 		app.logger.Info(fmt.Sprintf("ChangeMaster: %s started replication from %s", host, master))
 	} else {
 		return fmt.Errorf("%s was unable to start replication from %s", host, master)
