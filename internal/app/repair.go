@@ -11,6 +11,7 @@ import (
 func (app *App) repairShard(shardState map[string]*HostState, activeNodes []string, master string) {
 	replicas := make([]string, 0)
 	syncing := 0
+	masterState := shardState[master]
 	masterNode := app.shard.Get(master)
 	for host, state := range shardState {
 		if !state.PingOk {
@@ -20,7 +21,7 @@ func (app *App) repairShard(shardState map[string]*HostState, activeNodes []stri
 			app.repairMaster(masterNode, activeNodes, state)
 		} else {
 			rs := state.ReplicaState
-			if rs != nil && rs.MasterSyncInProgress && masterNode.MatchHost(rs.MasterHost) {
+			if rs != nil && rs.MasterSyncInProgress && replicates(masterState, rs, host, masterNode, true) {
 				syncing++
 			}
 			replicas = append(replicas, host)
@@ -39,9 +40,9 @@ func (app *App) repairShard(shardState map[string]*HostState, activeNodes []stri
 			}
 		}
 		rs := state.ReplicaState
-		if rs == nil || state.IsReplPaused || !(rs.MasterLinkState || rs.MasterSyncInProgress) || !masterNode.MatchHost(rs.MasterHost) {
+		if rs == nil || state.IsReplPaused || !replicates(masterState, rs, host, masterNode, true) {
 			if syncing < app.config.Redis.MaxParallelSyncs {
-				app.repairReplica(node, state, master)
+				app.repairReplica(node, masterState, state, master, host)
 				syncing++
 			} else {
 				app.logger.Error(fmt.Sprintf("Leaving replica %s broken: currently syncing %d/%d", host, syncing, app.config.Redis.MaxParallelSyncs))
@@ -75,10 +76,11 @@ func (app *App) repairMaster(node *redis.Node, activeNodes []string, state *Host
 	}
 }
 
-func (app *App) repairReplica(node *redis.Node, state *HostState, master string) {
+func (app *App) repairReplica(node *redis.Node, masterState, state *HostState, master, replicaFQDN string) {
 	masterNode := app.shard.Get(master)
 	rs := state.ReplicaState
-	if rs == nil || !masterNode.MatchHost(rs.MasterHost) {
+	if !replicates(masterState, rs, replicaFQDN, masterNode, true) {
+		app.logger.Info("Initiating replica repair", "fqdn", replicaFQDN)
 		switch app.mode {
 		case modeSentinel:
 			err := node.SentinelMakeReplica(app.ctx, master)

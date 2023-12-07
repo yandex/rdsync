@@ -32,9 +32,8 @@ func (app *App) checkHAReplicasRunning() bool {
 			app.logger.Warn("Host is ahead in replication history", "fqdn", host)
 			aheadHosts++
 		}
-		if hostState.PingOk && !hostState.IsMaster && hostState.ReplicaState != nil {
-			rs := hostState.ReplicaState
-			if rs.MasterLinkState && local.MatchHost(rs.MasterHost) {
+		if hostState.PingOk && !hostState.IsMaster {
+			if replicates(localState, hostState.ReplicaState, host, local, false) {
 				availableReplicas++
 			}
 		}
