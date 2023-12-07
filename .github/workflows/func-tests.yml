@@ -12,9 +12,78 @@ env:
   GO_VERSION: 1.21.3
 
 jobs:
+  prepare:
+    name: Prepare
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v3
+
+      - name: Patched redis cache
+        id: patched-redis-cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            redis/src/redis-server
+            redis/src/redis-senticache
+            redis/src/redis-cli
+          key: rdsync-redis-${{ hashFiles('redis_patches/*') }}
+
+      - name: Build patched redis
+        if: steps.patched-redis-cache.outputs.cache-hit != 'true'
+        run: make redis/src/redis-server
+
+      - name: Zookeeper cache
+        id: zookeeper-cache
+        uses: actions/cache@v3
+        with:
+          path: tests/images/zookeeper/zookeeper.tar.gz
+          key: rdsync-zookeeper-${{ hashFiles('tests/images/zookeeper/zookeeper.tar.gz') }}-${{ hashFiles('Makefile') }}
+
+      - name: Download zookeeper binary
+        if: steps.zookeeper-cache.outputs.cache-hit != 'true'
+        run: make tests/images/zookeeper/zookeeper.tar.gz
+
+      - name: Base image cache
+        id: cache-base-image
+        uses: actions/cache@v3
+        with:
+          path: ~/rdsync-base-img.tgz
+          key: rdsync-base-img-${{ hashFiles('tests/images/base/*') }}
+
+      - name: Build base image
+        if: steps.cache-base-image.outputs.cache-hit != 'true'
+        run: make base_image
+
+      - name: Export base image
+        if: steps.cache-base-image.outputs.cache-hit != 'true'
+        run: docker save rdsync-base | gzip -c > ~/rdsync-base-img.tgz
+
   test:
     name: Test
     runs-on: ubuntu-22.04
+    needs: [ prepare ]
+    strategy:
+      matrix:
+        command:
+          - 'GODOG_FEATURE=00_cluster_smoke make test'
+          - 'GODOG_FEATURE=00_sentinel_smoke make test'
+          - 'GODOG_FEATURE=01_cluster_maintenance make test'
+          - 'GODOG_FEATURE=01_sentinel_maintenance make test'
+          - 'GODOG_FEATURE=02_cluster_switchover_from make test'
+          - 'GODOG_FEATURE=02_sentinel_switchover_from make test'
+          - 'GODOG_FEATURE=03_cluster_switchover_to make test'
+          - 'GODOG_FEATURE=03_sentinel_switchover_to make test'
+          - 'GODOG_FEATURE=04_cluster_failover make test'
+          - 'GODOG_FEATURE=04_sentinel_failover make test'
+          - 'GODOG_FEATURE=05_cluster_replication_fix make test'
+          - 'GODOG_FEATURE=05_sentinel_replication_fix make test'
+          - 'GODOG_FEATURE=06_cluster_lost make test'
+          - 'GODOG_FEATURE=06_sentinel_lost make test'
+          - 'GODOG_FEATURE=07_cluster_local_repair make test'
+          - 'GODOG_FEATURE=07_sentinel_local_repair make test'
+      fail-fast: false
+
     steps:
       - name: Set up Go 1.x
         uses: actions/setup-go@v3
@@ -27,8 +96,53 @@ jobs:
       - name: Get dependencies
         run: go get -v -t -d ./...
 
+      - name: Load patched redis
+        id: patched-redis-cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            redis/src/redis-server
+            redis/src/redis-senticache
+            redis/src/redis-cli
+          key: rdsync-redis-${{ hashFiles('redis_patches/*') }}
+
+      - name: Fail if no cached patched redis
+        if: steps.patched-redis-cache.outputs.cache-hit != 'true'
+        run: |
+          echo "Failed to fetch cached patched redis. Will now exit..."
+          exit 1
+
+      - name: Load zookeeper
+        id: zookeeper-cache
+        uses: actions/cache@v3
+        with:
+          path: tests/images/zookeeper/zookeeper.tar.gz
+          key: rdsync-zookeeper-${{ hashFiles('tests/images/zookeeper/zookeeper.tar.gz') }}-${{ hashFiles('Makefile') }}
+
+      - name: Fail if no cached zookeeper
+        if: steps.zookeeper-cache.outputs.cache-hit != 'true'
+        run: |
+          echo "Failed to fetch cached zookeeper. Will now exit..."
+          exit 1
+
+      - name: Load docker images
+        id: cache-base-image
+        uses: actions/cache@v3
+        with:
+          path: ~/rdsync-base-img.tgz
+          key: rdsync-base-img-${{ hashFiles('tests/images/base/*') }}
+
+      - name: Fail if no cached base image
+        if: steps.cache-base-image.outputs.cache-hit != 'true'
+        run: |
+          echo "Failed to fetch cached base image. Will now exit..."
+          exit 1
+
+      - name: Import image
+        run: docker load -i ~/rdsync-base-img.tgz
+
       - name: Run test
-        run: make test
+        run: ${{ matrix.command }}
         
       - uses: actions/upload-artifact@v3
         if: failure()
