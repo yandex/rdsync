@@ -37,7 +37,9 @@ tests/images/zookeeper/zookeeper.tar.gz:
 	wget https://archive.apache.org/dist/zookeeper/zookeeper-$(ZK_VERSION)/apache-zookeeper-$(ZK_VERSION)-bin.tar.gz -nc -O tests/images/zookeeper/zookeeper.tar.gz
 
 base_image: tests/images/zookeeper/zookeeper.tar.gz
-	docker build tests/images/base -t rdsync-base:latest
+	@if [ "$(shell docker images | grep -c rdsync-base)" != "1" ]; then\
+		docker build tests/images/base -t rdsync-base:latest;\
+	fi
 
 start_sentinel_env: base_image redis/src/redis-server cmd/rdsync/rdsync recreate_logs
 	rm -rf ./tests/images/redis/rdsync && cp cmd/rdsync/rdsync ./tests/images/redis/rdsync
