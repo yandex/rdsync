@@ -60,7 +60,7 @@ type DockerComposer struct {
 	config      string
 	api         *client.Client
 	containers  map[string]types.Container
-	stopped     map[string]bool
+	stopped     map[string]struct{}
 }
 
 // NewDockerComposer returns DockerComposer instance for specified compose file
@@ -85,7 +85,7 @@ func NewDockerComposer(project, config string) (*DockerComposer, error) {
 	dc.config = config
 	dc.projectName = fmt.Sprintf("%s-%d", project, os.Getpid())
 	dc.containers = make(map[string]types.Container)
-	dc.stopped = make(map[string]bool)
+	dc.stopped = make(map[string]struct{})
 	return dc, nil
 }
 
@@ -113,8 +113,10 @@ func (dc *DockerComposer) fillContainers() error {
 		if prj != dc.projectName || srv == "" {
 			continue
 		}
-		if c.State != "running" && !dc.stopped[srv] {
-			return fmt.Errorf("container %s is %s, not running", srv, c.State)
+		if c.State != "running" {
+			if _, ok := dc.stopped[srv]; !ok {
+				return fmt.Errorf("container %s is %s, not running", srv, c.State)
+			}
 		}
 		dc.containers[srv] = c
 	}
@@ -286,7 +288,7 @@ func (dc *DockerComposer) Stop(service string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), defaultDockerTimeout)
 	defer cancel()
 	err := dc.api.ContainerStop(ctx, cont.ID, container.StopOptions{})
-	dc.stopped[service] = true
+	dc.stopped[service] = struct{}{}
 	return err
 }
 

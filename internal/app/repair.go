@@ -143,9 +143,9 @@ func (app *App) repairLocalNode(shardState map[string]*HostState, master string)
 			app.logger.Error("Unable to get active nodes for local node repair", "error", err)
 			return
 		}
-		activeSet := make(map[string]bool, len(activeNodes))
+		activeSet := make(map[string]struct{}, len(activeNodes))
 		for _, node := range activeNodes {
-			activeSet[node] = true
+			activeSet[node] = struct{}{}
 		}
 		aheadHosts := 0
 		baseOffset := getOffset(state)
