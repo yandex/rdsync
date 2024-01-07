@@ -65,7 +65,7 @@ func (app *App) stateManager() appState {
 		return stateMaintenance
 	}
 
-	app.repairLocalNode(shardState, master)
+	app.repairLocalNode(master)
 
 	var switchover Switchover
 	if err := app.dcs.Get(pathCurrentSwitch, &switchover); err == nil {
