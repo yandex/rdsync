@@ -107,7 +107,7 @@ func (app *App) repairReplica(node *redis.Node, masterState, state *HostState, m
 	}
 }
 
-func (app *App) repairLocalNode(shardState map[string]*HostState, master string) {
+func (app *App) repairLocalNode(master string) {
 	local := app.shard.Local()
 
 	offline, err := local.IsOffline(app.ctx)
@@ -132,6 +132,11 @@ func (app *App) repairLocalNode(shardState map[string]*HostState, master string)
 		return
 	}
 
+	shardState, err := app.getShardStateFromDB()
+	if err != nil {
+		app.logger.Error("Local repair: unable to get actual shard state", "error", err)
+		return
+	}
 	state, ok := shardState[local.FQDN()]
 	if !ok {
 		app.logger.Error("Local repair: unable to find local node in shard state")

@@ -52,7 +52,7 @@ func (app *App) stateCandidate() appState {
 		app.logger.Error("Candidate: failed to get current master from DCS", "error", err)
 		return stateCandidate
 	}
-	app.repairLocalNode(shardState, master)
+	app.repairLocalNode(master)
 
 	if app.dcs.AcquireLock(pathManagerLock) {
 		return stateManager
