@@ -107,7 +107,7 @@ func (app *App) repairReplica(node *redis.Node, masterState, state *HostState, m
 	}
 }
 
-func (app *App) repairLocalNode(master string) {
+func (app *App) repairLocalNode(master string) bool {
 	local := app.shard.Local()
 
 	offline, err := local.IsOffline(app.ctx)
@@ -129,24 +129,24 @@ func (app *App) repairLocalNode(master string) {
 	}
 
 	if !offline {
-		return
+		return true
 	}
 
 	shardState, err := app.getShardStateFromDB()
 	if err != nil {
 		app.logger.Error("Local repair: unable to get actual shard state", "error", err)
-		return
+		return false
 	}
 	state, ok := shardState[local.FQDN()]
 	if !ok {
 		app.logger.Error("Local repair: unable to find local node in shard state")
-		return
+		return true
 	}
 	if master == local.FQDN() && len(shardState) != 1 {
 		activeNodes, err := app.GetActiveNodes()
 		if err != nil {
 			app.logger.Error("Unable to get active nodes for local node repair", "error", err)
-			return
+			return true
 		}
 		activeSet := make(map[string]struct{}, len(activeNodes))
 		for _, node := range activeNodes {
@@ -166,22 +166,24 @@ func (app *App) repairLocalNode(master string) {
 			}
 			if aheadHosts != 0 {
 				app.logger.Error(fmt.Sprintf("Not making local node online: %d nodes are ahead in replication history", aheadHosts))
-				return
+				return false
 			}
 		}
 	} else if state.ReplicaState == nil {
 		err, rewriteErr := local.SetReadOnly(app.ctx, false)
 		if err != nil {
 			app.logger.Error("Unable to make local node read-only", "error", err)
-			return
+			return true
 		}
 		if rewriteErr != nil {
 			app.logger.Error("Unable rewrite conf after making local node read-only", "error", rewriteErr)
-			return
+			return true
 		}
 	}
 	err = local.SetOnline(app.ctx)
 	if err != nil {
 		app.logger.Error("Unable to set local node online", "error", err)
+		return false
 	}
+	return true
 }
