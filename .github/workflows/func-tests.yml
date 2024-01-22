@@ -9,7 +9,8 @@ on:
     - cron: '30 06 * * *'
 
 env:
-  GO_VERSION: 1.21.3
+  GO_VERSION: 1.21.6
+  DOCKER_API_VERSION: 1.43
 
 jobs:
   prepare:
