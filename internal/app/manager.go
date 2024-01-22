@@ -65,7 +65,7 @@ func (app *App) stateManager() appState {
 		return stateMaintenance
 	}
 
-	app.repairLocalNode(master)
+	updateActive := app.repairLocalNode(master)
 
 	var switchover Switchover
 	if err := app.dcs.Get(pathCurrentSwitch, &switchover); err == nil {
@@ -141,9 +141,11 @@ func (app *App) stateManager() appState {
 	delete(app.nodeFailTime, master)
 	app.repairShard(shardState, activeNodes, master)
 
-	err = app.updateActiveNodes(shardState, shardStateDcs, activeNodes, master)
-	if err != nil {
-		app.logger.Error("Failed to update active nodes in dcs", "error", err)
+	if updateActive {
+		err = app.updateActiveNodes(shardState, shardStateDcs, activeNodes, master)
+		if err != nil {
+			app.logger.Error("Failed to update active nodes in dcs", "error", err)
+		}
 	}
 
 	return stateManager
