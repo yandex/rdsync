@@ -22,7 +22,7 @@ jobs:
 
       - name: Patched redis cache
         id: patched-redis-cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             redis/src/redis-server
@@ -36,7 +36,7 @@ jobs:
 
       - name: Zookeeper cache
         id: zookeeper-cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: tests/images/zookeeper/zookeeper.tar.gz
           key: rdsync-zookeeper-${{ hashFiles('tests/images/zookeeper/zookeeper.tar.gz') }}-${{ hashFiles('Makefile') }}
@@ -47,7 +47,7 @@ jobs:
 
       - name: Base image cache
         id: cache-base-image
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/rdsync-base-img.tgz
           key: rdsync-base-img-${{ hashFiles('tests/images/base/*') }}
@@ -99,7 +99,7 @@ jobs:
 
       - name: Load patched redis
         id: patched-redis-cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             redis/src/redis-server
@@ -115,7 +115,7 @@ jobs:
 
       - name: Load zookeeper
         id: zookeeper-cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: tests/images/zookeeper/zookeeper.tar.gz
           key: rdsync-zookeeper-${{ hashFiles('tests/images/zookeeper/zookeeper.tar.gz') }}-${{ hashFiles('Makefile') }}
@@ -128,7 +128,7 @@ jobs:
 
       - name: Load docker images
         id: cache-base-image
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/rdsync-base-img.tgz
           key: rdsync-base-img-${{ hashFiles('tests/images/base/*') }}
