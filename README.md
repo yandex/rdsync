@@ -17,7 +17,7 @@ It uses a patched redis version to make a cluster or sentinel-like setup less pr
 
 ## Try it out
 
-* You will need a linux vm with gnu make, docker, docker-compose and go >1.21 installed.
+* You will need a linux vm with gnu make, docker, docker-compose and go >1.22 installed.
 * Use `make start_sentinel_env` to start an environment with senticache
 * Or `make start_cluster_env` to start an environment with single shard of clustered setup
 * Run `make clean` to drop containers and network
