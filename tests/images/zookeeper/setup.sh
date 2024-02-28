@@ -2,7 +2,9 @@
 
 set -xe
 
-apt-get install openjdk-17-jre-headless
+apt update
+
+apt install openjdk-17-jre-headless
 
 tar -xzf /var/lib/dist/zookeeper/zookeeper.tar.gz -C /opt
 mv /opt/apache-zookeeper* /opt/zookeeper

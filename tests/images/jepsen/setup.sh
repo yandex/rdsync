@@ -2,8 +2,8 @@
 
 set -xe
 
-apt-get install openjdk-17-jre-headless
-apt-get install libjna-java gnuplot wget
+apt update
+apt install openjdk-17-jre-headless libjna-java gnuplot wget
 chmod 600 /root/.ssh/id_rsa
 wget https://raw.githubusercontent.com/technomancy/leiningen/stable/bin/lein -O /usr/bin/lein
 chmod +x /usr/bin/lein
