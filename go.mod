@@ -3,7 +3,7 @@ module github.com/yandex/rdsync
 go 1.22
 
 require (
-	github.com/cenkalti/backoff/v4 v4.2.1
+	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cucumber/godog v0.14.0
 	github.com/docker/docker v26.0.0+incompatible
 	github.com/go-zookeeper/zk v1.0.3
