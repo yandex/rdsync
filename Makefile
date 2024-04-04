@@ -46,7 +46,7 @@ start_sentinel_env: base_image redis/src/redis-server cmd/rdsync/rdsync recreate
 	rm -rf ./tests/images/redis/redis-server && cp redis/src/redis-server ./tests/images/redis/redis-server
 	rm -rf ./tests/images/redis/redis-senticache && cp redis/src/redis-senticache ./tests/images/redis/redis-senticache
 	rm -rf ./tests/images/redis/redis-cli && cp redis/src/redis-cli ./tests/images/redis/redis-cli
-	docker-compose -p $(PROJECT) -f ./tests/images/jepsen-compose.yaml up -d --force-recreate --build
+	docker compose -p $(PROJECT) -f ./tests/images/jepsen-compose.yaml up -d --force-recreate --build
 	timeout 600 docker exec rdsync_zoo1_1 setup_zk.sh
 	timeout 600 docker exec rdsync_redis1_1 setup_sentinel.sh
 	timeout 600 docker exec rdsync_redis2_1 setup_sentinel.sh redis1
@@ -62,7 +62,7 @@ start_cluster_env: base_image redis/src/redis-server cmd/rdsync/rdsync recreate_
 	rm -rf ./tests/images/redis/redis-server && cp redis/src/redis-server ./tests/images/redis/redis-server
 	rm -rf ./tests/images/redis/redis-senticache && cp redis/src/redis-senticache ./tests/images/redis/redis-senticache
 	rm -rf ./tests/images/redis/redis-cli && cp redis/src/redis-cli ./tests/images/redis/redis-cli
-	docker-compose -p $(PROJECT) -f ./tests/images/jepsen-compose.yaml up -d --force-recreate --build
+	docker compose -p $(PROJECT) -f ./tests/images/jepsen-compose.yaml up -d --force-recreate --build
 	timeout 600 docker exec rdsync_zoo1_1 setup_zk.sh
 	timeout 600 docker exec rdsync_redis1_1 setup_cluster.sh
 	timeout 600 docker exec rdsync_redis2_1 setup_cluster.sh redis1
