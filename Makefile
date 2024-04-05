@@ -47,13 +47,13 @@ start_sentinel_env: base_image redis/src/redis-server cmd/rdsync/rdsync recreate
 	rm -rf ./tests/images/redis/redis-senticache && cp redis/src/redis-senticache ./tests/images/redis/redis-senticache
 	rm -rf ./tests/images/redis/redis-cli && cp redis/src/redis-cli ./tests/images/redis/redis-cli
 	docker compose -p $(PROJECT) -f ./tests/images/jepsen-compose.yaml up -d --force-recreate --build
-	timeout 600 docker exec rdsync_zoo1_1 setup_zk.sh
-	timeout 600 docker exec rdsync_redis1_1 setup_sentinel.sh
-	timeout 600 docker exec rdsync_redis2_1 setup_sentinel.sh redis1
-	timeout 600 docker exec rdsync_redis3_1 setup_sentinel.sh redis1
+	timeout 600 docker exec rdsync-zoo1-1 setup_zk.sh
+	timeout 600 docker exec rdsync-redis1-1 setup_sentinel.sh
+	timeout 600 docker exec rdsync-redis2-1 setup_sentinel.sh redis1
+	timeout 600 docker exec rdsync-redis3-1 setup_sentinel.sh redis1
 
 run_jepsen_sentinel_test: recreate_logs start_sentinel_env
-	(docker exec rdsync_jepsen_1 /root/jepsen/run.sh >tests/logs/jepsen.log 2>&1 && tail -n 4 tests/logs/jepsen.log) || ./tests/images/jepsen/save_logs.sh
+	(docker exec rdsync-jepsen-1 /root/jepsen/run.sh >tests/logs/jepsen.log 2>&1 && tail -n 4 tests/logs/jepsen.log) || ./tests/images/jepsen/save_logs.sh
 
 jepsen_sentinel_test: run_jepsen_sentinel_test clean
 
@@ -63,13 +63,13 @@ start_cluster_env: base_image redis/src/redis-server cmd/rdsync/rdsync recreate_
 	rm -rf ./tests/images/redis/redis-senticache && cp redis/src/redis-senticache ./tests/images/redis/redis-senticache
 	rm -rf ./tests/images/redis/redis-cli && cp redis/src/redis-cli ./tests/images/redis/redis-cli
 	docker compose -p $(PROJECT) -f ./tests/images/jepsen-compose.yaml up -d --force-recreate --build
-	timeout 600 docker exec rdsync_zoo1_1 setup_zk.sh
-	timeout 600 docker exec rdsync_redis1_1 setup_cluster.sh
-	timeout 600 docker exec rdsync_redis2_1 setup_cluster.sh redis1
-	timeout 600 docker exec rdsync_redis3_1 setup_cluster.sh redis1
+	timeout 600 docker exec rdsync-zoo1-1 setup_zk.sh
+	timeout 600 docker exec rdsync-redis1-1 setup_cluster.sh
+	timeout 600 docker exec rdsync-redis2-1 setup_cluster.sh redis1
+	timeout 600 docker exec rdsync-redis3-1 setup_cluster.sh redis1
 
 run_jepsen_cluster_test: recreate_logs start_cluster_env
-	(docker exec rdsync_jepsen_1 /root/jepsen/run.sh >tests/logs/jepsen.log 2>&1 && tail -n 4 tests/logs/jepsen.log) || ./tests/images/jepsen/save_logs.sh
+	(docker exec rdsync-jepsen-1 /root/jepsen/run.sh >tests/logs/jepsen.log 2>&1 && tail -n 4 tests/logs/jepsen.log) || ./tests/images/jepsen/save_logs.sh
 
 jepsen_cluster_test: run_jepsen_cluster_test clean
 
