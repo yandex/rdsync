@@ -78,7 +78,7 @@ func NewSentiCacheNode(config *config.Config, logger *slog.Logger) (*SentiCacheN
 		Protocol:        2,
 	}
 	if config.SentinelMode.UseTLS {
-		tlsConf, err := getTLSConfig(config.SentinelMode.TLSCAPath, localhost)
+		tlsConf, err := getTLSConfig(config, config.SentinelMode.TLSCAPath)
 		if err != nil {
 			return nil, err
 		}

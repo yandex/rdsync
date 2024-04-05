@@ -5,13 +5,13 @@ import (
 	"crypto/x509"
 	"fmt"
 	"os"
+
+	"github.com/yandex/rdsync/internal/config"
 )
 
-func getTLSConfig(CAPath string, host string) (*tls.Config, error) {
+func getTLSConfig(config *config.Config, CAPath string) (*tls.Config, error) {
 	c := &tls.Config{}
-	if host == localhost {
-		c.InsecureSkipVerify = true
-	}
+	c.ServerName = config.Hostname
 	if CAPath != "" {
 		cert, err := os.ReadFile(CAPath)
 		if err != nil {
