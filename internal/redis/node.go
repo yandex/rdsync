@@ -65,7 +65,7 @@ func NewNode(config *config.Config, logger *slog.Logger, fqdn string) (*Node, er
 		Protocol:        2,
 	}
 	if config.Redis.UseTLS {
-		tlsConf, err := getTLSConfig(config, config.Redis.TLSCAPath)
+		tlsConf, err := getTLSConfig(config, config.Redis.TLSCAPath, host)
 		if err != nil {
 			return nil, err
 		}
