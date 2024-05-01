@@ -5,7 +5,7 @@ go 1.22
 require (
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cucumber/godog v0.14.1
-	github.com/docker/docker v26.1.0+incompatible
+	github.com/docker/docker v26.1.1+incompatible
 	github.com/go-zookeeper/zk v1.0.3
 	github.com/gofrs/flock v0.8.1
 	github.com/heetch/confita v0.10.0
