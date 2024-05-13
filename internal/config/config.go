@@ -35,6 +35,7 @@ type RedisConfig struct {
 	MaxParallelSyncs        int           `yaml:"max_parallel_syncs"`
 	MaxReplicasToWrite      int           `yaml:"max_replicas_to_write"`
 	AllowDataLoss           bool          `yaml:"allow_data_loss"`
+	TurnBeforeSwitchover    bool          `yaml:"turn_before_switchover"`
 	RestartCommand          string        `yaml:"restart_command"`
 }
 
@@ -108,6 +109,7 @@ func DefaultRedisConfig() RedisConfig {
 		MaxParallelSyncs:        1,
 		MaxReplicasToWrite:      -1,
 		AllowDataLoss:           false,
+		TurnBeforeSwitchover:    false,
 		RestartCommand:          "systemctl restart redis-server",
 	}
 }
