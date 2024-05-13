@@ -354,6 +354,33 @@ func (app *App) performSwitchover(shardState map[string]*HostState, activeNodes 
 			app.waitPoisonPill(app.config.Redis.WaitPoisonPillTimeout)
 		}
 
+		if app.config.Redis.TurnBeforeSwitchover {
+			var psyncNodes []string
+			for _, host := range aliveActiveNodes {
+				if host == newMaster {
+					continue
+				}
+				if isPartialSyncPossible(shardState[host], shardState[newMaster]) {
+					psyncNodes = append(psyncNodes, host)
+				}
+			}
+
+			errs := runParallel(func(host string) error {
+				if !shardState[host].PingOk {
+					return nil
+				}
+				err := app.changeMaster(host, newMaster)
+				if err != nil {
+					return err
+				}
+				return nil
+			}, psyncNodes)
+
+			err := combineErrors(errs)
+			if err != nil {
+				app.logger.Warn("Unable to psync some replicas before promote", "error", err)
+			}
+		}
 		deadline := time.Now().Add(app.config.Redis.WaitPromoteTimeout)
 		forceDeadline := time.Now().Add(app.config.Redis.WaitPromoteForceTimeout)
 		promoted := false
