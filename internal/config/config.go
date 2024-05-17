@@ -16,6 +16,7 @@ import (
 // RedisConfig contains redis connection info and params
 type RedisConfig struct {
 	Port                    int           `yaml:"port"`
+	ClusterBusPort          int           `yaml:"cluster_bus_port"`
 	UseTLS                  bool          `yaml:"use_tls"`
 	TLSCAPath               string        `yaml:"tls_ca_path"`
 	AuthUser                string        `yaml:"auth_user"`
@@ -46,6 +47,7 @@ type RedisRenamesConfig struct {
 	ClusterFailover  string `yaml:"cluster_failover"`
 	ClusterMyID      string `yaml:"cluster_myid"`
 	ClusterReplicate string `yaml:"cluster_replicate"`
+	ClusterMeet      string `yaml:"cluster_meet"`
 	Config           string `yaml:"config"`
 	ReplicaOf        string `yaml:"replicaof"`
 }
@@ -90,6 +92,7 @@ type Config struct {
 func DefaultRedisConfig() RedisConfig {
 	return RedisConfig{
 		Port:                    6379,
+		ClusterBusPort:          16379,
 		UseTLS:                  false,
 		TLSCAPath:               "",
 		AuthUser:                "",
@@ -122,6 +125,7 @@ func DefaultRedisRenamesConfig() RedisRenamesConfig {
 		ClusterFailover:  "FAILOVER",
 		ClusterMyID:      "MYID",
 		ClusterReplicate: "REPLICATE",
+		ClusterMeet:      "MEET",
 		Config:           "CONFIG",
 		ReplicaOf:        "REPLICAOF",
 	}
