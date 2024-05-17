@@ -519,3 +519,26 @@ func (n *Node) ClusterPromoteTakeover(ctx context.Context) error {
 	cmd := n.conn.Do(ctx, n.config.Renames.Cluster, n.config.Renames.ClusterFailover, "TAKEOVER")
 	return cmd.Err()
 }
+
+// IsClusterNodeAlone checks if node sees only itself
+func (n *Node) IsClusterNodeAlone(ctx context.Context) (bool, error) {
+	cmd := n.conn.ClusterNodes(ctx)
+	err := cmd.Err()
+	if err != nil {
+		return false, err
+	}
+	lines := strings.Split(cmd.Val(), "\n")
+	var count int
+	for _, line := range lines {
+		if len(strings.TrimSpace(line)) > 0 {
+			count++
+		}
+	}
+	return count == 1, nil
+}
+
+// ClusterMeet makes replica join the cluster
+func (n *Node) ClusterMeet(ctx context.Context, addr string, port, clusterBusPort int) error {
+	cmd := n.conn.Do(ctx, n.config.Renames.Cluster, n.config.Renames.ClusterMeet, addr, strconv.Itoa(port), strconv.Itoa(clusterBusPort))
+	return cmd.Err()
+}

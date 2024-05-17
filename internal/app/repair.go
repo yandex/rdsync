@@ -88,6 +88,23 @@ func (app *App) repairReplica(node *redis.Node, masterState, state *HostState, m
 				app.logger.Error(fmt.Sprintf("Unable to make %s replica of %s", node.FQDN(), master), "error", err)
 			}
 		case modeCluster:
+			alone, err := node.IsClusterNodeAlone(app.ctx)
+			if err != nil {
+				app.logger.Error(fmt.Sprintf("Unable to check if %s is alone", node.FQDN()), "error", err)
+				return
+			}
+			if alone {
+				masterIP, err := masterNode.GetIP()
+				if err != nil {
+					app.logger.Error(fmt.Sprintf("Unable to make %s replica of %s", node.FQDN(), master), "error", err)
+					return
+				}
+				err = node.ClusterMeet(app.ctx, masterIP, app.config.Redis.Port, app.config.Redis.ClusterBusPort)
+				if err != nil {
+					app.logger.Error(fmt.Sprintf("Unable to make %s meet with master %s at %s:%d:%d", node.FQDN(), master, masterIP, app.config.Redis.Port, app.config.Redis.ClusterBusPort), "error", err)
+					return
+				}
+			}
 			masterID, err := masterNode.ClusterGetID(app.ctx)
 			if err != nil {
 				app.logger.Error(fmt.Sprintf("Unable to get cluster id of %s", master), "error", err.Error())
