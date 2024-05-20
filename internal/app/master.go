@@ -54,6 +54,22 @@ func (app *App) getMasterHost(shardState map[string]*HostState) (string, error) 
 		}
 	}
 	if len(masters) > 1 {
+		if app.mode == modeCluster {
+			mastersWithSlots := make([]string, 0)
+			for _, master := range masters {
+				node := app.shard.Get(master)
+				hasSlots, err := node.HasClusterSlots(app.ctx)
+				if err != nil {
+					return "", fmt.Errorf("unable to check slots on %s", master)
+				}
+				if hasSlots {
+					mastersWithSlots = append(mastersWithSlots, master)
+				}
+			}
+			if len(mastersWithSlots) == 1 {
+				return mastersWithSlots[0], nil
+			}
+		}
 		return "", fmt.Errorf("got more than 1 master: %s", masters)
 	}
 	if len(masters) == 0 {

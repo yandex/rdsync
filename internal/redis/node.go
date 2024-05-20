@@ -542,3 +542,23 @@ func (n *Node) ClusterMeet(ctx context.Context, addr string, port, clusterBusPor
 	cmd := n.conn.Do(ctx, n.config.Renames.Cluster, n.config.Renames.ClusterMeet, addr, strconv.Itoa(port), strconv.Itoa(clusterBusPort))
 	return cmd.Err()
 }
+
+// HasClusterSlots checks if node has any slot assigned
+func (n *Node) HasClusterSlots(ctx context.Context) (bool, error) {
+	cmd := n.conn.ClusterNodes(ctx)
+	err := cmd.Err()
+	if err != nil {
+		return false, err
+	}
+	lines := strings.Split(cmd.Val(), "\n")
+	for _, line := range lines {
+		splitted := strings.Split(line, " ")
+		if len(splitted) < 3 {
+			continue
+		}
+		if strings.Contains(splitted[2], "myself") {
+			return len(splitted) > 8, nil
+		}
+	}
+	return false, nil
+}
