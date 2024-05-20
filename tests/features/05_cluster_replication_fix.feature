@@ -172,6 +172,10 @@ Feature: Cluster mode broken replication fix
         """
         And I run command on host "redis3"
         """
+            sed -i -e 's/offline yes/offline no/' /etc/redis/redis.conf
+        """
+        And I run command on host "redis3"
+        """
             supervisorctl signal KILL redis
         """
         And I run command on host "redis3"
@@ -183,4 +187,79 @@ Feature: Cluster mode broken replication fix
         And zookeeper node "/test/active_nodes" should match json_exactly within "30" seconds
         """
             ["redis1","redis2","redis3"]
+        """
+
+    Scenario: Cluster splitbrain is fixed in favor of node with slots
+        Given clustered shard is up and running
+        Then redis host "redis1" should be master
+        And redis host "redis2" should become replica of "redis1" within "15" seconds
+        And replication on redis host "redis2" should run fine within "15" seconds
+        And redis host "redis3" should become replica of "redis1" within "15" seconds
+        And replication on redis host "redis3" should run fine within "15" seconds
+        And zookeeper node "/test/active_nodes" should match json_exactly within "30" seconds
+        """
+            ["redis1","redis2","redis3"]
+        """
+        When I run command on host "redis1"
+        """
+            supervisorctl signal STOP rdsync
+        """
+        And I run command on host "redis2"
+        """
+            supervisorctl signal STOP rdsync
+        """
+        And I run command on host "redis3"
+        """
+            supervisorctl signal STOP rdsync
+        """
+        And I run command on host "redis3"
+        """
+            rm -f /etc/redis/cluster.conf
+        """
+        And I run command on host "redis3"
+        """
+            sed -i -e 's/offline yes/offline no/' /etc/redis/redis.conf
+        """
+        And I run command on host "redis3"
+        """
+            supervisorctl signal KILL redis
+        """
+        And I run command on host "redis3"
+        """
+            supervisorctl start redis
+        """
+        Then redis host "redis3" should become available within "60" seconds
+        When I run command on redis host "redis1"
+        """
+            SET very-important-key foo
+        """
+        And I set zookeeper node "/test/master" to
+        """
+            "redis3"
+        """
+        And I run command on host "redis1"
+        """
+            supervisorctl signal CONT rdsync
+        """
+        And I run command on host "redis2"
+        """
+            supervisorctl signal CONT rdsync
+        """
+        And I run command on host "redis3"
+        """
+            supervisorctl signal CONT rdsync
+        """
+        Then redis host "redis3" should become replica of "redis1" within "60" seconds
+        And replication on redis host "redis3" should run fine within "15" seconds
+        And zookeeper node "/test/active_nodes" should match json_exactly within "30" seconds
+        """
+            ["redis1","redis2","redis3"]
+        """
+        When I run command on redis host "redis1"
+        """
+            GET very-important-key
+        """
+        Then redis cmd result should match regexp
+        """
+            .*foo.*
         """
