@@ -34,6 +34,23 @@ type Node struct {
 	conn        *client.Client
 }
 
+func uniqLookup(host string) ([]net.IP, error) {
+	ret := make([]net.IP, 0)
+	res, err := net.LookupIP(host)
+	if err != nil {
+		return ret, err
+	}
+	seen := map[string]struct{}{}
+	for _, ip := range res {
+		key := string(ip)
+		if _, ok := seen[key]; !ok {
+			seen[key] = struct{}{}
+			ret = append(ret, ip)
+		}
+	}
+	return ret, err
+}
+
 // NewNode is a Node constructor
 func NewNode(config *config.Config, logger *slog.Logger, fqdn string) (*Node, error) {
 	var host string
@@ -45,7 +62,7 @@ func NewNode(config *config.Config, logger *slog.Logger, fqdn string) (*Node, er
 	}
 	nodeLogger := logger.With("module", "node", "fqdn", host)
 	now := time.Now()
-	ips, err := net.LookupIP(fqdn)
+	ips, err := uniqLookup(fqdn)
 	if err != nil {
 		nodeLogger.Warn("Dns lookup failed", "error", err)
 		ips = []net.IP{}
@@ -127,7 +144,7 @@ func (n *Node) RefreshAddrs() error {
 	}
 	n.logger.Debug("Updating ips cache")
 	now := time.Now()
-	ips, err := net.LookupIP(n.fqdn)
+	ips, err := uniqLookup(n.fqdn)
 	if err != nil {
 		n.logger.Error("Updating ips cache failed", "error", err)
 		return err
