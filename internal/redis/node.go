@@ -77,7 +77,7 @@ func NewNode(config *config.Config, logger *slog.Logger, fqdn string) (*Node, er
 		conn:      client.NewClient(&opts),
 		logger:    nodeLogger,
 		fqdn:      fqdn,
-		ips:       ips,
+		ips:       uniqIPs(ips),
 		ipsTime:   now,
 	}
 	return &node, nil
@@ -132,9 +132,22 @@ func (n *Node) RefreshAddrs() error {
 		n.logger.Error("Updating ips cache failed", "error", err)
 		return err
 	}
-	n.ips = ips
+	n.ips = uniqIPs(ips)
 	n.ipsTime = now
 	return nil
+}
+
+// uniqIPs returns a slice of unique ips
+func uniqIPs(ips []net.IP) []net.IP {
+	uniq := map[string]struct{}{}
+	for _, ip := range ips {
+		uniq[string(ip)] = struct{}{}
+	}
+	ret := make([]net.IP, 0, len(uniq))
+	for ip := range uniq {
+		ret = append(ret, []byte(ip))
+	}
+	return ret
 }
 
 // GetIP returns first ip as string
