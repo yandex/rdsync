@@ -51,3 +51,54 @@ Feature: Sentinel mode survives dcs conn loss
         And host "redis2" is attached to the network
         And host "redis3" is attached to the network
         Then redis host "redis1" should become available within "60" seconds
+
+    Scenario: Sentinel mode partially partitioned manager gives up on manager role
+        Given sentinel shard is up and running
+        Then redis host "redis1" should be master
+        And redis host "redis2" should become replica of "redis1" within "15" seconds
+        And replication on redis host "redis2" should run fine within "15" seconds
+        And redis host "redis3" should become replica of "redis1" within "15" seconds
+        And replication on redis host "redis3" should run fine within "15" seconds
+        And zookeeper node "/test/active_nodes" should match json_exactly within "30" seconds
+        """
+            ["redis1","redis2","redis3"]
+        """
+        When I run command on host "redis1" with timeout "20" seconds
+        """
+            supervisorctl stop rdsync
+        """
+        Then command return code should be "0"
+        And  zookeeper node "/test/manager" should match regexp within "30" seconds
+        """
+            .*redis[23].*
+        """
+        When I run command on host "redis1" with timeout "20" seconds
+        """
+            supervisorctl start rdsync
+        """
+        When I get zookeeper node "/test/manager"
+        And I save zookeeper query result as "new_manager"
+        And port "6379" on host "{{.new_manager.hostname}}" is blocked
+        And I wait for "60" seconds
+        Then redis host "redis1" should be master
+        When I run command on host "{{.new_manager.hostname}}"
+        """
+            grep ERROR /var/log/rdsync.log
+        """
+        Then command output should match regexp
+        """
+            .*Giving up on manager role.*
+        """
+        When I run command on host "{{.new_manager.hostname}}"
+        """
+            grep INFO /var/log/rdsync.log
+        """
+        Then command output should match regexp
+        """
+            .*New manager.*
+        """
+        When port "6379" on host "{{.new_manager.hostname}}" is unblocked
+        Then zookeeper node "/test/active_nodes" should match json_exactly within "30" seconds
+        """
+            ["redis1","redis2","redis3"]
+        """

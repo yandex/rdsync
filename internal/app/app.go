@@ -22,6 +22,7 @@ type App struct {
 	ctx          context.Context
 	mode         appMode
 	nodeFailTime map[string]time.Time
+	splitTime    map[string]time.Time
 	state        appState
 	critical     atomic.Value
 	logger       *slog.Logger
@@ -72,9 +73,6 @@ func NewApp(configFile, logLevel string) (*App, error) {
 		return nil, err
 	}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: logLevelN}))
-	if err != nil {
-		return nil, err
-	}
 	mode, err := parseMode(conf.Mode)
 	if err != nil {
 		return nil, err
@@ -83,6 +81,7 @@ func NewApp(configFile, logLevel string) (*App, error) {
 		ctx:          baseContext(),
 		mode:         mode,
 		nodeFailTime: make(map[string]time.Time),
+		splitTime:    make(map[string]time.Time),
 		state:        stateInit,
 		logger:       logger,
 		config:       conf,

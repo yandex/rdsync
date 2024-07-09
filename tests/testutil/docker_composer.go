@@ -43,6 +43,10 @@ type Composer interface {
 	DetachFromNet(service string) error
 	// Attachs container/VM to network
 	AttachToNet(service string) error
+	// Blocks port on host
+	BlockPort(service string, port int) error
+	// Unblocks port on host
+	UnBlockPort(service string, port int) error
 	// Executes command inside container/VM with given timeout.
 	// Returns command retcode and output (stdoud and stderr are mixed)
 	RunCommand(service, cmd string, timeout time.Duration) (retcode int, output string, err error)
@@ -324,6 +328,48 @@ func (dc *DockerComposer) DetachFromNet(service string) error {
 		"iptables -A OUTPUT -o eth0 -j DROP",
 		"ip6tables -A INPUT -i eth0 -j DROP",
 		"ip6tables -A OUTPUT -o eth0 -j DROP",
+	}
+	for _, cmd := range cmds {
+		_, _, err := dc.RunCommand(service, cmd, defaultDockerTimeout)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// BlockPort blocks port for host
+func (dc *DockerComposer) BlockPort(service string, port int) error {
+	_, ok := dc.containers[service]
+	if !ok {
+		return fmt.Errorf("no such service: %s", service)
+	}
+	cmds := []string{
+		fmt.Sprintf("iptables -A INPUT -i eth0 -p tcp --dport %d -j DROP", port),
+		fmt.Sprintf("iptables -A OUTPUT -o eth0 -p tcp --dport %d -j DROP", port),
+		fmt.Sprintf("ip6tables -A INPUT -i eth0 -p tcp --dport %d -j DROP", port),
+		fmt.Sprintf("ip6tables -A OUTPUT -o eth0 -p tcp --dport %d -j DROP", port),
+	}
+	for _, cmd := range cmds {
+		_, _, err := dc.RunCommand(service, cmd, defaultDockerTimeout)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// UnBlockPort removes blocking rules for port on host
+func (dc *DockerComposer) UnBlockPort(service string, port int) error {
+	_, ok := dc.containers[service]
+	if !ok {
+		return fmt.Errorf("no such service: %s", service)
+	}
+	cmds := []string{
+		fmt.Sprintf("iptables -D INPUT -i eth0 -p tcp --dport %d -j DROP", port),
+		fmt.Sprintf("iptables -D OUTPUT -o eth0 -p tcp --dport %d -j DROP", port),
+		fmt.Sprintf("ip6tables -D INPUT -i eth0 -p tcp --dport %d -j DROP", port),
+		fmt.Sprintf("ip6tables -D OUTPUT -o eth0 -p tcp --dport %d -j DROP", port),
 	}
 	for _, cmd := range cmds {
 		_, _, err := dc.RunCommand(service, cmd, defaultDockerTimeout)

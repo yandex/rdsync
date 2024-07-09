@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -136,9 +137,47 @@ func (app *App) stateManager() appState {
 	}
 	if !shardState[master].PingOk {
 		app.logger.Error(fmt.Sprintf("Master %s probably failed, do not perform any kind of repair", master))
+		if master != app.config.Hostname && shardStateDcs[master].PingOk {
+			if app.splitTime[master].IsZero() {
+				app.splitTime[master] = time.Now()
+			}
+			if app.config.Redis.FailoverTimeout > 0 {
+				failedTime := time.Since(app.splitTime[master])
+				if failedTime < app.config.Redis.FailoverTimeout {
+					app.logger.Error(fmt.Sprintf("According to DCS %s is still alive, will wait for %v before giving up on manager role",
+						master, app.config.Redis.FailoverTimeout-failedTime))
+					return stateManager
+				}
+			}
+			app.logger.Error(fmt.Sprintf("According to DCS master %s is alive, but we see it as failed. Giving up on manager role", master))
+			delete(app.splitTime, master)
+			app.dcs.ReleaseLock(pathManagerLock)
+			waitCtx, cancel := context.WithTimeout(app.ctx, app.config.Redis.FailoverTimeout)
+			defer cancel()
+			ticker := time.NewTicker(app.config.TickInterval)
+			var manager dcs.LockOwner
+		Out:
+			for {
+				select {
+				case <-ticker.C:
+					err = app.dcs.Get(pathManagerLock, &manager)
+					if err != nil {
+						app.logger.Error(fmt.Sprintf("Failed to get %s", pathManagerLock), "error", err)
+					} else if manager.Hostname != app.config.Hostname {
+						app.logger.Info(fmt.Sprintf("New manager: %s", manager.Hostname))
+						break Out
+					}
+				case <-waitCtx.Done():
+					app.logger.Error("No node took manager lock for failover timeout")
+					break Out
+				}
+			}
+			return stateCandidate
+		}
 		return stateManager
 	}
 	delete(app.nodeFailTime, master)
+	delete(app.splitTime, master)
 	app.repairShard(shardState, activeNodes, master)
 
 	if updateActive {
