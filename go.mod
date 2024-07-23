@@ -7,7 +7,7 @@ require (
 	github.com/cucumber/godog v0.14.1
 	github.com/docker/docker v27.1.0+incompatible
 	github.com/go-zookeeper/zk v1.0.3
-	github.com/gofrs/flock v0.12.0
+	github.com/gofrs/flock v0.12.1
 	github.com/heetch/confita v0.10.0
 	github.com/redis/go-redis/v9 v9.6.0
 	github.com/spf13/cobra v1.8.1
@@ -52,7 +52,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.22.0 // indirect
 	go.opentelemetry.io/otel/trace v1.22.0 // indirect
 	golang.org/x/mod v0.14.0 // indirect
-	golang.org/x/sys v0.21.0 // indirect
+	golang.org/x/sys v0.22.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	golang.org/x/tools v0.17.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
