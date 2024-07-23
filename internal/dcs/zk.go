@@ -71,6 +71,9 @@ func NewZookeeper(config *ZookeeperConfig, logger *slog.Logger) (DCS, error) {
 	proxyLogger := logger.With("module", "dcs")
 
 	var operation func() error
+
+	hostProvider := NewRandomHostProvider(&config.RandomHostProvider, logger)
+
 	if config.UseSSL {
 		if config.CACert == "" || config.KeyFile == "" || config.CertFile == "" {
 			return nil, fmt.Errorf("zookeeper ssl not configured, fill ca_cert/key_file/cert_file in config or disable use_ssl flag")
@@ -85,12 +88,12 @@ func NewZookeeper(config *ZookeeperConfig, logger *slog.Logger) (DCS, error) {
 			return nil, err
 		}
 		operation = func() error {
-			conn, ec, err = zk.Connect(config.Hosts, config.SessionTimeout, zk.WithLogger(zkLoggerProxy{proxyLogger}), zk.WithDialer(dialer))
+			conn, ec, err = zk.Connect(config.Hosts, config.SessionTimeout, zk.WithLogger(zkLoggerProxy{proxyLogger}), zk.WithDialer(dialer), zk.WithHostProvider(hostProvider))
 			return err
 		}
 	} else {
 		operation = func() error {
-			conn, ec, err = zk.Connect(config.Hosts, config.SessionTimeout, zk.WithLogger(zkLoggerProxy{proxyLogger}))
+			conn, ec, err = zk.Connect(config.Hosts, config.SessionTimeout, zk.WithLogger(zkLoggerProxy{proxyLogger}), zk.WithHostProvider(hostProvider))
 			return err
 		}
 	}
