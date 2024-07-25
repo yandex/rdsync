@@ -1,6 +1,7 @@
 package dcs
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"math/rand"
@@ -10,20 +11,24 @@ import (
 )
 
 type RandomHostProvider struct {
-	lock       sync.Mutex
-	servers    []string
-	resolved   []string
-	tried      map[string]struct{}
-	logger     *slog.Logger
-	lastLookup time.Time
-	lookupTTL  time.Duration
+	lock          sync.Mutex
+	servers       []string
+	resolved      []string
+	tried         map[string]struct{}
+	logger        *slog.Logger
+	lastLookup    time.Time
+	lookupTTL     time.Duration
+	lookupTimeout time.Duration
+	resolver      *net.Resolver
 }
 
 func NewRandomHostProvider(config *RandomHostProviderConfig, logger *slog.Logger) *RandomHostProvider {
 	return &RandomHostProvider{
-		lookupTTL: config.LookupTTL,
-		logger:    logger,
-		tried:     make(map[string]struct{}),
+		lookupTTL:     config.LookupTTL,
+		lookupTimeout: config.LookupTimeout,
+		logger:        logger,
+		tried:         make(map[string]struct{}),
+		resolver:      &net.Resolver{},
 	}
 }
 
@@ -49,7 +54,9 @@ func (rhp *RandomHostProvider) resolveHosts() error {
 		if err != nil {
 			return err
 		}
-		addrs, err := net.LookupHost(host)
+		ctx, cancel := context.WithTimeout(context.Background(), rhp.lookupTimeout)
+		defer cancel()
+		addrs, err := rhp.resolver.LookupHost(ctx, host)
 		if err != nil {
 			rhp.logger.Error(fmt.Sprintf("unable to resolve %s", host), "error", err)
 		}
