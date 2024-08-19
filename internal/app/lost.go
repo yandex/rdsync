@@ -22,24 +22,47 @@ func (app *App) stateLost() appState {
 				return stateLost
 			}
 			if offline {
-				app.logger.Info("Rdsync have lost connection to ZK. However HA cluster is live. Setting local node online")
+				app.logger.Info("Rdsync have lost connection to ZK. However HA cluster is alive. Setting local node online")
 				err = node.SetOnline(app.ctx)
 				if err != nil {
 					app.logger.Error("Unable to set local node online", "error", err)
 				}
 				return stateLost
 			}
-			app.logger.Info("Rdsync have lost connection to ZK. However HA cluster is live. Do nothing")
+			app.logger.Info("Rdsync have lost connection to ZK. However HA cluster is alive. Do nothing")
 			return stateLost
 		}
 	} else {
 		shardState, err := app.getShardStateFromDB()
 		if err != nil {
 			app.logger.Error("Failed to get shard state from DB", "error", err)
-		} else {
-			app.logger.Info(fmt.Sprintf("Shard state: %v", shardState))
+			return stateLost
 		}
-		return stateLost
+
+		app.logger.Info(fmt.Sprintf("Shard state: %v", shardState))
+		master, err := app.getMasterHost(shardState)
+		if err != nil || master == "" {
+			app.logger.Error("Failed to get master from shard state", "error", err)
+		} else {
+			local := app.shard.Local()
+			offline, err := local.IsOffline(app.ctx)
+			if err != nil {
+				app.logger.Error("Failed to get node offline state", "fqdn", local.FQDN(), "error", err)
+				return stateLost
+			}
+			if shardState[master].PingOk && shardState[master].PingStable && replicates(shardState[master], shardState[local.FQDN()].ReplicaState, local.FQDN(), app.shard.Get(master), false) {
+				if offline {
+					app.logger.Info("Rdsync have lost connection to ZK. However our replication connection is alive. Setting local node online")
+					err = node.SetOnline(app.ctx)
+					if err != nil {
+						app.logger.Error("Unable to set local node online", "error", err)
+					}
+					return stateLost
+				}
+				app.logger.Info("Rdsync have lost connection to ZK. However our replication connection is alive. Do nothing")
+				return stateLost
+			}
+		}
 	}
 
 	offline, err := node.IsOffline(app.ctx)

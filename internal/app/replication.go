@@ -10,8 +10,8 @@ func replicates(masterState *HostState, replicaState *ReplicaState, replicaFQDN 
 	if replicaState == nil || !(replicaState.MasterLinkState || allowSync) {
 		return false
 	}
-	if slices.Contains(masterState.ConnectedReplicas, replicaFQDN) {
+	if masterState != nil && slices.Contains(masterState.ConnectedReplicas, replicaFQDN) {
 		return true
 	}
-	return masterNode.MatchHost(replicaState.MasterHost)
+	return masterNode != nil && masterNode.MatchHost(replicaState.MasterHost)
 }
