@@ -92,7 +92,7 @@ func NewApp(configFile, logLevel string) (*App, error) {
 
 func (app *App) connectDCS() error {
 	var err error
-	app.dcs, err = dcs.NewZookeeper(&app.config.Zookeeper, app.logger)
+	app.dcs, err = dcs.NewZookeeper(app.ctx, &app.config.Zookeeper, app.logger)
 	if err != nil {
 		return fmt.Errorf("failed to connect to zkDCS: %s", err.Error())
 	}
