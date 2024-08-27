@@ -1,2 +1,3 @@
 cmd/rdsync/rdsync
 tests/logs/
+.idea
