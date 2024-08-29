@@ -73,7 +73,7 @@ func NewZookeeper(ctx context.Context, config *ZookeeperConfig, logger *slog.Log
 
 	var operation func() error
 
-	hostProvider := NewRandomHostProvider(ctx, &config.RandomHostProvider, logger)
+	hostProvider := NewRandomHostProvider(ctx, &config.RandomHostProvider, proxyLogger)
 
 	if config.UseSSL {
 		if config.CACert == "" || config.KeyFile == "" || config.CertFile == "" {
