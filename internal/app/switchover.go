@@ -212,7 +212,7 @@ func (app *App) performSwitchover(shardState map[string]*HostState, activeNodes 
 			return err
 		}
 		rs := shardState[host].ReplicaState
-		if rs == nil || !rs.MasterLinkState {
+		if (rs == nil || !rs.MasterLinkState) && !app.config.Redis.TurnBeforeSwitchover {
 			app.logger.Info(fmt.Sprintf("Switchover: skipping replication pause on %s", host))
 			return nil
 		}
