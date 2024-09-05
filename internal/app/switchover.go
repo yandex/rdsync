@@ -360,6 +360,10 @@ func (app *App) performSwitchover(shardState map[string]*HostState, activeNodes 
 				if host == newMaster {
 					continue
 				}
+				if !shardState[newMaster].IsReplPaused {
+					app.logger.Warn(fmt.Sprintf("Unable to psync %s before promote: replication on new master is not paused", host))
+					continue
+				}
 				if isPartialSyncPossible(shardState[host], shardState[newMaster]) {
 					psyncNodes = append(psyncNodes, host)
 				}
