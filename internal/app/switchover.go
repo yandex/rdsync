@@ -354,6 +354,17 @@ func (app *App) performSwitchover(shardState map[string]*HostState, activeNodes 
 			app.waitPoisonPill(app.config.Redis.WaitPoisonPillTimeout)
 		}
 
+		if len(aliveActiveNodes) == 1 || app.config.Redis.AllowDataLoss || app.config.Redis.MaxReplicasToWrite == 0 {
+			node := app.shard.Get(newMaster)
+			err, errConf := node.SetMinReplicas(app.ctx, 0)
+			if err != nil {
+				return fmt.Errorf("unable to set %s available for write before promote: %s", newMaster, err.Error())
+			}
+			if errConf != nil {
+				return fmt.Errorf("unable to rewrite config on %s before promote: %s", newMaster, errConf.Error())
+			}
+		}
+
 		if app.config.Redis.TurnBeforeSwitchover {
 			var psyncNodes []string
 			for _, host := range aliveActiveNodes {
