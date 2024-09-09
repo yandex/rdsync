@@ -156,20 +156,20 @@ func (app *App) waitForCatchup(host, master string) error {
 			time.Sleep(time.Second)
 			continue
 		}
-		var ok bool
+		var masterOffset int64
 		if masterState.IsMaster {
-			ok = masterState.MasterReplicationOffset <= state.ReplicaState.ReplicationOffset
+			masterOffset = masterState.MasterReplicationOffset
 		} else if masterState.ReplicaState == nil {
 			app.logger.Warn(fmt.Sprintf("WaitForCatchup: %s has invalid replica state", master))
 			time.Sleep(time.Second)
 			continue
 		} else {
-			ok = masterState.ReplicaState.ReplicationOffset <= state.ReplicaState.ReplicationOffset
+			masterOffset = masterState.ReplicaState.ReplicationOffset
 		}
-		if ok {
+		if masterOffset <= state.ReplicaState.ReplicationOffset {
 			return nil
 		}
-		app.logger.Info(fmt.Sprintf("WaitForCatchup: waiting for %s to catchup with %s", host, master))
+		app.logger.Info(fmt.Sprintf("WaitForCatchup: waiting for %s (offset=%d) to catchup with %s (offset=%d)", host, state.ReplicaState.ReplicationOffset, master, masterOffset))
 		time.Sleep(time.Second)
 	}
 
