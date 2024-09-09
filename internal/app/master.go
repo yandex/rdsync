@@ -143,6 +143,10 @@ func (app *App) waitForCatchup(host, master string) error {
 
 	deadline := time.Now().Add(app.config.Redis.WaitCatchupTimeout)
 	for time.Now().Before(deadline) {
+		masterState := app.getHostState(master)
+		if !masterState.PingOk {
+			return fmt.Errorf("waitForCatchup: %s died while waiting for catchup on %s", master, host)
+		}
 		state := app.getHostState(host)
 		if !state.PingOk {
 			return fmt.Errorf("waitForCatchup: replica %s died while waiting for catchup from %s", host, master)
@@ -152,19 +156,15 @@ func (app *App) waitForCatchup(host, master string) error {
 			time.Sleep(time.Second)
 			continue
 		}
-		masterState := app.getHostState(master)
-		if !masterState.PingOk {
-			return fmt.Errorf("waitForCatchup: %s died while waiting for catchup on %s", master, host)
-		}
 		var ok bool
 		if masterState.IsMaster {
-			ok = masterState.MasterReplicationOffset == state.ReplicaState.ReplicationOffset
+			ok = masterState.MasterReplicationOffset <= state.ReplicaState.ReplicationOffset
 		} else if masterState.ReplicaState == nil {
 			app.logger.Warn(fmt.Sprintf("WaitForCatchup: %s has invalid replica state", master))
 			time.Sleep(time.Second)
 			continue
 		} else {
-			ok = masterState.ReplicaState.ReplicationOffset == state.ReplicaState.ReplicationOffset
+			ok = masterState.ReplicaState.ReplicationOffset <= state.ReplicaState.ReplicationOffset
 		}
 		if ok {
 			return nil
