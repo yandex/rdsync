@@ -18,6 +18,7 @@ type zkhost struct {
 type RandomHostProvider struct {
 	ctx                context.Context
 	hosts              sync.Map
+	useAddrs           bool
 	hostsKeys          []string
 	tried              map[string]struct{}
 	logger             *slog.Logger
@@ -27,7 +28,7 @@ type RandomHostProvider struct {
 	resolver           *net.Resolver
 }
 
-func NewRandomHostProvider(ctx context.Context, config *RandomHostProviderConfig, logger *slog.Logger) *RandomHostProvider {
+func NewRandomHostProvider(ctx context.Context, config *RandomHostProviderConfig, useAddrs bool, logger *slog.Logger) *RandomHostProvider {
 	return &RandomHostProvider{
 		ctx:                ctx,
 		lookupTTL:          config.LookupTTL,
@@ -37,6 +38,7 @@ func NewRandomHostProvider(ctx context.Context, config *RandomHostProviderConfig
 		tried:              make(map[string]struct{}),
 		hosts:              sync.Map{},
 		resolver:           &net.Resolver{},
+		useAddrs:           useAddrs,
 	}
 }
 
@@ -146,7 +148,11 @@ func (rhp *RandomHostProvider) Next() (server string, retryStart bool) {
 		zhost := host.(zkhost)
 
 		if len(zhost.resolved) > 0 {
-			ret = zhost.resolved[rand.Intn(len(zhost.resolved))]
+			if rhp.useAddrs {
+				ret = zhost.resolved[rand.Intn(len(zhost.resolved))]
+			} else {
+				ret = selected
+			}
 		}
 	}
 

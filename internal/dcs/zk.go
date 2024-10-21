@@ -74,7 +74,7 @@ func NewZookeeper(ctx context.Context, config *ZookeeperConfig, logger *slog.Log
 
 	var operation func() error
 
-	hostProvider := NewRandomHostProvider(ctx, &config.RandomHostProvider, proxyLogger)
+	hostProvider := NewRandomHostProvider(ctx, &config.RandomHostProvider, !config.UseSSL, proxyLogger)
 
 	if config.UseSSL {
 		if config.CACert == "" || config.KeyFile == "" || config.CertFile == "" {
@@ -85,7 +85,7 @@ func NewZookeeper(ctx context.Context, config *ZookeeperConfig, logger *slog.Log
 			return nil, err
 		}
 		baseDialer := net.Dialer{Timeout: config.SessionTimeout}
-		dialer, err := GetTLSDialer(config.Hosts, &baseDialer, tlsConfig)
+		dialer, err := GetTLSDialer(&baseDialer, tlsConfig)
 		if err != nil {
 			return nil, err
 		}
