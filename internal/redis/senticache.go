@@ -63,9 +63,9 @@ type SentiCacheNode struct {
 	broken bool
 }
 
-// NewSentiCacheNode is a SentiCacheNode constructor
-func NewSentiCacheNode(config *config.Config, logger *slog.Logger) (*SentiCacheNode, error) {
-	addr := net.JoinHostPort(localhost, strconv.Itoa(config.SentinelMode.CachePort))
+// NewRemoteSentiCacheNode is a remote SentiCacheNode constructor
+func NewRemoteSentiCacheNode(config *config.Config, host string, logger *slog.Logger) (*SentiCacheNode, error) {
+	addr := net.JoinHostPort(host, strconv.Itoa(config.SentinelMode.CachePort))
 	opts := client.Options{
 		Addr:            addr,
 		Username:        config.SentinelMode.CacheAuthUser,
@@ -78,7 +78,7 @@ func NewSentiCacheNode(config *config.Config, logger *slog.Logger) (*SentiCacheN
 		Protocol:        2,
 	}
 	if config.SentinelMode.UseTLS {
-		tlsConf, err := getTLSConfig(config, config.SentinelMode.TLSCAPath, localhost)
+		tlsConf, err := getTLSConfig(config, config.SentinelMode.TLSCAPath, host)
 		if err != nil {
 			return nil, err
 		}
@@ -91,6 +91,11 @@ func NewSentiCacheNode(config *config.Config, logger *slog.Logger) (*SentiCacheN
 		broken: false,
 	}
 	return &node, nil
+}
+
+// NewSentiCacheNode is a local SentiCacheNode constructor
+func NewSentiCacheNode(config *config.Config, logger *slog.Logger) (*SentiCacheNode, error) {
+	return NewRemoteSentiCacheNode(config, localhost, logger)
 }
 
 // Close closes underlying Redis connection
