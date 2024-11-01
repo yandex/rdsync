@@ -7,14 +7,10 @@ import (
 	"github.com/yandex/rdsync/internal/redis"
 )
 
-func (app *App) updateCache() error {
+func (app *App) updateCache(refState map[string]*HostState, cache *redis.SentiCacheNode) error {
 	var state redis.SentiCacheState
 	masterReadOnly := false
-	dcsState, err := app.getShardStateFromDcs()
-	if err != nil {
-		return err
-	}
-	for fqdn, hostState := range dcsState {
+	for fqdn, hostState := range refState {
 		if hostState == nil || !hostState.PingOk || hostState.Error != "" {
 			continue
 		}
@@ -53,7 +49,7 @@ func (app *App) updateCache() error {
 			}
 			state.Master.Port = app.config.Redis.Port
 			state.Master.RunID = hostState.RunID
-			state.Master.Quorum = len(dcsState)/2 + 1
+			state.Master.Quorum = len(refState)/2 + 1
 			state.Master.ParallelSyncs = app.config.Redis.MaxParallelSyncs
 			state.Master.ConfigEpoch = 0
 		} else {
@@ -84,9 +80,9 @@ func (app *App) updateCache() error {
 		}
 	}
 	if state.Master.IP == "" {
-		return fmt.Errorf("0 open masters within %d hosts", len(dcsState))
+		return fmt.Errorf("0 open masters within %d hosts", len(refState))
 	}
-	return app.cache.Update(app.ctx, &state)
+	return cache.Update(app.ctx, &state)
 }
 
 func (app *App) cacheUpdater() {
@@ -94,7 +90,10 @@ func (app *App) cacheUpdater() {
 	for {
 		select {
 		case <-ticker.C:
-			err := app.updateCache()
+			dcsState, err := app.getShardStateFromDcs()
+			if err == nil {
+				err = app.updateCache(dcsState, app.cache)
+			}
 			if err != nil {
 				app.logger.Error("CacheUpdater: failed to update cache", "error", err)
 			}

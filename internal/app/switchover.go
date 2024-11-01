@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/yandex/rdsync/internal/dcs"
+	"github.com/yandex/rdsync/internal/redis"
 )
 
 const (
@@ -450,6 +451,25 @@ func (app *App) performSwitchover(shardState map[string]*HostState, activeNodes 
 	newMasterNode := app.shard.Get(newMaster)
 
 	app.repairMaster(newMasterNode, psyncActiveNodes, shardState[newMaster])
+
+	if app.mode == modeSentinel {
+		shardState, err = app.getShardStateFromDB()
+		if err == nil {
+			sentiCacheUpdateErrs := runParallel(func(host string) error {
+				sentiCacheNode, err := redis.NewRemoteSentiCacheNode(app.config, host, app.logger)
+				if err != nil {
+					return err
+				}
+				return app.updateCache(shardState, sentiCacheNode)
+			}, activeNodes)
+			combined := combineErrors(sentiCacheUpdateErrs)
+			if combined != nil {
+				app.logger.Warn("Unable to notify all senticache nodes on new master", "error", combined)
+			}
+		} else {
+			app.logger.Warn("Unable to get state for senticache nodes notify on new master", "error", err)
+		}
+	}
 
 	errs := runParallel(func(host string) error {
 		if host == newMaster || !shardState[host].PingOk {
