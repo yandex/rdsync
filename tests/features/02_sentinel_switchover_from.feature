@@ -48,6 +48,9 @@ Feature: Sentinel mode switchover from old master
         And senticache host "redis1" should have master "{{.new_master}}" within "30" seconds
         And senticache host "redis2" should have master "{{.new_master}}" within "30" seconds
         And senticache host "redis3" should have master "{{.new_master}}" within "30" seconds
+        When I wait for "30" seconds
+        Then path "/var/lib/redis/appendonlydir" exists on "redis1"
+        Then path "/var/lib/redis/appendonlydir" does not exist on "{{.new_master}}"
 
     Scenario: Sentinel mode switchover with unhealthy replicas is rejected
         Given sentinel shard is up and running

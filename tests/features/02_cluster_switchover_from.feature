@@ -45,6 +45,9 @@ Feature: Cluster mode switchover from old master
         When I get zookeeper node "/test/master"
         And I save zookeeper query result as "new_master"
         Then redis host "{{.new_master}}" should be master
+        When I wait for "30" seconds
+        Then path "/var/lib/redis/appendonlydir" exists on "redis1"
+        Then path "/var/lib/redis/appendonlydir" does not exist on "{{.new_master}}"
 
     Scenario: Cluster mode switchover (from) with unhealthy replicas is rejected
         Given clustered shard is up and running

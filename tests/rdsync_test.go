@@ -492,7 +492,15 @@ func (tctx *testContext) stepSentinelShardIsUpAndRunning() error {
 func (tctx *testContext) stepPersistenceDisabled() error {
 	for _, service := range tctx.composer.Services() {
 		if strings.HasPrefix(service, redisName) {
-			_, err := tctx.runRedisCmd(service, []string{"CONFIG", "SET", "appendonly", "no"})
+			_, _, err := tctx.composer.RunCommand(service, "sed -i /OnReplicas/d /etc/rdsync.yaml", 10*time.Second)
+			if err != nil {
+				return err
+			}
+			_, _, err = tctx.composer.RunCommand(service, "supervisorctl restart rdsync", 10*time.Second)
+			if err != nil {
+				return err
+			}
+			_, err = tctx.runRedisCmd(service, []string{"CONFIG", "SET", "appendonly", "no"})
 			if err != nil {
 				return err
 			}
@@ -596,6 +604,30 @@ func (tctx *testContext) stepHostShouldHaveFileWithin(node string, path string, 
 		return err == nil
 	}, time.Duration(timeout*int(time.Second)), time.Second)
 	return err
+}
+
+func (tctx *testContext) stepPathExists(path, host string) error {
+	cmd := fmt.Sprintf("stat %s", path)
+	retCode, _, err := tctx.composer.RunCommand(host, cmd, 10*time.Second)
+	if err != nil {
+		return fmt.Errorf("failed to check path %s on %s: %s", path, host, err)
+	}
+	if retCode != 0 {
+		return fmt.Errorf("expected %s to exist on %s but it's not", path, host)
+	}
+	return nil
+}
+
+func (tctx *testContext) stepPathDoesNotExist(path, host string) error {
+	cmd := fmt.Sprintf("stat %s", path)
+	retCode, _, err := tctx.composer.RunCommand(host, cmd, 10*time.Second)
+	if err != nil {
+		return fmt.Errorf("failed to check path %s on %s: %s", path, host, err)
+	}
+	if retCode == 0 {
+		return fmt.Errorf("expected %s to be absent on %s but it exists", path, host)
+	}
+	return nil
 }
 
 func (tctx *testContext) stepIRunCommandOnHost(host string, body *godog.DocString) error {
@@ -1026,6 +1058,10 @@ func InitializeScenario(s *godog.ScenarioContext) {
 	// host checking
 	s.Step(`^host "([^"]*)" should have file "([^"]*)"$`, tctx.stepHostShouldHaveFile)
 	s.Step(`^host "([^"]*)" should have file "([^"]*)" within "(\d+)" seconds$`, tctx.stepHostShouldHaveFileWithin)
+
+	// path checking
+	s.Step(`^path "([^"]*)" does not exist on "([^"]*)"$`, tctx.stepPathDoesNotExist)
+	s.Step(`^path "([^"]*)" exists on "([^"]*)"$`, tctx.stepPathExists)
 
 	// command execution
 	s.Step(`^I run command on host "([^"]*)"$`, tctx.stepIRunCommandOnHost)

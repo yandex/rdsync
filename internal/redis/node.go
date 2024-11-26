@@ -335,6 +335,37 @@ func (n *Node) EmptyQuorumReplicas(ctx context.Context) error {
 	return nil
 }
 
+// GetAppendonly returns a setting of appendonly config
+func (n *Node) GetAppendonly(ctx context.Context) (bool, error) {
+	cmd := client.NewStringSliceCmd(ctx, n.config.Renames.Config, "get", "appendonly")
+	err := n.conn.Process(ctx, cmd)
+	if err != nil {
+		return false, err
+	}
+	vals, err := cmd.Result()
+	if err != nil {
+		return false, err
+	}
+	if len(vals) != 2 {
+		return false, fmt.Errorf("unexpected config get result for repl-paused: %v", vals)
+	}
+	return vals[1] == "yes", nil
+}
+
+// SetOffline disallows non-localhost connections and drops all existing clients (except rdsync ones)
+func (n *Node) SetAppendonly(ctx context.Context, value bool) error {
+	strValue := "yes"
+	if !value {
+		strValue = "no"
+	}
+	setCmd := n.conn.Do(ctx, n.config.Renames.Config, "set", "appendonly", strValue)
+	err := setCmd.Err()
+	if err != nil {
+		return err
+	}
+	return n.configRewrite(ctx)
+}
+
 // IsReadOnly returns ReadOnly status for node
 func (n *Node) IsReadOnly(ctx context.Context) (bool, error) {
 	minReplicas, err := n.GetMinReplicas(ctx)

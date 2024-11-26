@@ -14,6 +14,9 @@ Feature: Sentinel mode smoke tests
         And senticache host "redis1" should have master "redis1" within "30" seconds
         And senticache host "redis2" should have master "redis1" within "30" seconds
         And senticache host "redis3" should have master "redis1" within "30" seconds
+        And path "/var/lib/redis/appendonlydir" does not exist on "redis1"
+        And path "/var/lib/redis/appendonlydir" exists on "redis2"
+        And path "/var/lib/redis/appendonlydir" exists on "redis3"
 
     Scenario: Sentinel mode duplicate ip resolve does not break rdsync
         Given sentinel shard is up and running

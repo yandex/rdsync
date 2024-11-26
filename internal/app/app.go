@@ -21,6 +21,7 @@ import (
 type App struct {
 	ctx          context.Context
 	mode         appMode
+	aofMode      aofMode
 	nodeFailTime map[string]time.Time
 	splitTime    map[string]time.Time
 	state        appState
@@ -77,9 +78,14 @@ func NewApp(configFile, logLevel string) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
+	aofMode, err := parseAofMode(conf.AofMode)
+	if err != nil {
+		return nil, err
+	}
 	app := &App{
 		ctx:          baseContext(),
 		mode:         mode,
+		aofMode:      aofMode,
 		nodeFailTime: make(map[string]time.Time),
 		splitTime:    make(map[string]time.Time),
 		state:        stateInit,

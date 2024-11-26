@@ -146,6 +146,10 @@ func (app *App) repairLocalNode(master string) bool {
 	}
 
 	if !offline {
+		err = app.adjustAofMode(master)
+		if err != nil {
+			app.logger.Error("Unable to adjust aof config on local node", "error", err)
+		}
 		return true
 	}
 
