@@ -105,8 +105,8 @@ func (s *SentiCacheNode) Close() error {
 
 func (s *SentiCacheNode) restart(ctx context.Context) error {
 	s.logger.Error("Restarting broken senticache")
-	splitted := strings.Fields(s.config.SentinelMode.CacheRestartCommand)
-	cmd := exec.CommandContext(ctx, splitted[0], splitted[1:]...)
+	split := strings.Fields(s.config.SentinelMode.CacheRestartCommand)
+	cmd := exec.CommandContext(ctx, split[0], split[1:]...)
 	return cmd.Run()
 }
 

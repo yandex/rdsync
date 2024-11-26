@@ -121,7 +121,7 @@ Feature: Cluster mode broken replication fix
             "redis1"
         """
 
-    Scenario: Cluster mode accidential cascade replication is fixed
+    Scenario: Cluster mode accidental cascade replication is fixed
         Given clustered shard is up and running
         Then redis host "redis1" should be master
         And redis host "redis2" should become replica of "redis1" within "15" seconds

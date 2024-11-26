@@ -302,9 +302,9 @@ func (n *Node) GetQuorumReplicas(ctx context.Context) (string, error) {
 	if len(vals) != 2 {
 		return "", fmt.Errorf("unexpected config get result for quorum-replicas: %v", vals)
 	}
-	splitted := strings.Split(vals[1], " ")
-	sort.Strings(splitted)
-	return strings.Join(splitted, " "), nil
+	split := strings.Split(vals[1], " ")
+	sort.Strings(split)
+	return strings.Join(split, " "), nil
 }
 
 // SetQuorumReplicas sets desired quorum replicas
@@ -409,8 +409,8 @@ func (n *Node) Restart(ctx context.Context) error {
 		return fmt.Errorf("restarting %s is not possible - not local", n.fqdn)
 	}
 	n.logger.Warn(fmt.Sprintf("Restarting with %s", n.config.Redis.RestartCommand))
-	splitted := strings.Fields(n.config.Redis.RestartCommand)
-	cmd := exec.CommandContext(ctx, splitted[0], splitted[1:]...)
+	split := strings.Fields(n.config.Redis.RestartCommand)
+	cmd := exec.CommandContext(ctx, split[0], split[1:]...)
 	return cmd.Run()
 }
 
@@ -540,13 +540,13 @@ func (n *Node) IsClusterMajorityAlive(ctx context.Context) (bool, error) {
 	failedMasters := 0
 	lines := strings.Split(cmd.Val(), "\n")
 	for _, line := range lines {
-		splitted := strings.Split(line, " ")
-		if len(splitted) < 3 {
+		split := strings.Split(line, " ")
+		if len(split) < 3 {
 			continue
 		}
-		if strings.Contains(splitted[2], "master") {
+		if strings.Contains(split[2], "master") {
 			totalMasters += 1
-			if strings.Contains(splitted[2], "fail") {
+			if strings.Contains(split[2], "fail") {
 				failedMasters += 1
 			}
 		}
@@ -600,12 +600,12 @@ func (n *Node) HasClusterSlots(ctx context.Context) (bool, error) {
 	}
 	lines := strings.Split(cmd.Val(), "\n")
 	for _, line := range lines {
-		splitted := strings.Split(line, " ")
-		if len(splitted) < 3 {
+		split := strings.Split(line, " ")
+		if len(split) < 3 {
 			continue
 		}
-		if strings.Contains(splitted[2], "myself") {
-			return len(splitted) > 8, nil
+		if strings.Contains(split[2], "myself") {
+			return len(split) > 8, nil
 		}
 	}
 	return false, nil
