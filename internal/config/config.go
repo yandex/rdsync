@@ -38,6 +38,7 @@ type RedisConfig struct {
 	AllowDataLoss           bool          `yaml:"allow_data_loss"`
 	TurnBeforeSwitchover    bool          `yaml:"turn_before_switchover"`
 	RestartCommand          string        `yaml:"restart_command"`
+	AofPath                 string        `yaml:"aof_path"`
 }
 
 // RedisRenamesConfig contains redis command renames
@@ -72,6 +73,7 @@ type Config struct {
 	LogLevel                string              `yaml:"loglevel"`
 	Hostname                string              `yaml:"hostname"`
 	Mode                    string              `yaml:"mode"`
+	AofMode                 string              `yaml:"aof_mode"`
 	InfoFile                string              `yaml:"info_file"`
 	MaintenanceFile         string              `yaml:"maintenance_file"`
 	DaemonLockFile          string              `yaml:"daemon_lock_file"`
@@ -114,6 +116,7 @@ func DefaultRedisConfig() RedisConfig {
 		AllowDataLoss:           false,
 		TurnBeforeSwitchover:    false,
 		RestartCommand:          "systemctl restart redis-server",
+		AofPath:                 "",
 	}
 }
 
@@ -177,6 +180,7 @@ func DefaultConfig() (Config, error) {
 		return Config{}, err
 	}
 	config := Config{
+		AofMode:                 "Unspecified",
 		LogLevel:                "Info",
 		Hostname:                hostname,
 		Mode:                    "Sentinel",

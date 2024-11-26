@@ -1,4 +1,5 @@
 mode: Sentinel
+aof_mode: OnReplicas
 loglevel: Debug
 pprof_addr: ":8081"
 info_file: /var/run/rdsync.info
@@ -7,6 +8,7 @@ daemon_lock_file: /var/run/rdsync.lock
 redis:
   auth_password: functestpassword
   restart_command: supervisorctl restart redis
+  aof_path: /var/lib/redis/appendonlydir
 sentinel_mode:
   announce_hostname: true
   cluster_name: functest

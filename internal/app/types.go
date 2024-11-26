@@ -58,6 +58,43 @@ func parseMode(mode string) (appMode, error) {
 	return modeSentinel, fmt.Errorf("unknown mode: %s", mode)
 }
 
+type aofMode int
+
+const (
+	modeUnspecified aofMode = iota
+	modeOn
+	modeOff
+	modeOnReplicas
+)
+
+func (m aofMode) String() string {
+	switch m {
+	case modeUnspecified:
+		return "Unspecified"
+	case modeOn:
+		return "On"
+	case modeOff:
+		return "Off"
+	case modeOnReplicas:
+		return "OnReplicas"
+	}
+	return "Unknown"
+}
+
+func parseAofMode(mode string) (aofMode, error) {
+	switch mode {
+	case "Unspecified":
+		return modeUnspecified, nil
+	case "On":
+		return modeOn, nil
+	case "Off":
+		return modeOff, nil
+	case "OnReplicas":
+		return modeOnReplicas, nil
+	}
+	return modeUnspecified, fmt.Errorf("unknown aof mode: %s", mode)
+}
+
 const (
 	// manager's lock
 	pathManagerLock = "manager"

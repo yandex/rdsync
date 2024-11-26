@@ -11,6 +11,9 @@ Feature: Cluster mode smoke tests
         """
             ["redis1","redis2","redis3"]
         """
+        And path "/var/lib/redis/appendonlydir" does not exist on "redis1"
+        And path "/var/lib/redis/appendonlydir" exists on "redis2"
+        And path "/var/lib/redis/appendonlydir" exists on "redis3"
 
     Scenario: Cluster mode duplicate ip resolve does not break rdsync
         Given clustered shard is up and running
