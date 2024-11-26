@@ -26,7 +26,7 @@ type NodeConfiguration struct {
 	Priority int `json:"priority"`
 }
 
-// NewShard is a Shard constrcutor
+// NewShard is a Shard constructor
 func NewShard(config *config.Config, logger *slog.Logger, dcs dcs.DCS) *Shard {
 	s := &Shard{
 		config: config,

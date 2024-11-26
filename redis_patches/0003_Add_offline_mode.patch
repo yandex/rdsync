@@ -84,7 +84,7 @@ index be2405170..05bdf5c0c 100644
      int get_ack_from_slaves;            /* If true we send REPLCONF GETACK. */
      int repl_paused;                    /* If true we don't try to connect to master */
 +    /* Offline mode */
-+    int offline;                        /* If true only localhost connectiona are accepted */
++    int offline;                        /* If true only localhost connections are accepted */
 +    int offline_initial;                /* Initial state of offline mode (from config) */
      /* Limits */
      unsigned int maxclients;            /* Max number of simultaneous clients */

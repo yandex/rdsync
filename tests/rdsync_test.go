@@ -685,9 +685,9 @@ func (tctx *testContext) stepCommandOutputShouldMatch(matcher string, body *godo
 }
 
 func (tctx *testContext) stepIRunCmdOnHost(host string, body *godog.DocString) error {
-	splitted := strings.Split(strings.TrimSpace(body.Content), "\"")
+	split := strings.Split(strings.TrimSpace(body.Content), "\"")
 	var args []string
-	for index, arg := range splitted {
+	for index, arg := range split {
 		if index%2 == 1 {
 			args = append(args, strings.TrimSpace(arg))
 		} else {
@@ -707,9 +707,9 @@ func (tctx *testContext) stepRedisCmdResultShouldMatch(matcher string, body *god
 }
 
 func (tctx *testContext) stepIRunSenticacheCmdOnHost(host string, body *godog.DocString) error {
-	splitted := strings.Split(strings.TrimSpace(body.Content), "\"")
+	split := strings.Split(strings.TrimSpace(body.Content), "\"")
 	var args []string
-	for index, arg := range splitted {
+	for index, arg := range split {
 		if index%2 == 1 {
 			args = append(args, strings.TrimSpace(arg))
 		} else {
@@ -947,7 +947,7 @@ func (tctx *testContext) stepSenticacheHostShouldHaveMasterWithin(host, master s
 	return err
 }
 
-func (tctx *testContext) stepISaveZookeperQueryResultAs(varname string) error {
+func (tctx *testContext) stepISaveZookeeperQueryResultAs(varname string) error {
 	var j interface{}
 	if tctx.zkQueryResult != "" {
 		if err := json.Unmarshal([]byte(tctx.zkQueryResult), &j); err != nil {
@@ -1110,7 +1110,7 @@ func InitializeScenario(s *godog.ScenarioContext) {
 	s.Step(`^I break replication on host "([^"]*)"$`, tctx.stepBreakReplicationOnHost)
 
 	// variables
-	s.Step(`^I save zookeeper query result as "([^"]*)"$`, tctx.stepISaveZookeperQueryResultAs)
+	s.Step(`^I save zookeeper query result as "([^"]*)"$`, tctx.stepISaveZookeeperQueryResultAs)
 	s.Step(`^I save command output as "([^"]*)"$`, tctx.stepISaveCommandOutputAs)
 	s.Step(`^I save redis cmd result as "([^"]*)"$`, tctx.stepISaveRedisCmdResultAs)
 	s.Step(`^I save "([^"]*)" as "([^"]*)"$`, tctx.stepISaveValAs)
