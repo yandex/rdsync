@@ -32,5 +32,5 @@ Feature: Cluster mode local node repair
         """
             redis-cli -a functestpassword DEBUG SLEEP 600
         """
-        And I wait for "300" seconds
+        And I wait for "420" seconds
         Then redis host "redis1" should become available within "60" seconds

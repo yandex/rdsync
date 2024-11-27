@@ -9,9 +9,9 @@ import (
 	"github.com/yandex/rdsync/internal/dcs"
 )
 
-func (app *App) setStateError(state *HostState, fqdn, error string) {
-	app.logger.Error("GetHostState error", "fqdn", fqdn, "error", error)
-	state.Error = error
+func (app *App) setStateError(state *HostState, fqdn, message string) {
+	app.logger.Error("GetHostState error", "fqdn", fqdn, "error", message)
+	state.Error = message
 }
 
 func (app *App) getHostState(fqdn string) *HostState {

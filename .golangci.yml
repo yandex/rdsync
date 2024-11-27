@@ -40,9 +40,9 @@ linters:
   disable-all: true
   enable:
     - bodyclose
+    - copyloopvar
     - dupl
     - errcheck
-    - exportloopref
     - funlen
     - gocritic
     - gofmt
@@ -62,7 +62,7 @@ linters:
     - whitespace
 
 run:
-  go: 1.21
+  go: 1.23
   timeout: 5m
 
 severity:
