@@ -25,7 +25,7 @@ apt install less \
     faketime \
     iptables \
     openssl \
-    netcat
+    netcat-traditional
 
 rm -rf /var/run
 ln -s /dev/shm /var/run
