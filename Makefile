@@ -17,7 +17,7 @@ unittests:
 	go test ./cmd/... ./tests/testutil/matchers/
 
 redis/src/redis-server:
-	docker run --rm -v ${CURDIR}:/app -w /app ubuntu:jammy /app/redis_patches/build.sh
+	docker run --rm -v ${CURDIR}:/app -w /app ubuntu:noble /app/redis_patches/build.sh
 
 test: base_image redis/src/redis-server cmd/rdsync/rdsync recreate_logs
 	rm -rf ./tests/images/redis/rdsync && cp cmd/rdsync/rdsync ./tests/images/redis/rdsync

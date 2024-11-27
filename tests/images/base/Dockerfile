@@ -1,4 +1,4 @@
-FROM ubuntu:jammy
+FROM ubuntu:noble
 ENV container docker
 ENV DEBIAN_FRONTEND noninteractive
 COPY . /var/lib/dist/base
