@@ -1,6 +1,6 @@
 .PHONY: format lint unittests recreate_logs test start_sentinel_env run_jepsen_sentinel_test jepsen_sentinel_test start_cluster_env run_jepsen_cluster_test jepsen_cluster_test clean
 PROJECT=rdsync
-ZK_VERSION=3.9.2
+ZK_VERSION=3.9.3
 
 cmd/rdsync/rdsync:
 	GOOS=linux go build -tags netgo,osusergo -o ./cmd/rdsync/rdsync ./cmd/rdsync/...
