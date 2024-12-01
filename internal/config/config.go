@@ -34,7 +34,6 @@ type RedisConfig struct {
 	WaitPromoteForceTimeout time.Duration `yaml:"wait_promote_force_timeout"`
 	WaitPoisonPillTimeout   time.Duration `yaml:"wait_poison_pill_timeout"`
 	MaxParallelSyncs        int           `yaml:"max_parallel_syncs"`
-	MaxReplicasToWrite      int           `yaml:"max_replicas_to_write"`
 	AllowDataLoss           bool          `yaml:"allow_data_loss"`
 	TurnBeforeSwitchover    bool          `yaml:"turn_before_switchover"`
 	RestartCommand          string        `yaml:"restart_command"`
@@ -112,7 +111,6 @@ func DefaultRedisConfig() RedisConfig {
 		WaitPromoteForceTimeout: 10 * time.Second,
 		WaitPoisonPillTimeout:   30 * time.Second,
 		MaxParallelSyncs:        1,
-		MaxReplicasToWrite:      -1,
 		AllowDataLoss:           false,
 		TurnBeforeSwitchover:    false,
 		RestartCommand:          "systemctl restart redis-server",

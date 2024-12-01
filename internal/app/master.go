@@ -7,12 +7,8 @@ import (
 	"github.com/yandex/rdsync/internal/dcs"
 )
 
-func (app *App) getMinReplicasToWrite(activeNodes []string) int {
-	minReplicas := len(activeNodes) / 2
-	if app.config.Redis.MaxReplicasToWrite >= 0 && minReplicas > app.config.Redis.MaxReplicasToWrite {
-		minReplicas = app.config.Redis.MaxReplicasToWrite
-	}
-	return minReplicas
+func (app *App) getNumReplicasToWrite(activeNodes []string) int {
+	return len(activeNodes) / 2
 }
 
 func (app *App) getCurrentMaster(shardState map[string]*HostState) (string, error) {

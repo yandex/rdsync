@@ -68,7 +68,7 @@ index 000000000..dca11ab67
 +    }
 +}
 diff --git a/src/config.c b/src/config.c
-index a7231868c..60e197c36 100644
+index a7231868c..6939dc893 100644
 --- a/src/config.c
 +++ b/src/config.c
 @@ -3093,6 +3093,78 @@ static void rewriteConfigOfflineMode(standardConfig *config, const char *name, s
@@ -150,7 +150,15 @@ index a7231868c..60e197c36 100644
  standardConfig static_configs[] = {
      /* Bool configs */
      createBoolConfig("rdbchecksum", NULL, IMMUTABLE_CONFIG, server.rdb_checksum, 1, NULL, NULL),
-@@ -3309,6 +3381,7 @@ standardConfig static_configs[] = {
+@@ -3230,6 +3302,7 @@ standardConfig static_configs[] = {
+     createIntConfig("watchdog-period", NULL, MODIFIABLE_CONFIG | HIDDEN_CONFIG, 0, INT_MAX, server.watchdog_period, 0, INTEGER_CONFIG, NULL, updateWatchdogPeriod),
+     createIntConfig("shutdown-timeout", NULL, MODIFIABLE_CONFIG, 0, INT_MAX, server.shutdown_timeout, 10, INTEGER_CONFIG, NULL, NULL),
+     createIntConfig("repl-diskless-sync-max-replicas", NULL, MODIFIABLE_CONFIG, 0, INT_MAX, server.repl_diskless_sync_max_replicas, 0, INTEGER_CONFIG, NULL, NULL),
++    createIntConfig("quorum-replicas-to-write", NULL, MODIFIABLE_CONFIG, 0, INT_MAX, server.quorum_replicas_to_write, 0, INTEGER_CONFIG, NULL, NULL),
+ 
+     /* Unsigned int configs */
+     createUIntConfig("maxclients", NULL, MODIFIABLE_CONFIG, 1, UINT_MAX, server.maxclients, 10000, INTEGER_CONFIG, NULL, updateMaxclients),
+@@ -3309,6 +3382,7 @@ standardConfig static_configs[] = {
      createSpecialConfig("replicaof", "slaveof", IMMUTABLE_CONFIG | MULTI_ARG_CONFIG, setConfigReplicaOfOption, getConfigReplicaOfOption, rewriteConfigReplicaOfOption, NULL),
      createSpecialConfig("latency-tracking-info-percentiles", NULL, MODIFIABLE_CONFIG | MULTI_ARG_CONFIG, setConfigLatencyTrackingInfoPercentilesOutputOption, getConfigLatencyTrackingInfoPercentilesOutputOption, rewriteConfigLatencyTrackingInfoPercentilesOutputOption, NULL),
      createSpecialConfig("offline", NULL, MODIFIABLE_CONFIG, setOfflineMode, getOfflineMode, rewriteConfigOfflineMode, applyBind),
@@ -171,7 +179,7 @@ index 7696e8c28..82c6f2b97 100644
      c->reploff = 0;
      c->read_reploff = 0;
 diff --git a/src/replication.c b/src/replication.c
-index 47172dba3..6bfb21ef4 100644
+index 47172dba3..04f0c29bb 100644
 --- a/src/replication.c
 +++ b/src/replication.c
 @@ -1285,7 +1285,8 @@ void replconfCommand(client *c) {
@@ -220,7 +228,7 @@ index 47172dba3..6bfb21ef4 100644
      replicationRequestAckFromSlaves();
  }
  
-+/* WAITQUORUM for min-replicas-to-write quorum replicas to acknowledge the processing of our latest
++/* WAITQUORUM for quorum-replicas-to-write quorum replicas to acknowledge the processing of our latest
 + * write command (and all the previous commands). */
 +void waitquorumCommand(client *c) {
 +    long ackreplicas;
@@ -233,14 +241,14 @@ index 47172dba3..6bfb21ef4 100644
 +
 +    /* First try without blocking at all. */
 +    ackreplicas = replicationCountQuorumAcksByOffset(c->woff);
-+    if (ackreplicas >= server.repl_min_slaves_to_write || c->flags & CLIENT_DENY_BLOCKING) {
++    if (ackreplicas >= server.quorum_replicas_to_write || c->flags & CLIENT_DENY_BLOCKING) {
 +        addReplyLongLong(c,ackreplicas);
 +        return;
 +    }
 +
 +    /* Otherwise block the client and put it into our list of clients
 +     * waiting for ack from slaves. */
-+    blockForReplication(c,0,offset,server.repl_min_slaves_to_write);
++    blockForReplication(c,0,offset,server.quorum_replicas_to_write);
 +    c->bstate.quorum = 1;
 +
 +    /* Make sure that the server will send an ACK request to all the slaves
@@ -360,7 +368,7 @@ index 2aa63df77..4b1f4242a 100644
              }
          }
 diff --git a/src/server.h b/src/server.h
-index 05bdf5c0c..58dbd02b4 100644
+index 320d5eeba..18c85d3dc 100644
 --- a/src/server.h
 +++ b/src/server.h
 @@ -1030,6 +1030,7 @@ typedef struct blockingState {
@@ -379,15 +387,20 @@ index 05bdf5c0c..58dbd02b4 100644
      int repl_start_cmd_stream_on_ack; /* Install slave write handler on first ACK. */
      int repldbfd;           /* Replication DB file descriptor. */
      off_t repldboff;        /* Replication DB file offset. */
-@@ -1599,6 +1601,7 @@ struct redisServer {
+@@ -1597,8 +1599,10 @@ struct redisServer {
+     list *clients_pending_write; /* There is to write or install handler. */
+     list *clients_pending_read;  /* Client has pending read socket buffers. */
      list *slaves, *monitors;    /* List of slaves and MONITORs */
-     client *current_client;     /* The client that triggered the command execution (External or AOF). */
-     client *executing_client;   /* The client executing the current command (possibly script or module). */
-+    dict *quorum_replicas;      /* Replicas that should participate in quorum commit */
+-    client *current_client;     /* The client that triggered the command execution (External or AOF). */
+-    client *executing_client;   /* The client executing the current command (possibly script or module). */
++    client *current_client;       /* The client that triggered the command execution (External or AOF). */
++    client *executing_client;     /* The client executing the current command (possibly script or module). */
++    dict *quorum_replicas;        /* Replicas that should participate in quorum commit */
++    int quorum_replicas_to_write; /* Num replicas to accept write before returning from WAITQUORUM command */
  
  #ifdef LOG_REQ_RES
      char *req_res_logfile; /* Path of log file for logging all requests and their replies. If NULL, no logging will be performed */
-@@ -2804,11 +2807,13 @@ void resizeReplicationBacklog(void);
+@@ -2804,11 +2808,13 @@ void resizeReplicationBacklog(void);
  void replicationSetMaster(char *ip, int port);
  void replicationUnsetMaster(void);
  void refreshGoodSlavesCount(void);
@@ -401,7 +414,7 @@ index 05bdf5c0c..58dbd02b4 100644
  void replicationSendNewlineToMaster(void);
  long long replicationGetSlaveOffset(void);
  char *replicationGetSlaveName(client *c);
-@@ -3654,6 +3659,7 @@ void bitposCommand(client *c);
+@@ -3654,6 +3660,7 @@ void bitposCommand(client *c);
  void replconfCommand(client *c);
  void waitCommand(client *c);
  void waitaofCommand(client *c);
@@ -410,7 +423,7 @@ index 05bdf5c0c..58dbd02b4 100644
  void georadiusbymemberroCommand(client *c);
  void georadiusCommand(client *c);
 diff --git a/tests/unit/yandex-cloud-patches.tcl b/tests/unit/yandex-cloud-patches.tcl
-index b8c3ba453..0ac84b270 100644
+index b8c3ba453..43ea52352 100644
 --- a/tests/unit/yandex-cloud-patches.tcl
 +++ b/tests/unit/yandex-cloud-patches.tcl
 @@ -21,3 +21,67 @@ start_server {config "minimal.conf" tags {"external:skip"}} {
@@ -438,7 +451,7 @@ index b8c3ba453..0ac84b270 100644
 +    }
 +
 +    wait_replica_online $master
-+    $master config set min-replicas-to-write 1
++    $master config set quorum-replicas-to-write 1
 +    $master config set quorum-replicas $slave_host:$slave_port
 +
 +    test {WAITQUORUM should acknowledge 1 additional copy of the data} {
@@ -481,3 +494,6 @@ index b8c3ba453..0ac84b270 100644
 +    }
 +}
 +}
+-- 
+2.47.1
+
