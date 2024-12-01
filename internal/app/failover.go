@@ -19,7 +19,7 @@ func countRunningHAReplicas(shardState map[string]*HostState) int {
 }
 
 func (app *App) getFailoverQuorum(activeNodes []string) int {
-	fq := len(activeNodes) - app.getMinReplicasToWrite(activeNodes)
+	fq := len(activeNodes) - app.getNumReplicasToWrite(activeNodes)
 	if fq < 1 || app.config.Redis.AllowDataLoss {
 		fq = 1
 	}

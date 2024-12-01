@@ -52,17 +52,26 @@ func (app *App) repairShard(shardState map[string]*HostState, activeNodes []stri
 }
 
 func (app *App) repairMaster(node *redis.Node, activeNodes []string, state *HostState) {
-	expectedMinReplicas := app.getMinReplicasToWrite(activeNodes)
-	actualMinReplicas, err := node.GetMinReplicas(app.ctx)
+	if state.IsReadOnly {
+		err, rewriteErr := node.SetReadWrite(app.ctx)
+		if err != nil {
+			app.logger.Error("Unable to set master read-write", "fqdn", node.FQDN(), "error", err)
+		}
+		if rewriteErr != nil {
+			app.logger.Error("Unable to rewrite config on master", "fqdn", node.FQDN(), "error", rewriteErr)
+		}
+	}
+	expectedNumReplicas := app.getNumReplicasToWrite(activeNodes)
+	actualNumReplicas, err := node.GetNumQuorumReplicas(app.ctx)
 	if err != nil {
-		app.logger.Error("Unable to get actual min replicas on master", "fqdn", node.FQDN(), "error", err)
+		app.logger.Error("Unable to get actual num quorum replicas on master", "fqdn", node.FQDN(), "error", err)
 		return
 	}
-	if actualMinReplicas != expectedMinReplicas {
-		app.logger.Info(fmt.Sprintf("Changing min replicas from %d to %d on master", actualMinReplicas, expectedMinReplicas), "fqdn", node.FQDN())
-		err, rewriteErr := node.SetMinReplicas(app.ctx, expectedMinReplicas)
+	if actualNumReplicas != expectedNumReplicas {
+		app.logger.Info(fmt.Sprintf("Changing num quorum replicas from %d to %d on master", actualNumReplicas, expectedNumReplicas), "fqdn", node.FQDN())
+		err, rewriteErr := node.SetNumQuorumReplicas(app.ctx, expectedNumReplicas)
 		if err != nil {
-			app.logger.Error("Unable to set min replicas on master", "fqdn", node.FQDN(), "error", err)
+			app.logger.Error("Unable to set num quorum replicas on master", "fqdn", node.FQDN(), "error", err)
 		}
 		if rewriteErr != nil {
 			app.logger.Error("Unable to rewrite config on master", "fqdn", node.FQDN(), "error", rewriteErr)

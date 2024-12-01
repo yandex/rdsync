@@ -257,9 +257,9 @@ func (n *Node) DisconnectClients(ctx context.Context, ctype string) error {
 	return disconnectCmd.Err()
 }
 
-// GetMinReplicas returns number of connected replicas to accept writes on node
-func (n *Node) GetMinReplicas(ctx context.Context) (int, error) {
-	cmd := client.NewStringSliceCmd(ctx, n.config.Renames.Config, "get", "min-replicas-to-write")
+// GetNumQuorumReplicas returns number of connected replicas to accept writes on node
+func (n *Node) GetNumQuorumReplicas(ctx context.Context) (int, error) {
+	cmd := client.NewStringSliceCmd(ctx, n.config.Renames.Config, "get", "quorum-replicas-to-write")
 	err := n.conn.Process(ctx, cmd)
 	if err != nil {
 		return 0, err
@@ -269,18 +269,18 @@ func (n *Node) GetMinReplicas(ctx context.Context) (int, error) {
 		return 0, err
 	}
 	if len(vals) != 2 {
-		return 0, fmt.Errorf("unexpected config get result for min-replicas-to-write: %v", vals)
+		return 0, fmt.Errorf("unexpected config get result for quorum-replicas-to-write: %v", vals)
 	}
 	ret, err := strconv.ParseInt(vals[1], 10, 32)
 	if err != nil {
-		return 0, fmt.Errorf("unable to parse min-replicas-to-write value: %s", err.Error())
+		return 0, fmt.Errorf("unable to parse quorum-replicas-to-write value: %s", err.Error())
 	}
 	return int(ret), nil
 }
 
-// SetMinReplicas sets desired number of connected replicas to accept writes on node
-func (n *Node) SetMinReplicas(ctx context.Context, value int) (error, error) {
-	setCmd := n.conn.Do(ctx, n.config.Renames.Config, "set", "min-replicas-to-write", strconv.Itoa(value))
+// SetNumQuorumReplicas sets desired number of connected replicas to accept writes on node
+func (n *Node) SetNumQuorumReplicas(ctx context.Context, value int) (error, error) {
+	setCmd := n.conn.Do(ctx, n.config.Renames.Config, "set", "quorum-replicas-to-write", strconv.Itoa(value))
 	err := setCmd.Err()
 	if err != nil {
 		return err, nil
@@ -368,19 +368,33 @@ func (n *Node) SetAppendonly(ctx context.Context, value bool) error {
 
 // IsReadOnly returns ReadOnly status for node
 func (n *Node) IsReadOnly(ctx context.Context) (bool, error) {
-	minReplicas, err := n.GetMinReplicas(ctx)
+	cmd := client.NewStringSliceCmd(ctx, n.config.Renames.Config, "get", "min-replicas-to-write")
+	err := n.conn.Process(ctx, cmd)
 	if err != nil {
 		return false, err
 	}
-	return minReplicas == highMinReplicas, nil
+	vals, err := cmd.Result()
+	if err != nil {
+		return false, err
+	}
+	if len(vals) != 2 {
+		return false, fmt.Errorf("unexpected config get result for min-replicas-to-write: %v", vals)
+	}
+	ret, err := strconv.ParseInt(vals[1], 10, 32)
+	if err != nil {
+		return false, fmt.Errorf("unable to parse min-replicas-to-write value: %s", err.Error())
+	}
+	return int(ret) > 0, nil
 }
 
 // SetReadOnly makes node read-only by setting min replicas to unreasonably high value and disconnecting clients
 func (n *Node) SetReadOnly(ctx context.Context, disconnect bool) (error, error) {
-	err, rewriteErr := n.SetMinReplicas(ctx, highMinReplicas)
+	setCmd := n.conn.Do(ctx, n.config.Renames.Config, "set", "min-replicas-to-write", strconv.Itoa(highMinReplicas))
+	err := setCmd.Err()
 	if err != nil {
-		return err, rewriteErr
+		return err, nil
 	}
+	rewriteErr := n.configRewrite(ctx)
 	if disconnect {
 		err = n.DisconnectClients(ctx, "normal")
 		if err != nil {
@@ -392,6 +406,16 @@ func (n *Node) SetReadOnly(ctx context.Context, disconnect bool) (error, error) 
 		}
 	}
 	return nil, rewriteErr
+}
+
+// SetReadOnly makes node returns min-replicas-to-write to zero
+func (n *Node) SetReadWrite(ctx context.Context) (error, error) {
+	setCmd := n.conn.Do(ctx, n.config.Renames.Config, "set", "min-replicas-to-write", "0")
+	err := setCmd.Err()
+	if err != nil {
+		return err, nil
+	}
+	return nil, n.configRewrite(ctx)
 }
 
 // SetOnline allows non-localhost connections

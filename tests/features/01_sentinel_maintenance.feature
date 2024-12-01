@@ -56,7 +56,7 @@ Feature: Sentinel mode maintenance tests
             ["redis1","redis2","redis3"]
         """
 
-    Scenario: Sentinel mode maintenance enter sets min-replicas-to-write to 0 on master
+    Scenario: Sentinel mode maintenance enter sets quorum-replicas-to-write to 0 on master
         Given sentinel shard is up and running
         Then zookeeper node "/test/active_nodes" should match json_exactly within "30" seconds
         """
@@ -65,11 +65,11 @@ Feature: Sentinel mode maintenance tests
         When I wait for "60" seconds
         And I run command on redis host "redis1"
         """
-            CONFIG GET min-replicas-to-write
+            CONFIG GET quorum-replicas-to-write
         """
         Then redis cmd result should match regexp
         """
-            .*min-replicas-to-write 1.*
+            .*quorum-replicas-to-write 1.*
         """
         When I run command on host "redis1"
         """
@@ -89,11 +89,11 @@ Feature: Sentinel mode maintenance tests
         And zookeeper node "/test/active_nodes" should not exist
         When I run command on redis host "redis1"
         """
-            CONFIG GET min-replicas-to-write
+            CONFIG GET quorum-replicas-to-write
         """
         Then redis cmd result should match regexp
         """
-            .*min-replicas-to-write *0.*
+            .*quorum-replicas-to-write *0.*
         """
 
     Scenario: Sentinel mode maintenance leave updates master host in DCS after manual change

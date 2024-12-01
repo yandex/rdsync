@@ -50,7 +50,7 @@ Feature: Cluster mode maintenance tests
             ["redis1","redis2","redis3"]
         """
 
-    Scenario: Cluster mode maintenance enter sets min-replicas-to-write to 0 on master
+    Scenario: Cluster mode maintenance enter sets quorum-replicas-to-write to 0 on master
         Given clustered shard is up and running
         Then zookeeper node "/test/active_nodes" should match json_exactly within "30" seconds
         """
@@ -59,11 +59,11 @@ Feature: Cluster mode maintenance tests
         When I wait for "60" seconds
         And I run command on redis host "redis1"
         """
-            CONFIG GET min-replicas-to-write
+            CONFIG GET quorum-replicas-to-write
         """
         Then redis cmd result should match regexp
         """
-            .*min-replicas-to-write 1.*
+            .*quorum-replicas-to-write 1.*
         """
         When I run command on host "redis1"
         """
@@ -83,11 +83,11 @@ Feature: Cluster mode maintenance tests
         And zookeeper node "/test/active_nodes" should not exist
         When I run command on redis host "redis1"
         """
-            CONFIG GET min-replicas-to-write
+            CONFIG GET quorum-replicas-to-write
         """
         Then redis cmd result should match regexp
         """
-            .*min-replicas-to-write *0.*
+            .*quorum-replicas-to-write *0.*
         """
 
     Scenario: Cluster mode maintenance leave updates master host in DCS after manual change

@@ -9,7 +9,7 @@ import (
 
 func (app *App) enterMaintenance(maintenance *Maintenance, master string) error {
 	node := app.shard.Get(master)
-	err, rewriteErr := node.SetMinReplicas(app.ctx, 0)
+	err, rewriteErr := node.SetNumQuorumReplicas(app.ctx, 0)
 	if err != nil {
 		return err
 	}
