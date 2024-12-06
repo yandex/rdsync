@@ -126,3 +126,43 @@ Feature: Cluster mode survives dcs conn loss
         """
             ["redis1","redis2","redis3"]
         """
+
+    Scenario: Cluster mode partially partitioned manager gives up on manager role and triggers failover on master
+        Given clustered shard is up and running
+        Then redis host "redis1" should be master
+        And redis host "redis2" should become replica of "redis1" within "15" seconds
+        And replication on redis host "redis2" should run fine within "15" seconds
+        And redis host "redis3" should become replica of "redis1" within "15" seconds
+        And replication on redis host "redis3" should run fine within "15" seconds
+        And zookeeper node "/test/active_nodes" should match json_exactly within "30" seconds
+        """
+            ["redis1","redis2","redis3"]
+        """
+        When port "6379" on host "redis1" is blocked
+        And I wait for "180" seconds
+        And I run command on host "redis1"
+        """
+            grep ERROR /var/log/rdsync.log
+        """
+        Then command output should match regexp
+        """
+            .*Giving up on manager role.*
+        """
+        And zookeeper node "/test/last_switch" should match json within "60" seconds
+        """
+        {
+            "cause": "auto",
+            "from": "redis1",
+            "result": {
+                "ok": true
+            }
+        }
+        """
+        When I get zookeeper node "/test/master"
+        And I save zookeeper query result as "new_master"
+        Then redis host "{{.new_master}}" should be master
+        When port "6379" on host "redis1" is unblocked
+        Then zookeeper node "/test/active_nodes" should match json_exactly within "30" seconds
+        """
+            ["redis1","redis2","redis3"]
+        """
