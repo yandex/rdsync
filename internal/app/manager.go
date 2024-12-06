@@ -133,7 +133,8 @@ func (app *App) stateManager() appState {
 			app.logger.Error("We see that majority of shard is still alive, but master is not. So it probably failed.")
 			masterFailed = true
 		}
-	} else if (!shardStateDcs[master].PingOk && !shardState[master].PingOk) || shardStateDcs[master].IsOffline {
+	}
+	if (!shardStateDcs[master].PingOk && !shardState[master].PingOk) || shardStateDcs[master].IsOffline {
 		masterFailed = true
 	}
 	if masterFailed {
