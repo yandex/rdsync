@@ -145,6 +145,7 @@ type HostState struct {
 	SecondReplicationOffset int64            `json:"second_replication_offset"`
 	ReplicationBacklogStart int64            `json:"replication_backlog_start"`
 	ReplicationBacklogSize  int64            `json:"replication_backlog_size"`
+	MinReplicasToWrite      int64            `json:"min_replicas_to_write"`
 	ReplicationID           string           `json:"replication_id"`
 	ReplicationID2          string           `json:"replication_id2"`
 	Error                   string           `json:"error"`

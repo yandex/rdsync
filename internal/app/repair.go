@@ -52,7 +52,7 @@ func (app *App) repairShard(shardState map[string]*HostState, activeNodes []stri
 }
 
 func (app *App) repairMaster(node *redis.Node, activeNodes []string, state *HostState) {
-	if state.IsReadOnly {
+	if state.IsReadOnly || state.MinReplicasToWrite != 0 {
 		err, rewriteErr := node.SetReadWrite(app.ctx)
 		if err != nil {
 			app.logger.Error("Unable to set master read-write", "fqdn", node.FQDN(), "error", err)

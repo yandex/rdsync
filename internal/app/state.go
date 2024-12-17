@@ -167,11 +167,12 @@ func (app *App) getHostState(fqdn string) *HostState {
 		}
 		state.ReplicaState = &rs
 	}
-	state.IsReadOnly, err = node.IsReadOnly(app.ctx)
+	state.MinReplicasToWrite, err = node.GetMinReplicasToWrite(app.ctx)
 	if err != nil {
 		app.setStateError(&state, fqdn, err.Error())
 		return &state
 	}
+	state.IsReadOnly = node.IsReadOnly(state.MinReplicasToWrite)
 	state.IsOffline, err = node.IsOffline(app.ctx)
 	if err != nil {
 		app.setStateError(&state, fqdn, err.Error())

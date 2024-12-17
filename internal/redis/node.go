@@ -366,25 +366,30 @@ func (n *Node) SetAppendonly(ctx context.Context, value bool) error {
 	return n.configRewrite(ctx)
 }
 
-// IsReadOnly returns ReadOnly status for node
-func (n *Node) IsReadOnly(ctx context.Context) (bool, error) {
+// GetMinReplicasToWrite returns number of replicas required to write on node
+func (n *Node) GetMinReplicasToWrite(ctx context.Context) (int64, error) {
 	cmd := client.NewStringSliceCmd(ctx, n.config.Renames.Config, "get", "min-replicas-to-write")
 	err := n.conn.Process(ctx, cmd)
 	if err != nil {
-		return false, err
+		return 0, err
 	}
 	vals, err := cmd.Result()
 	if err != nil {
-		return false, err
+		return 0, err
 	}
 	if len(vals) != 2 {
-		return false, fmt.Errorf("unexpected config get result for min-replicas-to-write: %v", vals)
+		return 0, fmt.Errorf("unexpected config get result for min-replicas-to-write: %v", vals)
 	}
-	ret, err := strconv.ParseInt(vals[1], 10, 32)
+	ret, err := strconv.ParseInt(vals[1], 10, 64)
 	if err != nil {
-		return false, fmt.Errorf("unable to parse min-replicas-to-write value: %s", err.Error())
+		return 0, fmt.Errorf("unable to parse min-replicas-to-write value: %s", err.Error())
 	}
-	return int(ret) > 0, nil
+	return ret, nil
+}
+
+// IsReadOnly returns ReadOnly status for node
+func (n *Node) IsReadOnly(minReplicasToWrite int64) bool {
+	return minReplicasToWrite == highMinReplicas
 }
 
 // SetReadOnly makes node read-only by setting min replicas to unreasonably high value and disconnecting clients
