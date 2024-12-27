@@ -54,17 +54,20 @@ type RedisRenamesConfig struct {
 
 // SentinelModeConfig contains sentinel-mode specific configuration
 type SentinelModeConfig struct {
-	AnnounceHostname    bool   `yaml:"announce_hostname"`
-	Name                string `yaml:"name"`
-	RunID               string `yaml:"run_id"`
-	ClusterName         string `yaml:"cluster_name"`
-	CacheAuthUser       string `yaml:"cache_auth_user"`
-	CacheAuthPassword   string `yaml:"cache_auth_password"`
-	CachePort           int    `yaml:"cache_port"`
-	CacheRestartCommand string `yaml:"cache_restart_command"`
-	CacheUpdateSecret   string `yaml:"cache_update_secret"`
-	UseTLS              bool   `yaml:"use_tls"`
-	TLSCAPath           string `yaml:"tls_ca_path"`
+	AnnounceHostname    bool          `yaml:"announce_hostname"`
+	Name                string        `yaml:"name"`
+	RunID               string        `yaml:"run_id"`
+	ClusterName         string        `yaml:"cluster_name"`
+	CacheAuthUser       string        `yaml:"cache_auth_user"`
+	CacheAuthPassword   string        `yaml:"cache_auth_password"`
+	CacheDialTimeout    time.Duration `yaml:"cache_dial_timeout"`
+	CacheReadTimeout    time.Duration `yaml:"cache_read_timeout"`
+	CacheWriteTimeout   time.Duration `yaml:"cache_write_timeout"`
+	CachePort           int           `yaml:"cache_port"`
+	CacheRestartCommand string        `yaml:"cache_restart_command"`
+	CacheUpdateSecret   string        `yaml:"cache_update_secret"`
+	UseTLS              bool          `yaml:"use_tls"`
+	TLSCAPath           string        `yaml:"tls_ca_path"`
 }
 
 // Config contains rdsync application configuration
@@ -154,6 +157,9 @@ func DefaultSentinelModeConfig(hostname string) (SentinelModeConfig, error) {
 		ClusterName:         "test-cluster",
 		CacheAuthUser:       "",
 		CacheAuthPassword:   "",
+		CacheDialTimeout:    5 * time.Second,
+		CacheReadTimeout:    5 * time.Second,
+		CacheWriteTimeout:   5 * time.Second,
 		CachePort:           26379,
 		CacheRestartCommand: "systemctl restart redis-senticache",
 		CacheUpdateSecret:   "",
