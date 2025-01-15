@@ -3,9 +3,9 @@
             [jepsen.core :as jepsen]
             [jepsen.rdsync :as rdsync]))
 
-(def redis_nodes ["redis1" "redis2" "redis3"])
+(def valkey_nodes ["valkey1" "valkey2" "valkey3"])
 
 (def zk_nodes ["zoo1" "zoo2" "zoo3"])
 
 (deftest rdsync-test
-  (is (:valid? (:results (jepsen/run! (rdsync/rdsync-test redis_nodes zk_nodes))))))
+  (is (:valid? (:results (jepsen/run! (rdsync/rdsync-test valkey_nodes zk_nodes))))))

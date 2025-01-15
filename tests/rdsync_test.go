@@ -7,6 +7,7 @@ import (
 	"html/template"
 	"io"
 	"log"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,7 +16,7 @@ import (
 
 	"github.com/cucumber/godog"
 	"github.com/go-zookeeper/zk"
-	"github.com/redis/go-redis/v9"
+	client "github.com/valkey-io/valkey-go"
 
 	"github.com/yandex/rdsync/internal/dcs"
 	"github.com/yandex/rdsync/tests/testutil"
@@ -23,25 +24,25 @@ import (
 )
 
 const (
-	zkName                     = "zoo"
-	zkPort                     = 2181
-	zkConnectTimeout           = 5 * time.Second
-	redisName                  = "redis"
-	redisPort                  = 6379
-	senticachePort             = 26379
-	redisPassword              = "functestpassword"
-	redisConnectTimeout        = 30 * time.Second
-	redisInitialConnectTimeout = 2 * time.Minute
-	redisCmdTimeout            = 15 * time.Second
-	testUser                   = "testuser"
-	testPassword               = "testpassword123"
+	zkName                      = "zoo"
+	zkPort                      = 2181
+	zkConnectTimeout            = 5 * time.Second
+	valkeyName                  = "valkey"
+	valkeyPort                  = 6379
+	senticachePort              = 26379
+	valkeyPassword              = "functestpassword"
+	valkeyConnectTimeout        = 30 * time.Second
+	valkeyInitialConnectTimeout = 2 * time.Minute
+	valkeyCmdTimeout            = 15 * time.Second
+	testUser                    = "testuser"
+	testPassword                = "testpassword123"
 )
 
-var redisLogsToSave = map[string]string{
-	"/var/log/supervisor.log":       "supervisor.log",
-	"/var/log/rdsync.log":           "rdsync.log",
-	"/var/log/redis/server.log":     "redis.log",
-	"/var/log/redis/senticache.log": "senticache.log",
+var valkeyLogsToSave = map[string]string{
+	"/var/log/supervisor.log":        "supervisor.log",
+	"/var/log/rdsync.log":            "rdsync.log",
+	"/var/log/valkey/server.log":     "valkey.log",
+	"/var/log/valkey/senticache.log": "senticache.log",
 }
 
 var zkLogsToSave = map[string]string{
@@ -60,10 +61,10 @@ type testContext struct {
 	composer            testutil.Composer
 	composerEnv         []string
 	zk                  *zk.Conn
-	conns               map[string]*redis.Client
-	senticaches         map[string]*redis.Client
+	conns               map[string]client.Client
+	senticaches         map[string]client.Client
 	zkQueryResult       string
-	redisCmdResult      string
+	valkeyCmdResult     string
 	senticacheCmdResult string
 	commandRetcode      int
 	commandOutput       string
@@ -77,8 +78,8 @@ func newTestContext() (*testContext, error) {
 	if err != nil {
 		return nil, err
 	}
-	tctx.conns = make(map[string]*redis.Client)
-	tctx.senticaches = make(map[string]*redis.Client)
+	tctx.conns = make(map[string]client.Client)
+	tctx.senticaches = make(map[string]client.Client)
 	tctx.acl = zk.DigestACL(zk.PermAll, testUser, testPassword)
 	return tctx, nil
 }
@@ -87,8 +88,8 @@ func (tctx *testContext) saveLogs(scenario string) error {
 	for _, service := range tctx.composer.Services() {
 		var logsToSave map[string]string
 		switch {
-		case strings.HasPrefix(service, redisName):
-			logsToSave = redisLogsToSave
+		case strings.HasPrefix(service, valkeyName):
+			logsToSave = valkeyLogsToSave
 		case strings.HasPrefix(service, zkName):
 			logsToSave = zkLogsToSave
 		default:
@@ -172,17 +173,13 @@ func (tctx *testContext) cleanup() {
 		tctx.zk = nil
 	}
 	for _, conn := range tctx.conns {
-		if err := conn.Close(); err != nil {
-			log.Printf("failed to close redis connection: %s", err)
-		}
+		conn.Close()
 	}
-	tctx.conns = make(map[string]*redis.Client)
+	tctx.conns = make(map[string]client.Client)
 	for _, conn := range tctx.senticaches {
-		if err := conn.Close(); err != nil {
-			log.Printf("failed to close senticache connection: %s", err)
-		}
+		conn.Close()
 	}
-	tctx.senticaches = make(map[string]*redis.Client)
+	tctx.senticaches = make(map[string]client.Client)
 	if err := tctx.composer.Down(); err != nil {
 		log.Printf("failed to tear down compose: %s", err)
 	}
@@ -190,7 +187,7 @@ func (tctx *testContext) cleanup() {
 	tctx.variables = make(map[string]interface{})
 	tctx.composerEnv = make([]string, 0)
 	tctx.zkQueryResult = ""
-	tctx.redisCmdResult = ""
+	tctx.valkeyCmdResult = ""
 	tctx.senticacheCmdResult = ""
 	tctx.commandRetcode = 0
 	tctx.commandOutput = ""
@@ -215,83 +212,102 @@ func (tctx *testContext) connectZookeeper(addrs []string, timeout time.Duration)
 	return conn, nil
 }
 
-func (tctx *testContext) connectRedis(addr string, timeout time.Duration) (*redis.Client, error) {
-	opts := redis.Options{
-		Addr:         addr,
-		Password:     redisPassword,
-		DialTimeout:  time.Second,
-		ReadTimeout:  time.Second,
-		PoolSize:     1,
-		MinIdleConns: 1,
-		Protocol:     2,
+func (tctx *testContext) connectValkey(addr string, timeout time.Duration) (client.Client, error) {
+	opts := client.ClientOption{
+		InitAddress:           []string{addr},
+		AlwaysRESP2:           true,
+		ForceSingleClient:     true,
+		DisableAutoPipelining: true,
+		DisableCache:          true,
+		BlockingPoolMinSize:   1,
+		BlockingPoolCleanup:   time.Second,
+		Password:              valkeyPassword,
+		Dialer:                net.Dialer{Timeout: time.Second},
+		ConnWriteTimeout:      time.Second,
 	}
-	conn := redis.NewClient(&opts)
-	// redis connection is lazy, so we need ping it
+	var conn client.Client
 	var err error
 	testutil.Retry(func() bool {
-		ctx, cancel := context.WithTimeout(context.Background(), redisCmdTimeout)
+		conn, err = client.NewClient(opts)
+		if err != nil {
+			conn = nil
+			return false
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), valkeyCmdTimeout)
 		defer cancel()
-		err = conn.Ping(ctx).Err()
+		err = conn.Do(ctx, conn.B().Ping().Build()).Error()
 		return err == nil
 	}, timeout, time.Second)
 	if err != nil {
-		_ = conn.Close()
+		if conn != nil {
+			conn.Close()
+		}
 		return nil, err
 	}
 	return conn, nil
 }
 
-func (tctx *testContext) connectSenticache(addr string, timeout time.Duration) (*redis.Client, error) {
-	opts := redis.Options{
-		Addr:         addr,
-		DialTimeout:  time.Second,
-		ReadTimeout:  time.Second,
-		PoolSize:     1,
-		MinIdleConns: 1,
+func (tctx *testContext) connectSenticache(addr string, timeout time.Duration) (client.Client, error) {
+	opts := client.ClientOption{
+		InitAddress:           []string{addr},
+		AlwaysRESP2:           true,
+		ForceSingleClient:     true,
+		DisableAutoPipelining: true,
+		DisableCache:          true,
+		BlockingPoolMinSize:   1,
+		BlockingPoolCleanup:   time.Second,
+		Dialer:                net.Dialer{Timeout: time.Second},
+		ConnWriteTimeout:      time.Second,
 	}
-	conn := redis.NewClient(&opts)
-	// redis connection is lazy, so we need ping it
+	var conn client.Client
 	var err error
 	testutil.Retry(func() bool {
-		ctx, cancel := context.WithTimeout(context.Background(), redisCmdTimeout)
+		conn, err = client.NewClient(opts)
+		if err != nil {
+			conn = nil
+			return false
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), valkeyCmdTimeout)
 		defer cancel()
-		err = conn.Ping(ctx).Err()
+		err = conn.Do(ctx, conn.B().Ping().Build()).Error()
 		return err == nil
 	}, timeout, time.Second)
 	if err != nil {
-		_ = conn.Close()
+		if conn != nil {
+			conn.Close()
+		}
 		return nil, err
 	}
 	return conn, nil
 }
 
-func (tctx *testContext) getRedisConnection(host string) (*redis.Client, error) {
+func (tctx *testContext) getValkeyConnection(host string) (client.Client, error) {
 	conn, ok := tctx.conns[host]
 	if !ok {
-		return nil, fmt.Errorf("redis %s is not in our host list", host)
+		return nil, fmt.Errorf("valkey %s is not in our host list", host)
 	}
-	err := conn.Ping(context.Background()).Err()
+	err := conn.Do(context.Background(), conn.B().Ping().Build()).Error()
 	if err == nil {
 		return conn, nil
 	}
-	addr, err := tctx.composer.GetAddr(host, redisPort)
+	addr, err := tctx.composer.GetAddr(host, valkeyPort)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get redis addr %s: %s", host, err)
+		return nil, fmt.Errorf("failed to get valkey addr %s: %s", host, err)
 	}
-	conn, err = tctx.connectRedis(addr, redisConnectTimeout)
+	conn, err = tctx.connectValkey(addr, valkeyConnectTimeout)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to redis %s: %s", host, err)
+		return nil, fmt.Errorf("failed to connect to valkey %s: %s", host, err)
 	}
 	tctx.conns[host] = conn
 	return conn, nil
 }
 
-func (tctx *testContext) getSenticacheConnection(host string) (*redis.Client, error) {
+func (tctx *testContext) getSenticacheConnection(host string) (client.Client, error) {
 	conn, ok := tctx.senticaches[host]
 	if !ok {
 		return nil, fmt.Errorf("senticache %s is not in our host list", host)
 	}
-	err := conn.Ping(context.Background()).Err()
+	err := conn.Do(context.Background(), conn.B().Ping().Build()).Error()
 	if err == nil {
 		return conn, nil
 	}
@@ -299,7 +315,7 @@ func (tctx *testContext) getSenticacheConnection(host string) (*redis.Client, er
 	if err != nil {
 		return nil, fmt.Errorf("failed to get senticache addr %s: %s", host, err)
 	}
-	conn, err = tctx.connectSenticache(addr, redisConnectTimeout)
+	conn, err = tctx.connectSenticache(addr, valkeyConnectTimeout)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to senticache %s: %s", host, err)
 	}
@@ -307,29 +323,39 @@ func (tctx *testContext) getSenticacheConnection(host string) (*redis.Client, er
 	return conn, nil
 }
 
-func (tctx *testContext) runRedisCmd(host string, cmd []string) (string, error) {
-	conn, err := tctx.getRedisConnection(host)
+func (tctx *testContext) runValkeyCmd(host string, cmd []string) (string, error) {
+	conn, err := tctx.getValkeyConnection(host)
 	if err != nil {
 		return "", err
 	}
 
-	tctx.redisCmdResult = ""
-	ctx, cancel := context.WithTimeout(context.Background(), redisCmdTimeout)
+	tctx.valkeyCmdResult = ""
+	ctx, cancel := context.WithTimeout(context.Background(), valkeyCmdTimeout)
 	defer cancel()
-	var iargs []interface{}
-	for _, arg := range cmd {
-		iargs = append(iargs, arg)
-	}
-	result := conn.Do(ctx, iargs...)
+	result := conn.Do(ctx, conn.B().Arbitrary(cmd...).Build())
 
-	err = result.Err()
+	err = result.Error()
 	if err != nil {
-		tctx.redisCmdResult = err.Error()
+		tctx.valkeyCmdResult = err.Error()
 	} else {
-		tctx.redisCmdResult = result.String()
+		message, err := result.ToMessage()
+		if err != nil {
+			tctx.valkeyCmdResult = err.Error()
+			return tctx.valkeyCmdResult, err
+		}
+		if message.IsArray() {
+			strSlice, err := message.AsStrSlice()
+			if err != nil {
+				tctx.valkeyCmdResult = err.Error()
+			} else {
+				tctx.valkeyCmdResult = strings.Join(strSlice, " ")
+			}
+		} else {
+			tctx.valkeyCmdResult = message.String()
+		}
 	}
 
-	return tctx.redisCmdResult, err
+	return tctx.valkeyCmdResult, err
 }
 
 func (tctx *testContext) runSenticacheCmd(host string, cmd []string) (string, error) {
@@ -339,15 +365,11 @@ func (tctx *testContext) runSenticacheCmd(host string, cmd []string) (string, er
 	}
 
 	tctx.senticacheCmdResult = ""
-	ctx, cancel := context.WithTimeout(context.Background(), redisCmdTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), valkeyCmdTimeout)
 	defer cancel()
-	var iargs []interface{}
-	for _, arg := range cmd {
-		iargs = append(iargs, arg)
-	}
-	result := conn.Do(ctx, iargs...)
+	result := conn.Do(ctx, conn.B().Arbitrary(cmd...).Build())
 
-	err = result.Err()
+	err = result.Error()
 	if err != nil {
 		tctx.senticacheCmdResult = err.Error()
 	} else {
@@ -387,10 +409,10 @@ func (tctx *testContext) baseShardIsUpAndRunning() error {
 	}
 
 	err = tctx.composer.RunCommandAtHosts("/var/lib/dist/base/generate_certs.sh && supervisorctl restart rdsync",
-		"redis",
+		"valkey",
 		time.Minute)
 	if err != nil {
-		return fmt.Errorf("failed to generate certs in redis hosts: %s", err)
+		return fmt.Errorf("failed to generate certs in valkey hosts: %s", err)
 	}
 
 	if err = tctx.createZookeeperNode("/test"); err != nil {
@@ -400,9 +422,9 @@ func (tctx *testContext) baseShardIsUpAndRunning() error {
 		return fmt.Errorf("failed to create path prefix zk node due %s", err)
 	}
 
-	// prepare redis nodes
+	// prepare valkey nodes
 	for _, service := range tctx.composer.Services() {
-		if strings.HasPrefix(service, redisName) {
+		if strings.HasPrefix(service, valkeyName) {
 			if err = tctx.createZookeeperNode(dcs.JoinPath("/test", dcs.PathHANodesPrefix, service)); err != nil {
 				return fmt.Errorf("failed to create %s zk node due %s", service, err)
 			}
@@ -416,29 +438,29 @@ func (tctx *testContext) stepClusteredShardIsUpAndRunning() error {
 	if err != nil {
 		return err
 	}
-	_, _, err = tctx.composer.RunCommand("redis1", "setup_cluster.sh", 1*time.Minute)
+	_, _, err = tctx.composer.RunCommand("valkey1", "setup_cluster.sh", 1*time.Minute)
 	if err != nil {
 		return err
 	}
-	_, _, err = tctx.composer.RunCommand("redis2", "setup_cluster.sh redis1", 1*time.Minute)
+	_, _, err = tctx.composer.RunCommand("valkey2", "setup_cluster.sh valkey1", 1*time.Minute)
 	if err != nil {
 		return err
 	}
-	_, _, err = tctx.composer.RunCommand("redis3", "setup_cluster.sh redis1", 1*time.Minute)
+	_, _, err = tctx.composer.RunCommand("valkey3", "setup_cluster.sh valkey1", 1*time.Minute)
 	if err != nil {
 		return err
 	}
 
-	// check redis nodes
+	// check valkey nodes
 	for _, service := range tctx.composer.Services() {
-		if strings.HasPrefix(service, redisName) {
-			addr, err := tctx.composer.GetAddr(service, redisPort)
+		if strings.HasPrefix(service, valkeyName) {
+			addr, err := tctx.composer.GetAddr(service, valkeyPort)
 			if err != nil {
-				return fmt.Errorf("failed to get redis addr %s: %s", service, err)
+				return fmt.Errorf("failed to get valkey addr %s: %s", service, err)
 			}
-			conn, err := tctx.connectRedis(addr, redisInitialConnectTimeout)
+			conn, err := tctx.connectValkey(addr, valkeyInitialConnectTimeout)
 			if err != nil {
-				return fmt.Errorf("failed to connect to redis %s: %s", service, err)
+				return fmt.Errorf("failed to connect to valkey %s: %s", service, err)
 			}
 			tctx.conns[service] = conn
 		}
@@ -451,35 +473,35 @@ func (tctx *testContext) stepSentinelShardIsUpAndRunning() error {
 	if err != nil {
 		return err
 	}
-	_, _, err = tctx.composer.RunCommand("redis1", "setup_sentinel.sh", 1*time.Minute)
+	_, _, err = tctx.composer.RunCommand("valkey1", "setup_sentinel.sh", 1*time.Minute)
 	if err != nil {
 		return err
 	}
-	_, _, err = tctx.composer.RunCommand("redis2", "setup_sentinel.sh redis1", 1*time.Minute)
+	_, _, err = tctx.composer.RunCommand("valkey2", "setup_sentinel.sh valkey1", 1*time.Minute)
 	if err != nil {
 		return err
 	}
-	_, _, err = tctx.composer.RunCommand("redis3", "setup_sentinel.sh redis1", 1*time.Minute)
+	_, _, err = tctx.composer.RunCommand("valkey3", "setup_sentinel.sh valkey1", 1*time.Minute)
 	if err != nil {
 		return err
 	}
-	// check redis nodes
+	// check valkey nodes
 	for _, service := range tctx.composer.Services() {
-		if strings.HasPrefix(service, redisName) {
-			addr, err := tctx.composer.GetAddr(service, redisPort)
+		if strings.HasPrefix(service, valkeyName) {
+			addr, err := tctx.composer.GetAddr(service, valkeyPort)
 			if err != nil {
-				return fmt.Errorf("failed to get redis addr %s: %s", service, err)
+				return fmt.Errorf("failed to get valkey addr %s: %s", service, err)
 			}
-			conn, err := tctx.connectRedis(addr, redisInitialConnectTimeout)
+			conn, err := tctx.connectValkey(addr, valkeyInitialConnectTimeout)
 			if err != nil {
-				return fmt.Errorf("failed to connect to redis %s: %s", service, err)
+				return fmt.Errorf("failed to connect to valkey %s: %s", service, err)
 			}
 			tctx.conns[service] = conn
 			saddr, err2 := tctx.composer.GetAddr(service, senticachePort)
 			if err2 != nil {
 				return fmt.Errorf("failed to get senticache addr %s: %s", service, err2)
 			}
-			sconn, err2 := tctx.connectSenticache(saddr, redisInitialConnectTimeout)
+			sconn, err2 := tctx.connectSenticache(saddr, valkeyInitialConnectTimeout)
 			if err2 != nil {
 				return fmt.Errorf("failed to connect to senticache %s: %s", service, err2)
 			}
@@ -491,7 +513,7 @@ func (tctx *testContext) stepSentinelShardIsUpAndRunning() error {
 
 func (tctx *testContext) stepPersistenceDisabled() error {
 	for _, service := range tctx.composer.Services() {
-		if strings.HasPrefix(service, redisName) {
+		if strings.HasPrefix(service, valkeyName) {
 			_, _, err := tctx.composer.RunCommand(service, "sed -i /OnReplicas/d /etc/rdsync.yaml", 10*time.Second)
 			if err != nil {
 				return err
@@ -500,19 +522,19 @@ func (tctx *testContext) stepPersistenceDisabled() error {
 			if err != nil {
 				return err
 			}
-			_, err = tctx.runRedisCmd(service, []string{"CONFIG", "SET", "appendonly", "no"})
+			_, err = tctx.runValkeyCmd(service, []string{"CONFIG", "SET", "appendonly", "no"})
 			if err != nil {
 				return err
 			}
-			_, err = tctx.runRedisCmd(service, []string{"CONFIG", "SET", "save", ""})
+			_, err = tctx.runValkeyCmd(service, []string{"CONFIG", "SET", "save", ""})
 			if err != nil {
 				return err
 			}
-			_, _, err = tctx.composer.RunCommand(service, "echo 'appendonly no' >> /etc/redis/redis.conf", 10*time.Second)
+			_, _, err = tctx.composer.RunCommand(service, "echo 'appendonly no' >> /etc/valkey/valkey.conf", 10*time.Second)
 			if err != nil {
 				return err
 			}
-			_, _, err = tctx.composer.RunCommand(service, "echo 'save \\'\\'' >> /etc/redis/redis.conf", 10*time.Second)
+			_, _, err = tctx.composer.RunCommand(service, "echo 'save \\'\\'' >> /etc/valkey/valkey.conf", 10*time.Second)
 			if err != nil {
 				return err
 			}
@@ -561,26 +583,26 @@ func (tctx *testContext) stepHostIsDeleted(host string) error {
 	return tctx.stepIDeleteZookeeperNode(dcs.JoinPath("/test", dcs.PathHANodesPrefix, host))
 }
 
-func (tctx *testContext) stepRedisOnHostKilled(host string) error {
-	cmd := "supervisorctl signal KILL redis"
+func (tctx *testContext) stepValkeyOnHostKilled(host string) error {
+	cmd := "supervisorctl signal KILL valkey"
 	_, _, err := tctx.composer.RunCommand(host, cmd, 10*time.Second)
 	return err
 }
 
-func (tctx *testContext) stepRedisOnHostStarted(host string) error {
-	cmd := "supervisorctl start redis"
+func (tctx *testContext) stepValkeyOnHostStarted(host string) error {
+	cmd := "supervisorctl start valkey"
 	_, _, err := tctx.composer.RunCommand(host, cmd, 10*time.Second)
 	return err
 }
 
-func (tctx *testContext) stepRedisOnHostRestarted(host string) error {
-	cmd := "supervisorctl restart redis"
+func (tctx *testContext) stepValkeyOnHostRestarted(host string) error {
+	cmd := "supervisorctl restart valkey"
 	_, _, err := tctx.composer.RunCommand(host, cmd, 30*time.Second)
 	return err
 }
 
-func (tctx *testContext) stepRedisOnHostStopped(host string) error {
-	cmd := "supervisorctl signal TERM redis"
+func (tctx *testContext) stepValkeyOnHostStopped(host string) error {
+	cmd := "supervisorctl signal TERM valkey"
 	_, _, err := tctx.composer.RunCommand(host, cmd, 10*time.Second)
 	return err
 }
@@ -694,16 +716,16 @@ func (tctx *testContext) stepIRunCmdOnHost(host string, body *godog.DocString) e
 			args = append(args, strings.Split(strings.TrimSpace(arg), " ")...)
 		}
 	}
-	_, err := tctx.runRedisCmd(host, args)
+	_, err := tctx.runValkeyCmd(host, args)
 	return err
 }
 
-func (tctx *testContext) stepRedisCmdResultShouldMatch(matcher string, body *godog.DocString) error {
+func (tctx *testContext) stepValkeyCmdResultShouldMatch(matcher string, body *godog.DocString) error {
 	m, err := matchers.GetMatcher(matcher)
 	if err != nil {
 		return err
 	}
-	return m(tctx.redisCmdResult, strings.TrimSpace(body.Content))
+	return m(tctx.valkeyCmdResult, strings.TrimSpace(body.Content))
 }
 
 func (tctx *testContext) stepIRunSenticacheCmdOnHost(host string, body *godog.DocString) error {
@@ -729,7 +751,7 @@ func (tctx *testContext) stepSenticacheCmdResultShouldMatch(matcher string, body
 }
 
 func (tctx *testContext) stepBreakReplicationOnHost(host string) error {
-	if _, err := tctx.runRedisCmd(host, []string{"CONFIG", "SET", "repl-paused", "yes"}); err != nil {
+	if _, err := tctx.runValkeyCmd(host, []string{"CONFIG", "SET", "repl-paused", "yes"}); err != nil {
 		return err
 	}
 	return nil
@@ -839,8 +861,8 @@ func (tctx *testContext) stepZookeeperNodeShouldNotExistWithin(node string, time
 	return err
 }
 
-func (tctx *testContext) stepRedisHostShouldBeMaster(host string) error {
-	res, err := tctx.runRedisCmd(host, []string{"ROLE"})
+func (tctx *testContext) stepValkeyHostShouldBeMaster(host string) error {
+	res, err := tctx.runValkeyCmd(host, []string{"ROLE"})
 	if err != nil {
 		return err
 	}
@@ -848,8 +870,8 @@ func (tctx *testContext) stepRedisHostShouldBeMaster(host string) error {
 	return m(res, ".*master.*")
 }
 
-func (tctx *testContext) stepRedisHostShouldBeReplicaOf(host, master string) error {
-	res, err := tctx.runRedisCmd(host, []string{"INFO", "replication"})
+func (tctx *testContext) stepValkeyHostShouldBeReplicaOf(host, master string) error {
+	res, err := tctx.runValkeyCmd(host, []string{"INFO", "replication"})
 	if err != nil {
 		return err
 	}
@@ -861,17 +883,17 @@ func (tctx *testContext) stepRedisHostShouldBeReplicaOf(host, master string) err
 	return m(res, fmt.Sprintf(".*master_host:(%s|%s).*", master, ip))
 }
 
-func (tctx *testContext) stepRedisHostShouldBecomeReplicaOfWithin(host, master string, timeout int) error {
+func (tctx *testContext) stepValkeyHostShouldBecomeReplicaOfWithin(host, master string, timeout int) error {
 	var err error
 	testutil.Retry(func() bool {
-		err = tctx.stepRedisHostShouldBeReplicaOf(host, master)
+		err = tctx.stepValkeyHostShouldBeReplicaOf(host, master)
 		return err == nil
 	}, time.Duration(timeout*int(time.Second)), time.Second)
 	return err
 }
 
-func (tctx *testContext) stepReplicationOnRedisHostShouldRunFine(host string) error {
-	res, err := tctx.runRedisCmd(host, []string{"INFO", "replication"})
+func (tctx *testContext) stepReplicationOnValkeyHostShouldRunFine(host string) error {
+	res, err := tctx.runValkeyCmd(host, []string{"INFO", "replication"})
 	if err != nil {
 		return err
 	}
@@ -879,45 +901,45 @@ func (tctx *testContext) stepReplicationOnRedisHostShouldRunFine(host string) er
 	return m(res, ".*master_link_status:up.*")
 }
 
-func (tctx *testContext) stepReplicationOnRedisHostShouldRunFineWithin(host string, timeout int) error {
+func (tctx *testContext) stepReplicationOnValkeyHostShouldRunFineWithin(host string, timeout int) error {
 	var err error
 	testutil.Retry(func() bool {
-		err = tctx.stepReplicationOnRedisHostShouldRunFine(host)
+		err = tctx.stepReplicationOnValkeyHostShouldRunFine(host)
 		return err == nil
 	}, time.Duration(timeout*int(time.Second)), time.Second)
 	return err
 }
 
-func (tctx *testContext) stepRedisHostShouldBecomeUnavailableWithin(host string, timeout int) error {
-	addr, err := tctx.composer.GetAddr(host, redisPort)
+func (tctx *testContext) stepValkeyHostShouldBecomeUnavailableWithin(host string, timeout int) error {
+	addr, err := tctx.composer.GetAddr(host, valkeyPort)
 	if err != nil {
-		return fmt.Errorf("failed to get redis addr %s: %s", host, err)
+		return fmt.Errorf("failed to get valkey addr %s: %s", host, err)
 	}
 	testutil.Retry(func() bool {
-		var conn *redis.Client
-		conn, err = tctx.connectRedis(addr, time.Second)
+		var conn client.Client
+		conn, err = tctx.connectValkey(addr, time.Second)
 		if err == nil {
-			_ = conn.Close()
+			conn.Close()
 			return false
 		}
 		return true
 	}, time.Duration(timeout*int(time.Second)), time.Second)
 	if err == nil {
-		return fmt.Errorf("redis host %s is still available", host)
+		return fmt.Errorf("valkey host %s is still available", host)
 	}
 	return nil
 }
 
-func (tctx *testContext) stepRedisHostShouldBecomeAvailableWithin(host string, timeout int) error {
-	addr, err := tctx.composer.GetAddr(host, redisPort)
+func (tctx *testContext) stepValkeyHostShouldBecomeAvailableWithin(host string, timeout int) error {
+	addr, err := tctx.composer.GetAddr(host, valkeyPort)
 	if err != nil {
-		return fmt.Errorf("failed to get redis addr %s: %s", host, err)
+		return fmt.Errorf("failed to get valkey addr %s: %s", host, err)
 	}
 	testutil.Retry(func() bool {
-		var conn *redis.Client
-		conn, err = tctx.connectRedis(addr, redisConnectTimeout)
+		var conn client.Client
+		conn, err = tctx.connectValkey(addr, valkeyConnectTimeout)
 		if err == nil {
-			_ = conn.Close()
+			conn.Close()
 			return true
 		}
 		return false
@@ -958,8 +980,8 @@ func (tctx *testContext) stepISaveZookeeperQueryResultAs(varname string) error {
 	return nil
 }
 
-func (tctx *testContext) stepISaveRedisCmdResultAs(varname string) error {
-	tctx.variables[varname] = tctx.redisCmdResult
+func (tctx *testContext) stepISaveValkeyCmdResultAs(varname string) error {
+	tctx.variables[varname] = tctx.valkeyCmdResult
 	return nil
 }
 
@@ -1029,7 +1051,7 @@ func InitializeScenario(s *godog.ScenarioContext) {
 	s.After(func(ctx context.Context, scenario *godog.Scenario, err error) (context.Context, error) {
 		if err != nil {
 			name := scenario.Name
-			name = strings.Replace(name, " ", "_", -1)
+			name = strings.ReplaceAll(name, " ", "_")
 			err2 := tctx.saveLogs(name)
 			if err2 != nil {
 				log.Printf("failed to save logs: %v", err2)
@@ -1070,8 +1092,8 @@ func InitializeScenario(s *godog.ScenarioContext) {
 	s.Step(`^I run command on host "([^"]*)" until result match regexp "([^"]*)" with timeout "(\d+)" seconds$`, tctx.stepIRunCommandOnHostUntilResultMatch)
 	s.Step(`^command return code should be "(\d+)"$`, tctx.stepCommandReturnCodeShouldBe)
 	s.Step(`^command output should match (\w+)$`, tctx.stepCommandOutputShouldMatch)
-	s.Step(`^I run command on redis host "([^"]*)"$`, tctx.stepIRunCmdOnHost)
-	s.Step(`^redis cmd result should match (\w+)$`, tctx.stepRedisCmdResultShouldMatch)
+	s.Step(`^I run command on valkey host "([^"]*)"$`, tctx.stepIRunCmdOnHost)
+	s.Step(`^valkey cmd result should match (\w+)$`, tctx.stepValkeyCmdResultShouldMatch)
 	s.Step(`^I run command on senticache host "([^"]*)"$`, tctx.stepIRunSenticacheCmdOnHost)
 	s.Step(`^senticache cmd result should match (\w+)$`, tctx.stepSenticacheCmdResultShouldMatch)
 
@@ -1088,31 +1110,31 @@ func InitializeScenario(s *godog.ScenarioContext) {
 	s.Step(`^zookeeper node "([^"]*)" should not exist$`, tctx.stepZookeeperNodeShouldNotExist)
 	s.Step(`^zookeeper node "([^"]*)" should not exist within "(\d+)" seconds$`, tctx.stepZookeeperNodeShouldNotExistWithin)
 
-	// redis checking
-	s.Step(`^redis host "([^"]*)" should be master$`, tctx.stepRedisHostShouldBeMaster)
-	s.Step(`^redis host "([^"]*)" should be replica of "([^"]*)"$`, tctx.stepRedisHostShouldBeReplicaOf)
-	s.Step(`^redis host "([^"]*)" should become replica of "([^"]*)" within "(\d+)" seconds$`, tctx.stepRedisHostShouldBecomeReplicaOfWithin)
-	s.Step(`^replication on redis host "([^"]*)" should run fine$`, tctx.stepReplicationOnRedisHostShouldRunFine)
-	s.Step(`^replication on redis host "([^"]*)" should run fine within "(\d+)" seconds$`, tctx.stepReplicationOnRedisHostShouldRunFineWithin)
+	// valkey checking
+	s.Step(`^valkey host "([^"]*)" should be master$`, tctx.stepValkeyHostShouldBeMaster)
+	s.Step(`^valkey host "([^"]*)" should be replica of "([^"]*)"$`, tctx.stepValkeyHostShouldBeReplicaOf)
+	s.Step(`^valkey host "([^"]*)" should become replica of "([^"]*)" within "(\d+)" seconds$`, tctx.stepValkeyHostShouldBecomeReplicaOfWithin)
+	s.Step(`^replication on valkey host "([^"]*)" should run fine$`, tctx.stepReplicationOnValkeyHostShouldRunFine)
+	s.Step(`^replication on valkey host "([^"]*)" should run fine within "(\d+)" seconds$`, tctx.stepReplicationOnValkeyHostShouldRunFineWithin)
 
-	s.Step(`^redis host "([^"]*)" should become unavailable within "(\d+)" seconds$`, tctx.stepRedisHostShouldBecomeUnavailableWithin)
-	s.Step(`^redis host "([^"]*)" should become available within "(\d+)" seconds$`, tctx.stepRedisHostShouldBecomeAvailableWithin)
+	s.Step(`^valkey host "([^"]*)" should become unavailable within "(\d+)" seconds$`, tctx.stepValkeyHostShouldBecomeUnavailableWithin)
+	s.Step(`^valkey host "([^"]*)" should become available within "(\d+)" seconds$`, tctx.stepValkeyHostShouldBecomeAvailableWithin)
 
 	// senticache checking
 	s.Step(`^senticache host "([^"]*)" should have master "([^"]*)"$`, tctx.stepSenticacheHostShouldHaveMaster)
 	s.Step(`^senticache host "([^"]*)" should have master "([^"]*)" within "(\d+)" seconds$`, tctx.stepSenticacheHostShouldHaveMasterWithin)
 
-	// redis manipulation
-	s.Step(`^redis on host "([^"]*)" is killed$`, tctx.stepRedisOnHostKilled)
-	s.Step(`^redis on host "([^"]*)" is started$`, tctx.stepRedisOnHostStarted)
-	s.Step(`^redis on host "([^"]*)" is restarted$`, tctx.stepRedisOnHostRestarted)
-	s.Step(`^redis on host "([^"]*)" is stopped$`, tctx.stepRedisOnHostStopped)
+	// valkey manipulation
+	s.Step(`^valkey on host "([^"]*)" is killed$`, tctx.stepValkeyOnHostKilled)
+	s.Step(`^valkey on host "([^"]*)" is started$`, tctx.stepValkeyOnHostStarted)
+	s.Step(`^valkey on host "([^"]*)" is restarted$`, tctx.stepValkeyOnHostRestarted)
+	s.Step(`^valkey on host "([^"]*)" is stopped$`, tctx.stepValkeyOnHostStopped)
 	s.Step(`^I break replication on host "([^"]*)"$`, tctx.stepBreakReplicationOnHost)
 
 	// variables
 	s.Step(`^I save zookeeper query result as "([^"]*)"$`, tctx.stepISaveZookeeperQueryResultAs)
 	s.Step(`^I save command output as "([^"]*)"$`, tctx.stepISaveCommandOutputAs)
-	s.Step(`^I save redis cmd result as "([^"]*)"$`, tctx.stepISaveRedisCmdResultAs)
+	s.Step(`^I save valkey cmd result as "([^"]*)"$`, tctx.stepISaveValkeyCmdResultAs)
 	s.Step(`^I save "([^"]*)" as "([^"]*)"$`, tctx.stepISaveValAs)
 
 	// misc

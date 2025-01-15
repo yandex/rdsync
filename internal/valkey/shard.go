@@ -1,4 +1,4 @@
-package redis
+package valkey
 
 import (
 	"fmt"
@@ -10,7 +10,7 @@ import (
 	"github.com/yandex/rdsync/internal/dcs"
 )
 
-// Shard contains a set of Redis nodes
+// Shard contains a set of valkey nodes
 type Shard struct {
 	sync.Mutex
 	config *config.Config
@@ -20,7 +20,7 @@ type Shard struct {
 	dcs    dcs.DCS
 }
 
-// NodeConfiguration is a dcs node configuration for redis replica
+// NodeConfiguration is a dcs node configuration for valkey replica
 type NodeConfiguration struct {
 	// Priority - is a host priority to become master. Can be changed via CLI.
 	Priority int `json:"priority"`
@@ -82,9 +82,7 @@ func (s *Shard) UpdateHostsInfo() error {
 	for hostname := range s.nodes {
 		if _, found := set[hostname]; !found {
 			if s.local == nil || hostname != s.local.FQDN() {
-				if err = s.nodes[hostname].Close(); err != nil {
-					return err
-				}
+				s.nodes[hostname].Close()
 			}
 			delete(s.nodes, hostname)
 		}
@@ -93,7 +91,7 @@ func (s *Shard) UpdateHostsInfo() error {
 	return nil
 }
 
-// Get returns Redis Node by host name
+// Get returns Valkey Node by host name
 func (s *Shard) Get(host string) *Node {
 	s.Lock()
 	defer s.Unlock()
@@ -101,7 +99,7 @@ func (s *Shard) Get(host string) *Node {
 	return s.nodes[host]
 }
 
-// Local returns Redis Node running on the same not as current rdsync process
+// Local returns Valkey Node running on the same not as current rdsync process
 func (s *Shard) Local() *Node {
 	return s.local
 }
@@ -112,7 +110,7 @@ func (s *Shard) Close() {
 	defer s.Unlock()
 
 	for _, node := range s.nodes {
-		_ = node.Close()
+		node.Close()
 	}
 }
 

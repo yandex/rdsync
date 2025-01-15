@@ -1,4 +1,4 @@
-package redis
+package valkey
 
 import (
 	"crypto/tls"

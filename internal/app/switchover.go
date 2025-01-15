@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/yandex/rdsync/internal/dcs"
-	"github.com/yandex/rdsync/internal/redis"
+	"github.com/yandex/rdsync/internal/valkey"
 )
 
 const (
@@ -200,7 +200,7 @@ func (app *App) performSwitchover(shardState map[string]*HostState, activeNodes 
 			}
 		}
 		if switchover.Cause != CauseAuto {
-			app.waitPoisonPill(app.config.Redis.WaitPoisonPillTimeout)
+			app.waitPoisonPill(app.config.Valkey.WaitPoisonPillTimeout)
 		}
 	}
 
@@ -213,7 +213,7 @@ func (app *App) performSwitchover(shardState map[string]*HostState, activeNodes 
 			return err
 		}
 		rs := shardState[host].ReplicaState
-		if (rs == nil || !rs.MasterLinkState) && !app.config.Redis.TurnBeforeSwitchover {
+		if (rs == nil || !rs.MasterLinkState) && !app.config.Valkey.TurnBeforeSwitchover {
 			app.logger.Info(fmt.Sprintf("Switchover: skipping replication pause on %s", host))
 			return nil
 		}
@@ -352,10 +352,10 @@ func (app *App) performSwitchover(shardState map[string]*HostState, activeNodes 
 			}
 		}
 		if switchover.Cause != CauseAuto {
-			app.waitPoisonPill(app.config.Redis.WaitPoisonPillTimeout)
+			app.waitPoisonPill(app.config.Valkey.WaitPoisonPillTimeout)
 		}
 
-		if len(aliveActiveNodes) == 1 || app.config.Redis.AllowDataLoss {
+		if len(aliveActiveNodes) == 1 || app.config.Valkey.AllowDataLoss {
 			node := app.shard.Get(newMaster)
 			err, errConf := node.SetReadWrite(app.ctx)
 			if err != nil {
@@ -373,7 +373,7 @@ func (app *App) performSwitchover(shardState map[string]*HostState, activeNodes 
 			}
 		}
 
-		if app.config.Redis.TurnBeforeSwitchover {
+		if app.config.Valkey.TurnBeforeSwitchover {
 			var psyncNodes []string
 			for _, host := range aliveActiveNodes {
 				if host == newMaster {
@@ -404,8 +404,8 @@ func (app *App) performSwitchover(shardState map[string]*HostState, activeNodes 
 				app.logger.Warn("Unable to psync some replicas before promote", "error", err)
 			}
 		}
-		deadline := time.Now().Add(app.config.Redis.WaitPromoteTimeout)
-		forceDeadline := time.Now().Add(app.config.Redis.WaitPromoteForceTimeout)
+		deadline := time.Now().Add(app.config.Valkey.WaitPromoteTimeout)
+		forceDeadline := time.Now().Add(app.config.Valkey.WaitPromoteForceTimeout)
 		promoted := false
 		for time.Now().Before(deadline) {
 			err = app.promote(newMaster, oldMaster, shardState, forceDeadline)
@@ -463,7 +463,7 @@ func (app *App) performSwitchover(shardState map[string]*HostState, activeNodes 
 		shardState, err = app.getShardStateFromDB()
 		if err == nil {
 			sentiCacheUpdateErrs := runParallel(func(host string) error {
-				sentiCacheNode, err := redis.NewRemoteSentiCacheNode(app.config, host, app.logger)
+				sentiCacheNode, err := valkey.NewRemoteSentiCacheNode(app.config, host, app.logger)
 				if err != nil {
 					return err
 				}

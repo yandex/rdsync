@@ -32,9 +32,9 @@ func (app *App) actualizeQuorumReplicas(master string, activeNodes []string) err
 			continue
 		}
 		activeNode := app.shard.Get(host)
-		expected = append(expected, fmt.Sprintf("%s:%d", host, app.config.Redis.Port))
+		expected = append(expected, fmt.Sprintf("%s:%d", host, app.config.Valkey.Port))
 		for _, ip := range activeNode.GetIPs() {
-			expected = append(expected, fmt.Sprintf("%s:%d", ip, app.config.Redis.Port))
+			expected = append(expected, fmt.Sprintf("%s:%d", ip, app.config.Valkey.Port))
 		}
 	}
 

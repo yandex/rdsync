@@ -13,7 +13,7 @@ import (
 	"gopkg.in/yaml.v2"
 
 	"github.com/yandex/rdsync/internal/dcs"
-	"github.com/yandex/rdsync/internal/redis"
+	"github.com/yandex/rdsync/internal/valkey"
 )
 
 // CliInfo prints DCS-based shard state to stdout
@@ -26,7 +26,7 @@ func (app *App) CliInfo(verbose bool) int {
 	app.dcs.Initialize()
 	defer app.dcs.Close()
 
-	app.shard = redis.NewShard(app.config, app.logger, app.dcs)
+	app.shard = valkey.NewShard(app.config, app.logger, app.dcs)
 	defer app.shard.Close()
 	if err := app.shard.UpdateHostsInfo(); err != nil {
 		app.logger.Error("Unable to update hosts info", "error", err)
@@ -133,7 +133,7 @@ func (app *App) CliState(verbose bool) int {
 	}
 	defer app.dcs.Close()
 	app.dcs.Initialize()
-	app.shard = redis.NewShard(app.config, app.logger, app.dcs)
+	app.shard = valkey.NewShard(app.config, app.logger, app.dcs)
 	defer app.shard.Close()
 
 	if err := app.shard.UpdateHostsInfo(); err != nil {
@@ -192,7 +192,7 @@ func (app *App) CliSwitch(switchFrom, switchTo string, waitTimeout time.Duration
 	}
 	defer app.dcs.Close()
 	app.dcs.Initialize()
-	app.shard = redis.NewShard(app.config, app.logger, app.dcs)
+	app.shard = valkey.NewShard(app.config, app.logger, app.dcs)
 	defer app.shard.Close()
 
 	if err := app.shard.UpdateHostsInfo(); err != nil {
@@ -522,7 +522,7 @@ func (app *App) CliHostList() int {
 	app.dcs.Initialize()
 	defer app.dcs.Close()
 
-	app.shard = redis.NewShard(app.config, app.logger, app.dcs)
+	app.shard = valkey.NewShard(app.config, app.logger, app.dcs)
 	defer app.shard.Close()
 
 	data := make(map[string]interface{})
@@ -545,7 +545,7 @@ func (app *App) CliHostList() int {
 }
 
 // CliHostAdd add hosts to the list of hosts in dcs
-func (app *App) CliHostAdd(host string, priority *int, dryRun bool, skipRedisCheck bool) int {
+func (app *App) CliHostAdd(host string, priority *int, dryRun bool, skipValkeyCheck bool) int {
 	if priority != nil && *priority < 0 {
 		app.logger.Error(fmt.Sprintf("Priority must be >= 0. Got: %d", *priority))
 		return 1
@@ -559,7 +559,7 @@ func (app *App) CliHostAdd(host string, priority *int, dryRun bool, skipRedisChe
 	defer app.dcs.Close()
 	app.dcs.Initialize()
 
-	app.shard = redis.NewShard(app.config, app.logger, app.dcs)
+	app.shard = valkey.NewShard(app.config, app.logger, app.dcs)
 	defer app.shard.Close()
 
 	// root path probably does not exist
@@ -568,8 +568,8 @@ func (app *App) CliHostAdd(host string, priority *int, dryRun bool, skipRedisChe
 		return 1
 	}
 
-	if !skipRedisCheck {
-		node, err := redis.NewNode(app.config, app.logger, host)
+	if !skipValkeyCheck {
+		node, err := valkey.NewNode(app.config, app.logger, host)
 		if err != nil {
 			app.logger.Error(fmt.Sprintf("Failed to check connection to %s, can't tell if it's alive", host), "error", err)
 			return 1
@@ -583,7 +583,7 @@ func (app *App) CliHostAdd(host string, priority *int, dryRun bool, skipRedisChe
 	}
 
 	if !dryRun && priority == nil {
-		err = app.dcs.Set(dcs.JoinPath(pathHANodes, host), *redis.DefaultNodeConfiguration())
+		err = app.dcs.Set(dcs.JoinPath(pathHANodes, host), *valkey.DefaultNodeConfiguration())
 		if err != nil && err != dcs.ErrExists {
 			app.logger.Error(fmt.Sprintf("Unable to create dcs path for %s", host), "error", err)
 			return 1
@@ -627,7 +627,7 @@ func (app *App) CliHostRemove(host string) int {
 }
 
 func (app *App) processPriority(priority *int, dryRun bool, host string) (changes bool, err error) {
-	targetConf := redis.DefaultNodeConfiguration()
+	targetConf := valkey.DefaultNodeConfiguration()
 	if priority != nil {
 		targetConf.Priority = *priority
 	}

@@ -1,4 +1,4 @@
-package redis
+package valkey
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	client "github.com/redis/go-redis/v9"
+	client "github.com/valkey-io/valkey-go"
 
 	"github.com/yandex/rdsync/internal/config"
 )
@@ -23,7 +23,7 @@ type SentiCacheSentinel struct {
 	Port  int
 }
 
-// SentiCacheReplica represents the redis replica as seen by senticache
+// SentiCacheReplica represents the valkey replica as seen by senticache
 type SentiCacheReplica struct {
 	IP                    string
 	Port                  int
@@ -37,7 +37,7 @@ type SentiCacheReplica struct {
 	SlaveReplOffset       int64
 }
 
-// SentiCacheMaster represents the redis master as seen by senticache
+// SentiCacheMaster represents the valkey master as seen by senticache
 type SentiCacheMaster struct {
 	Name          string
 	IP            string
@@ -55,28 +55,30 @@ type SentiCacheState struct {
 	Sentinels []SentiCacheSentinel
 }
 
-// SentiCacheNode represents API to query/manipulate a single Redis SentiCache node
+// SentiCacheNode represents API to query/manipulate a single Valkey SentiCache node
 type SentiCacheNode struct {
 	config *config.Config
 	logger *slog.Logger
-	conn   *client.Client
+	conn   client.Client
+	opts   client.ClientOption
 	broken bool
 }
 
 // NewRemoteSentiCacheNode is a remote SentiCacheNode constructor
 func NewRemoteSentiCacheNode(config *config.Config, host string, logger *slog.Logger) (*SentiCacheNode, error) {
 	addr := net.JoinHostPort(host, strconv.Itoa(config.SentinelMode.CachePort))
-	opts := client.Options{
-		Addr:            addr,
-		Username:        config.SentinelMode.CacheAuthUser,
-		Password:        config.SentinelMode.CacheAuthPassword,
-		DialTimeout:     config.Redis.DialTimeout,
-		ReadTimeout:     config.Redis.ReadTimeout,
-		WriteTimeout:    config.Redis.WriteTimeout,
-		PoolSize:        1,
-		MinIdleConns:    1,
-		ConnMaxLifetime: time.Hour,
-		Protocol:        2,
+	opts := client.ClientOption{
+		InitAddress:           []string{addr},
+		Username:              config.SentinelMode.CacheAuthUser,
+		Password:              config.SentinelMode.CacheAuthPassword,
+		Dialer:                net.Dialer{Timeout: config.Valkey.DialTimeout},
+		ConnWriteTimeout:      config.Valkey.WriteTimeout,
+		AlwaysRESP2:           true,
+		ForceSingleClient:     true,
+		DisableAutoPipelining: true,
+		DisableCache:          true,
+		BlockingPoolMinSize:   1,
+		BlockingPoolCleanup:   time.Second,
 	}
 	if config.SentinelMode.UseTLS {
 		tlsConf, err := getTLSConfig(config, config.SentinelMode.TLSCAPath, host)
@@ -85,9 +87,15 @@ func NewRemoteSentiCacheNode(config *config.Config, host string, logger *slog.Lo
 		}
 		opts.TLSConfig = tlsConf
 	}
+	conn, err := client.NewClient(opts)
+	if err != nil {
+		logger.Warn("Unable to establish initial connection", "fqdn", host, "error", err)
+		conn = nil
+	}
 	node := SentiCacheNode{
 		config: config,
-		conn:   client.NewClient(&opts),
+		conn:   conn,
+		opts:   opts,
 		logger: logger.With("module", "senticache"),
 		broken: false,
 	}
@@ -99,9 +107,22 @@ func NewSentiCacheNode(config *config.Config, logger *slog.Logger) (*SentiCacheN
 	return NewRemoteSentiCacheNode(config, localhost, logger)
 }
 
-// Close closes underlying Redis connection
-func (s *SentiCacheNode) Close() error {
-	return s.conn.Close()
+// Close closes underlying Valkey connection
+func (s *SentiCacheNode) Close() {
+	if s.conn != nil {
+		s.conn.Close()
+	}
+}
+
+func (s *SentiCacheNode) ensureConn() error {
+	if s.conn == nil {
+		conn, err := client.NewClient(s.opts)
+		if err != nil {
+			return err
+		}
+		s.conn = conn
+	}
+	return nil
 }
 
 func (s *SentiCacheNode) restart(ctx context.Context) error {
@@ -112,22 +133,27 @@ func (s *SentiCacheNode) restart(ctx context.Context) error {
 }
 
 func (s *SentiCacheNode) sentinels(ctx context.Context) ([]SentiCacheSentinel, error) {
-	cmd := client.NewSliceCmd(ctx, "SENTINEL", "SENTINELS", "1")
-	err := s.conn.Process(ctx, cmd)
+	err := s.ensureConn()
 	if err != nil {
 		return []SentiCacheSentinel{}, err
 	}
-	val, err := cmd.Result()
+	cmd := s.conn.Do(ctx, s.conn.B().SentinelSentinels().Master("1").Build())
+	err = cmd.Error()
+	if err != nil {
+		return []SentiCacheSentinel{}, err
+	}
+	val, err := cmd.ToArray()
 	if err != nil {
 		return []SentiCacheSentinel{}, err
 	}
 	res := make([]SentiCacheSentinel, len(val))
 	for index, rawSentinel := range val {
 		sentinel := SentiCacheSentinel{}
-		sentinelInt := rawSentinel.([]interface{})
-		for i := 0; i < len(sentinelInt)/2; i += 2 {
-			key := sentinelInt[i].(string)
-			value := sentinelInt[i+1].(string)
+		sentinelInt, err := rawSentinel.AsStrMap()
+		if err != nil {
+			return []SentiCacheSentinel{}, err
+		}
+		for key, value := range sentinelInt {
 			switch key {
 			case "name":
 				sentinel.Name = value
@@ -148,12 +174,16 @@ func (s *SentiCacheNode) sentinels(ctx context.Context) ([]SentiCacheSentinel, e
 }
 
 func (s *SentiCacheNode) master(ctx context.Context) (*SentiCacheMaster, error) {
-	cmd := client.NewSliceCmd(ctx, "SENTINEL", "MASTERS")
-	err := s.conn.Process(ctx, cmd)
+	err := s.ensureConn()
 	if err != nil {
 		return nil, err
 	}
-	val, err := cmd.Result()
+	cmd := s.conn.Do(ctx, s.conn.B().Arbitrary("SENTINEL", "MASTERS").Build())
+	err = cmd.Error()
+	if err != nil {
+		return nil, err
+	}
+	val, err := cmd.ToArray()
 	if err != nil {
 		return nil, err
 	}
@@ -163,10 +193,11 @@ func (s *SentiCacheNode) master(ctx context.Context) (*SentiCacheMaster, error) 
 		return nil, fmt.Errorf("got %d masters in senticache", len(val))
 	}
 	var res SentiCacheMaster
-	master := val[0].([]interface{})
-	for i := 0; i < len(master)/2; i += 2 {
-		key := master[i].(string)
-		value := master[i+1].(string)
+	master, err := val[0].AsStrMap()
+	if err != nil {
+		return nil, err
+	}
+	for key, value := range master {
 		switch key {
 		case "name":
 			res.Name = value
@@ -202,22 +233,27 @@ func (s *SentiCacheNode) master(ctx context.Context) (*SentiCacheMaster, error) 
 }
 
 func (s *SentiCacheNode) replicas(ctx context.Context) ([]SentiCacheReplica, error) {
-	cmd := client.NewSliceCmd(ctx, "SENTINEL", "REPLICAS", "1")
-	err := s.conn.Process(ctx, cmd)
+	err := s.ensureConn()
 	if err != nil {
 		return []SentiCacheReplica{}, err
 	}
-	val, err := cmd.Result()
+	cmd := s.conn.Do(ctx, s.conn.B().SentinelReplicas().Master("1").Build())
+	err = cmd.Error()
+	if err != nil {
+		return []SentiCacheReplica{}, err
+	}
+	val, err := cmd.ToArray()
 	if err != nil {
 		return []SentiCacheReplica{}, err
 	}
 	res := make([]SentiCacheReplica, len(val))
 	for index, rawReplica := range val {
 		replica := SentiCacheReplica{}
-		replicaInt := rawReplica.([]interface{})
-		for i := 0; i < len(replicaInt)/2; i += 2 {
-			key := replicaInt[i].(string)
-			value := replicaInt[i+1].(string)
+		replicaInt, err := rawReplica.AsStrMap()
+		if err != nil {
+			return []SentiCacheReplica{}, err
+		}
+		for key, value := range replicaInt {
 			switch key {
 			case "ip":
 				replica.IP = value
@@ -347,12 +383,7 @@ func (s *SentiCacheNode) Update(ctx context.Context, state *SentiCacheState) err
 		)
 	}
 	s.logger.Debug(fmt.Sprintf("Updating senticache state with %v", command))
-	cmd := make([]interface{}, len(command))
-	for i, v := range command {
-		cmd[i] = v
-	}
-	res := s.conn.Do(ctx, cmd...)
-	err = res.Err()
+	err = s.conn.Do(ctx, s.conn.B().Arbitrary(command...).Build()).Error()
 	if err != nil {
 		s.broken = true
 		return err

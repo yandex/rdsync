@@ -5,10 +5,10 @@ pprof_addr: ":8081"
 info_file: /var/run/rdsync.info
 maintenance_file: /var/run/rdsync.maintenance
 daemon_lock_file: /var/run/rdsync.lock
-redis:
+valkey:
   auth_password: functestpassword
-  restart_command: supervisorctl restart redis
-  aof_path: /var/lib/redis/appendonlydir
+  restart_command: supervisorctl restart valkey
+  aof_path: /var/lib/valkey/appendonlydir
 sentinel_mode:
   announce_hostname: true
   cluster_name: functest

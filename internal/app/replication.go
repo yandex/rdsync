@@ -3,10 +3,10 @@ package app
 import (
 	"slices"
 
-	"github.com/yandex/rdsync/internal/redis"
+	"github.com/yandex/rdsync/internal/valkey"
 )
 
-func replicates(masterState *HostState, replicaState *ReplicaState, replicaFQDN string, masterNode *redis.Node, allowSync bool) bool {
+func replicates(masterState *HostState, replicaState *ReplicaState, replicaFQDN string, masterNode *valkey.Node, allowSync bool) bool {
 	if replicaState == nil || !(replicaState.MasterLinkState || allowSync) {
 		return false
 	}

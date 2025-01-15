@@ -20,7 +20,7 @@ func countRunningHAReplicas(shardState map[string]*HostState) int {
 
 func (app *App) getFailoverQuorum(activeNodes []string) int {
 	fq := len(activeNodes) - app.getNumReplicasToWrite(activeNodes)
-	if fq < 1 || app.config.Redis.AllowDataLoss {
+	if fq < 1 || app.config.Valkey.AllowDataLoss {
 		fq = 1
 	}
 	return fq
@@ -36,11 +36,11 @@ func (app *App) performFailover(master string) error {
 }
 
 func (app *App) approveFailover(shardState map[string]*HostState, activeNodes []string, master string) error {
-	if app.config.Redis.FailoverTimeout > 0 {
+	if app.config.Valkey.FailoverTimeout > 0 {
 		failedTime := time.Since(app.nodeFailTime[master])
-		if failedTime < app.config.Redis.FailoverTimeout {
+		if failedTime < app.config.Valkey.FailoverTimeout {
 			return fmt.Errorf("failover timeout is not yet elapsed: remaining %v",
-				app.config.Redis.FailoverTimeout-failedTime)
+				app.config.Valkey.FailoverTimeout-failedTime)
 		}
 	}
 	if countRunningHAReplicas(shardState) == len(shardState)-1 {
@@ -64,9 +64,9 @@ func (app *App) approveFailover(shardState map[string]*HostState, activeNodes []
 			return fmt.Errorf("another switchover with cause %s is in progress", lastSwitchover.Cause)
 		}
 		timeAfterLastSwitchover := time.Since(lastSwitchover.Result.FinishedAt)
-		if timeAfterLastSwitchover < app.config.Redis.FailoverCooldown && lastSwitchover.Cause == CauseAuto {
+		if timeAfterLastSwitchover < app.config.Valkey.FailoverCooldown && lastSwitchover.Cause == CauseAuto {
 			return fmt.Errorf("not enough time from last failover %s (cooldown %s)",
-				lastSwitchover.Result.FinishedAt, app.config.Redis.FailoverCooldown)
+				lastSwitchover.Result.FinishedAt, app.config.Valkey.FailoverCooldown)
 		}
 	}
 	return nil

@@ -176,12 +176,12 @@ func (app *App) stateManager() appState {
 			if app.splitTime[master].IsZero() {
 				app.splitTime[master] = time.Now()
 			}
-			if app.config.Redis.FailoverTimeout > 0 {
+			if app.config.Valkey.FailoverTimeout > 0 {
 				failedTime := time.Since(app.splitTime[master])
-				if failedTime < app.config.Redis.FailoverTimeout {
+				if failedTime < app.config.Valkey.FailoverTimeout {
 					app.logger.Error(
 						fmt.Sprintf("According to DCS majority of shard is still alive, but we don't see that from here, will wait for %v before giving up on manager role",
-							app.config.Redis.FailoverTimeout-failedTime))
+							app.config.Valkey.FailoverTimeout-failedTime))
 					return stateManager
 				}
 			}
@@ -195,7 +195,7 @@ func (app *App) stateManager() appState {
 		app.logger.Error("According to DCS majority of shard is still alive, but we don't see that from here. Giving up on manager role")
 		delete(app.splitTime, master)
 		app.dcs.ReleaseLock(pathManagerLock)
-		waitCtx, cancel := context.WithTimeout(app.ctx, app.config.Redis.FailoverTimeout)
+		waitCtx, cancel := context.WithTimeout(app.ctx, app.config.Valkey.FailoverTimeout)
 		defer cancel()
 		ticker := time.NewTicker(app.config.TickInterval)
 		var manager dcs.LockOwner

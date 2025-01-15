@@ -33,15 +33,15 @@
     client/Reusable
     (reusable? [_ test] true)))
 
-(defn redis-client
-  "Redis client"
+(defn valkey-client
+  "Valkey client"
   [node]
   (reify client/Client
     (setup! [_ test]
-      (info "redis-client setup"))
+      (info "valkey-client setup"))
     (open! [_ test node]
       (cond (not (string/includes? (name node) "zoo"))
-            (redis-client node)
+            (valkey-client node)
             true
             (noop-client)))
 
@@ -70,7 +70,7 @@
     (reusable? [_ test] true)))
 
 (defn db
-  "Redis database"
+  "Valkey database"
   []
   (reify db/DB
     (setup! [_ test node]
@@ -140,7 +140,7 @@
              (case (:f op)
                :switch (assoc op :value
                           (try
-                              (let [node (rand-nth (filter (fn [x] (string/includes? (name x) "redis"))
+                              (let [node (rand-nth (filter (fn [x] (string/includes? (name x) "valkey"))
                                                            (:nodes test)))]
                                 (control/on node
                                   (control/exec :timeout :10 :rdsync :switch :--to node))
@@ -165,7 +165,7 @@
              (case (:f op)
                :kill (assoc op :value
                       (try
-                          (let [node (rand-nth (filter (fn [x] (string/includes? (name x) "redis"))
+                          (let [node (rand-nth (filter (fn [x] (string/includes? (name x) "valkey"))
                                                        (:nodes test)))]
                             (control/on node
                               (control/exec :supervisorctl :signal :KILL :rdsync))
@@ -183,14 +183,14 @@
 (def nemesis-starts [:start-halves :start-ring :start-one :switch :kill])
 
 (defn rdsync-test
-  [redis-nodes zookeeper-nodes]
-  {:nodes     (concat redis-nodes zookeeper-nodes)
+  [valkey-nodes zookeeper-nodes]
+  {:nodes     (concat valkey-nodes zookeeper-nodes)
    :name      "rdsync"
    :os        os/noop
    :db        (db)
    :ssh       {:private-key-path "/root/.ssh/id_rsa" :strict-host-key-checking :no :password ""}
    :net       net/iptables
-   :client    (redis-client nil)
+   :client    (valkey-client nil)
    :nemesis   (nemesis/compose {{:start-halves :start} (nemesis/partition-random-halves)
                                 {:start-ring   :start} (nemesis/partition-majorities-ring)
                                 {:start-one    :start
