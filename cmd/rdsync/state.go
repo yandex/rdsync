@@ -11,7 +11,7 @@ import (
 
 var stateCmd = &cobra.Command{
 	Use:   "state",
-	Short: "Print information from redis hosts",
+	Short: "Print information from valkey hosts",
 	Run: func(cmd *cobra.Command, args []string) {
 		app, err := app.NewApp(configFile, logLevel)
 		if err != nil {

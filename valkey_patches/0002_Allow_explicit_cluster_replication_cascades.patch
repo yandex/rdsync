@@ -1,22 +1,18 @@
-diff --git a/src/cluster.c b/src/cluster.c
-index 6b34b72c2..b01695db7 100644
---- a/src/cluster.c
-+++ b/src/cluster.c
-@@ -6282,12 +6282,6 @@ NULL
-             return;
+diff --git a/src/cluster_legacy.c b/src/cluster_legacy.c
+index 46b63c6cd..0449ca0c9 100644
+--- a/src/cluster_legacy.c
++++ b/src/cluster_legacy.c
+@@ -6642,7 +6642,7 @@ int clusterCommandSpecial(client *c) {
          }
  
--        /* Can't replicate a slave. */
--        if (nodeIsSlave(n)) {
--            addReplyError(c,"I can only replicate a master, not a replica.");
--            return;
--        }
--
-         /* If the instance is currently a master, it should have no assigned
-          * slots nor keys to accept to replicate some other node.
-          * Slaves can switch to another master without issues. */
+         /* Can't replicate a replica. */
+-        if (nodeIsReplica(n)) {
++        if (nodeIsReplica(n) && !server.cluster_replica_no_failover) {
+             addReplyError(c, "I can only replicate a master, not a replica.");
+             return 1;
+         }
 diff --git a/tests/cluster/tests/99-yandex-cloud-patches.tcl b/tests/cluster/tests/99-yandex-cloud-patches.tcl
-index 6d0c1007b..3a0d580d9 100644
+index 6d0c1007b..04b644128 100644
 --- a/tests/cluster/tests/99-yandex-cloud-patches.tcl
 +++ b/tests/cluster/tests/99-yandex-cloud-patches.tcl
 @@ -13,8 +13,8 @@ proc kill_clustered_redis {id} {
@@ -30,11 +26,12 @@ index 6d0c1007b..3a0d580d9 100644
  }
  
  test "Cluster is up" {
-@@ -38,6 +38,15 @@ test "Replication pause on instance #1 works" {
+@@ -38,6 +38,16 @@ test "Replication pause on instance #1 works" {
      }
  }
  
 +test "Replication cascade with paused instance works" {
++    assert {[R 2 config set cluster-slave-no-failover yes] eq {OK}}
 +    assert {[R 2 cluster replicate [R 1 CLUSTER MYID]] eq {OK}}
 +    wait_for_condition 1000 50 {
 +        [RI 2 master_link_status] eq {up}
@@ -46,3 +43,6 @@ index 6d0c1007b..3a0d580d9 100644
  test "Replication resume on instance #1 works" {
      assert {[R 1 config set repl-paused no] eq {OK}}
      wait_for_condition 1000 50 {
+-- 
+2.48.0
+

@@ -13,8 +13,8 @@ import (
 	"github.com/yandex/rdsync/internal/dcs"
 )
 
-// RedisConfig contains redis connection info and params
-type RedisConfig struct {
+// ValkeyConfig contains valkey connection info and params
+type ValkeyConfig struct {
 	Port                    int           `yaml:"port"`
 	ClusterBusPort          int           `yaml:"cluster_bus_port"`
 	UseTLS                  bool          `yaml:"use_tls"`
@@ -22,7 +22,6 @@ type RedisConfig struct {
 	AuthUser                string        `yaml:"auth_user"`
 	AuthPassword            string        `yaml:"auth_password"`
 	DialTimeout             time.Duration `yaml:"dial_timeout"`
-	ReadTimeout             time.Duration `yaml:"read_timeout"`
 	WriteTimeout            time.Duration `yaml:"write_timeout"`
 	DNSTTL                  time.Duration `yaml:"dns_ttl"`
 	FailoverTimeout         time.Duration `yaml:"failover_timeout"`
@@ -38,18 +37,6 @@ type RedisConfig struct {
 	TurnBeforeSwitchover    bool          `yaml:"turn_before_switchover"`
 	RestartCommand          string        `yaml:"restart_command"`
 	AofPath                 string        `yaml:"aof_path"`
-}
-
-// RedisRenamesConfig contains redis command renames
-type RedisRenamesConfig struct {
-	Client           string `yaml:"client"`
-	Cluster          string `yaml:"cluster"`
-	ClusterFailover  string `yaml:"cluster_failover"`
-	ClusterMyID      string `yaml:"cluster_myid"`
-	ClusterReplicate string `yaml:"cluster_replicate"`
-	ClusterMeet      string `yaml:"cluster_meet"`
-	Config           string `yaml:"config"`
-	ReplicaOf        string `yaml:"replicaof"`
 }
 
 // SentinelModeConfig contains sentinel-mode specific configuration
@@ -84,14 +71,13 @@ type Config struct {
 	PprofAddr               string              `yaml:"pprof_addr"`
 	Zookeeper               dcs.ZookeeperConfig `yaml:"zookeeper"`
 	DcsWaitTimeout          time.Duration       `yaml:"dcs_wait_timeout"`
-	Redis                   RedisConfig         `yaml:"redis"`
-	Renames                 RedisRenamesConfig  `yaml:"renames"`
+	Valkey                  ValkeyConfig        `yaml:"valkey"`
 	SentinelMode            SentinelModeConfig  `yaml:"sentinel_mode"`
 }
 
-// DefaultRedisConfig returns default configuration for redis connection info and params
-func DefaultRedisConfig() RedisConfig {
-	return RedisConfig{
+// DefaultValkeyConfig returns default configuration for valkey connection info and params
+func DefaultValkeyConfig() ValkeyConfig {
+	return ValkeyConfig{
 		Port:                    6379,
 		ClusterBusPort:          16379,
 		UseTLS:                  false,
@@ -99,7 +85,6 @@ func DefaultRedisConfig() RedisConfig {
 		AuthUser:                "",
 		AuthPassword:            "",
 		DialTimeout:             5 * time.Second,
-		ReadTimeout:             5 * time.Second,
 		WriteTimeout:            5 * time.Second,
 		DNSTTL:                  5 * time.Minute,
 		FailoverTimeout:         30 * time.Second,
@@ -113,22 +98,8 @@ func DefaultRedisConfig() RedisConfig {
 		MaxParallelSyncs:        1,
 		AllowDataLoss:           false,
 		TurnBeforeSwitchover:    false,
-		RestartCommand:          "systemctl restart redis-server",
+		RestartCommand:          "systemctl restart valkey-server",
 		AofPath:                 "",
-	}
-}
-
-// DefaultRedisRenamesConfig returns default redis command renames
-func DefaultRedisRenamesConfig() RedisRenamesConfig {
-	return RedisRenamesConfig{
-		Client:           "CLIENT",
-		Cluster:          "CLUSTER",
-		ClusterFailover:  "FAILOVER",
-		ClusterMyID:      "MYID",
-		ClusterReplicate: "REPLICATE",
-		ClusterMeet:      "MEET",
-		Config:           "CONFIG",
-		ReplicaOf:        "REPLICAOF",
 	}
 }
 
@@ -155,7 +126,7 @@ func DefaultSentinelModeConfig(hostname string) (SentinelModeConfig, error) {
 		CacheAuthUser:       "",
 		CacheAuthPassword:   "",
 		CachePort:           26379,
-		CacheRestartCommand: "systemctl restart redis-senticache",
+		CacheRestartCommand: "systemctl restart valkey-senticache",
 		CacheUpdateSecret:   "",
 		UseTLS:              false,
 		TLSCAPath:           "",
@@ -193,8 +164,7 @@ func DefaultConfig() (Config, error) {
 		PprofAddr:               "",
 		Zookeeper:               zkConfig,
 		DcsWaitTimeout:          10 * time.Second,
-		Redis:                   DefaultRedisConfig(),
-		Renames:                 DefaultRedisRenamesConfig(),
+		Valkey:                  DefaultValkeyConfig(),
 		SentinelMode:            sentinelConf,
 	}
 	return config, nil

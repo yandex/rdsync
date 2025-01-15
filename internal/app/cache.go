@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/yandex/rdsync/internal/redis"
+	"github.com/yandex/rdsync/internal/valkey"
 )
 
-func (app *App) updateCache(refState map[string]*HostState, cache *redis.SentiCacheNode) error {
-	var state redis.SentiCacheState
+func (app *App) updateCache(refState map[string]*HostState, cache *valkey.SentiCacheNode) error {
+	var state valkey.SentiCacheState
 	masterReadOnly := false
 	for fqdn, hostState := range refState {
 		if hostState == nil || !hostState.PingOk || hostState.Error != "" {
@@ -16,7 +16,7 @@ func (app *App) updateCache(refState map[string]*HostState, cache *redis.SentiCa
 		}
 
 		if hostState.SentiCacheState != nil && fqdn != app.config.Hostname {
-			var sentinel redis.SentiCacheSentinel
+			var sentinel valkey.SentiCacheSentinel
 			sentinel.Name = hostState.SentiCacheState.Name
 			sentinel.RunID = hostState.SentiCacheState.RunID
 			if app.config.SentinelMode.AnnounceHostname {
@@ -47,29 +47,29 @@ func (app *App) updateCache(refState map[string]*HostState, cache *redis.SentiCa
 			} else {
 				state.Master.IP = hostState.IP
 			}
-			state.Master.Port = app.config.Redis.Port
+			state.Master.Port = app.config.Valkey.Port
 			state.Master.RunID = hostState.RunID
 			state.Master.Quorum = len(refState)/2 + 1
-			state.Master.ParallelSyncs = app.config.Redis.MaxParallelSyncs
+			state.Master.ParallelSyncs = app.config.Valkey.MaxParallelSyncs
 			state.Master.ConfigEpoch = 0
 		} else {
 			nc, err := app.shard.GetNodeConfiguration(fqdn)
 			if err != nil {
 				return err
 			}
-			var replica redis.SentiCacheReplica
+			var replica valkey.SentiCacheReplica
 			if app.config.SentinelMode.AnnounceHostname {
 				replica.IP = fqdn
 			} else {
 				replica.IP = hostState.IP
 			}
-			replica.Port = app.config.Redis.Port
+			replica.Port = app.config.Valkey.Port
 			replica.RunID = hostState.RunID
 			replica.MasterLinkDownTime = hostState.ReplicaState.MasterLinkDownTime
 			replica.SlavePriority = nc.Priority
 			replica.ReplicaAnnounced = 1
 			replica.MasterHost = hostState.ReplicaState.MasterHost
-			replica.MasterPort = app.config.Redis.Port
+			replica.MasterPort = app.config.Valkey.Port
 			if hostState.ReplicaState.MasterLinkState {
 				replica.SlaveMasterLinkStatus = 0
 			} else {

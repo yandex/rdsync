@@ -14,7 +14,7 @@ import (
 
 	"github.com/yandex/rdsync/internal/config"
 	"github.com/yandex/rdsync/internal/dcs"
-	"github.com/yandex/rdsync/internal/redis"
+	"github.com/yandex/rdsync/internal/valkey"
 )
 
 // App is main application structure
@@ -29,8 +29,8 @@ type App struct {
 	logger       *slog.Logger
 	config       *config.Config
 	dcs          dcs.DCS
-	shard        *redis.Shard
-	cache        *redis.SentiCacheNode
+	shard        *valkey.Shard
+	cache        *valkey.SentiCacheNode
 	daemonLock   *flock.Flock
 }
 
@@ -136,10 +136,10 @@ func (app *App) Run() int {
 	defer app.dcs.Close()
 	app.dcs.SetDisconnectCallback(func() error { return app.handleCritical() })
 
-	app.shard = redis.NewShard(app.config, app.logger, app.dcs)
+	app.shard = valkey.NewShard(app.config, app.logger, app.dcs)
 	defer app.shard.Close()
 	if app.mode == modeSentinel {
-		app.cache, err = redis.NewSentiCacheNode(app.config, app.logger)
+		app.cache, err = valkey.NewSentiCacheNode(app.config, app.logger)
 		if err != nil {
 			app.logger.Error("Unable to init senticache node", "error", err)
 			return 1

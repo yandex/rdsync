@@ -1,8 +1,8 @@
 diff --git a/src/config.c b/src/config.c
-index b26704283..1d720132a 100644
+index 2d4e703d9..c1351d74f 100644
 --- a/src/config.c
 +++ b/src/config.c
-@@ -2525,6 +2525,25 @@ static int updateAofAutoGCEnabled(const char **err) {
+@@ -2526,6 +2526,25 @@ static int updateExtendedRedisCompat(const char **err) {
      return 1;
  }
  
@@ -10,13 +10,13 @@ index b26704283..1d720132a 100644
 +    UNUSED(err);
 +
 +    if (server.repl_paused) {
-+        if (server.masterhost) {
-+            if (server.repl_state == REPL_STATE_CONNECTING || slaveIsInHandshakeState() ||
-+                    server.repl_state == REPL_STATE_TRANSFER) {
++        if (server.primary_host) {
++            if (server.repl_state == REPL_STATE_CONNECTING || replicaIsInHandshakeState() ||
++                server.repl_state == REPL_STATE_TRANSFER) {
 +                cancelReplicationHandshake(0);
 +            }
-+            if (server.master) {
-+                freeClient(server.master);
++            if (server.primary) {
++                freeClient(server.primary);
 +            }
 +            server.repl_state = REPL_STATE_CONNECT;
 +        }
@@ -28,65 +28,65 @@ index b26704283..1d720132a 100644
  static int updateSighandlerEnabled(const char **err) {
      UNUSED(err);
      if (server.crashlog_enabled)
-@@ -3095,6 +3114,7 @@ standardConfig static_configs[] = {
-     createBoolConfig("latency-tracking", NULL, MODIFIABLE_CONFIG, server.latency_tracking_enabled, 1, NULL, NULL),
-     createBoolConfig("aof-disable-auto-gc", NULL, MODIFIABLE_CONFIG | HIDDEN_CONFIG, server.aof_disable_auto_gc, 0, NULL, updateAofAutoGCEnabled),
-     createBoolConfig("replica-ignore-disk-write-errors", NULL, MODIFIABLE_CONFIG, server.repl_ignore_disk_write_error, 0, NULL, NULL),
+@@ -3107,6 +3126,7 @@ standardConfig static_configs[] = {
+     createBoolConfig("enable-debug-assert", NULL, IMMUTABLE_CONFIG | HIDDEN_CONFIG, server.enable_debug_assert, 0, NULL, NULL),
+     createBoolConfig("cluster-slot-stats-enabled", NULL, MODIFIABLE_CONFIG, server.cluster_slot_stats_enabled, 0, NULL, NULL),
+     createBoolConfig("hide-user-data-from-log", NULL, MODIFIABLE_CONFIG, server.hide_user_data_from_log, 1, NULL, NULL),
 +    createBoolConfig("repl-paused", NULL, MODIFIABLE_CONFIG, server.repl_paused, 0, NULL, updateReplPaused),
  
      /* String Configs */
      createStringConfig("aclfile", NULL, IMMUTABLE_CONFIG, ALLOW_EMPTY_STRING, server.acl_filename, "", NULL, NULL),
 diff --git a/src/replication.c b/src/replication.c
-index fbd9b0a99..47172dba3 100644
+index 249c190ea..a1ec23f38 100644
 --- a/src/replication.c
 +++ b/src/replication.c
-@@ -47,7 +47,6 @@ void replicationResurrectCachedMaster(connection *conn);
+@@ -51,7 +51,6 @@ void replicationResurrectProvisionalPrimary(void);
  void replicationSendAck(void);
- int replicaPutOnline(client *slave);
- void replicaStartCommandStream(client *slave);
+ int replicaPutOnline(client *replica);
+ void replicaStartCommandStream(client *replica);
 -int cancelReplicationHandshake(int reconnect);
+ void replicationSteadyStateInit(void);
+ void setupMainConnForPsync(connection *conn);
+ void dualChannelSyncHandleRdbLoadCompletion(void);
+@@ -1067,7 +1066,7 @@ void syncCommand(client *c) {
  
- /* We take a global flag to remember if this instance generated an RDB
-  * because of replication, so that we can remove the RDB file in case
-@@ -970,7 +969,7 @@ void syncCommand(client *c) {
- 
-     /* Refuse SYNC requests if we are a slave but the link with our master
+     /* Refuse SYNC requests if we are a replica but the link with our primary
       * is not ok... */
--    if (server.masterhost && server.repl_state != REPL_STATE_CONNECTED) {
-+    if (server.masterhost && server.repl_state != REPL_STATE_CONNECTED && !server.repl_paused) {
-         addReplyError(c,"-NOMASTERLINK Can't SYNC while not connected with my master");
+-    if (server.primary_host && server.repl_state != REPL_STATE_CONNECTED) {
++    if (server.primary_host && server.repl_state != REPL_STATE_CONNECTED && !server.repl_paused) {
+         addReplyError(c, "-NOMASTERLINK Can't SYNC while not connected with my master");
          return;
      }
-@@ -3743,7 +3742,7 @@ void replicationCron(void) {
+@@ -4520,7 +4519,7 @@ void replicationCron(void) {
      }
  
-     /* Check if we should connect to a MASTER */
+     /* Check if we should connect to a PRIMARY */
 -    if (server.repl_state == REPL_STATE_CONNECT) {
 +    if (server.repl_state == REPL_STATE_CONNECT && !server.repl_paused) {
-         serverLog(LL_NOTICE,"Connecting to MASTER %s:%d",
-             server.masterhost, server.masterport);
-         connectWithMaster();
+         serverLog(LL_NOTICE, "Connecting to PRIMARY %s:%d", server.primary_host, server.primary_port);
+         connectWithPrimary();
+     }
 diff --git a/src/server.h b/src/server.h
-index cb555031e..be2405170 100644
+index fceb2894a..d6dcd98fe 100644
 --- a/src/server.h
 +++ b/src/server.h
-@@ -1907,6 +1907,7 @@ struct redisServer {
+@@ -2095,6 +2095,7 @@ struct valkeyServer {
      /* Synchronous replication. */
-     list *clients_waiting_acks;         /* Clients waiting in WAIT or WAITAOF. */
-     int get_ack_from_slaves;            /* If true we send REPLCONF GETACK. */
-+    int repl_paused;                    /* If true we don't try to connect to master */
+     list *clients_waiting_acks; /* Clients waiting in WAIT or WAITAOF. */
+     int get_ack_from_replicas;  /* If true we send REPLCONF GETACK. */
++    int repl_paused;            /* If true we don't try to connect to master */
      /* Limits */
-     unsigned int maxclients;            /* Max number of simultaneous clients */
-     unsigned long long maxmemory;   /* Max number of memory bytes to use */
-@@ -2826,6 +2827,8 @@ void clearFailoverState(void);
+     unsigned int maxclients;                    /* Max number of simultaneous clients */
+     unsigned long long maxmemory;               /* Max number of memory bytes to use */
+@@ -3082,6 +3083,8 @@ void clearFailoverState(void);
  void updateFailoverStatus(void);
  void abortFailover(const char *err);
  const char *getFailoverStateString(void);
 +int cancelReplicationHandshake(int reconnect);
-+int slaveIsInHandshakeState(void);
++int replicaIsInHandshakeState(void);
+ int sendCurrentOffsetToReplica(client *replica);
+ void addRdbReplicaToPsyncWait(client *replica);
  
- /* Generic persistence functions */
- void startLoadingFile(size_t size, char* filename, int rdbflags);
 diff --git a/tests/cluster/tests/99-yandex-cloud-patches.tcl b/tests/cluster/tests/99-yandex-cloud-patches.tcl
 new file mode 100644
 index 000000000..6d0c1007b
@@ -203,15 +203,6 @@ index 000000000..a2c9bb949
 +        }
 +    }
 +}
-diff --git a/tests/test_helper.tcl b/tests/test_helper.tcl
-index 21fa35d4d..ad7707a29 100644
---- a/tests/test_helper.tcl
-+++ b/tests/test_helper.tcl
-@@ -103,6 +103,7 @@ set ::all_tests {
-     unit/cluster/slot-ownership
-     unit/cluster/links
-     unit/cluster/cluster-response-tls
-+    integration/yandex-cloud-patches
- }
- # Index to the next test to run in the ::all_tests list.
- set ::next_test 0
+-- 
+2.48.0
+

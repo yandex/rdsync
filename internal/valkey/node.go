@@ -1,4 +1,4 @@
-package redis
+package valkey
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	client "github.com/redis/go-redis/v9"
+	client "github.com/valkey-io/valkey-go"
 
 	"github.com/yandex/rdsync/internal/config"
 )
@@ -21,7 +21,7 @@ const (
 	highMinReplicas = 65535
 )
 
-// Node represents API to query/manipulate a single Redis node
+// Node represents API to query/manipulate a single valkey node
 type Node struct {
 	config      *config.Config
 	logger      *slog.Logger
@@ -31,7 +31,8 @@ type Node struct {
 	clusterID   string
 	infoResults []bool
 	cachedInfo  map[string]string
-	conn        *client.Client
+	conn        client.Client
+	opts        client.ClientOption
 }
 
 func uniqLookup(host string) ([]net.IP, error) {
@@ -68,34 +69,41 @@ func NewNode(config *config.Config, logger *slog.Logger, fqdn string) (*Node, er
 		ips = []net.IP{}
 		now = time.Time{}
 	}
-	addr := net.JoinHostPort(host, strconv.Itoa(config.Redis.Port))
-	opts := client.Options{
-		Addr:            addr,
-		Username:        config.Redis.AuthUser,
-		Password:        config.Redis.AuthPassword,
-		DialTimeout:     config.Redis.DialTimeout,
-		ReadTimeout:     config.Redis.ReadTimeout,
-		WriteTimeout:    config.Redis.WriteTimeout,
-		PoolSize:        1,
-		MaxRetries:      -1,
-		ConnMaxIdleTime: -1,
-		Protocol:        2,
+	addr := net.JoinHostPort(host, strconv.Itoa(config.Valkey.Port))
+	opts := client.ClientOption{
+		InitAddress:           []string{addr},
+		Username:              config.Valkey.AuthUser,
+		Password:              config.Valkey.AuthPassword,
+		Dialer:                net.Dialer{Timeout: config.Valkey.DialTimeout},
+		ConnWriteTimeout:      config.Valkey.WriteTimeout,
+		AlwaysRESP2:           true,
+		ForceSingleClient:     true,
+		DisableAutoPipelining: true,
+		DisableCache:          true,
+		BlockingPoolMinSize:   1,
+		BlockingPoolCleanup:   time.Second,
 	}
-	if config.Redis.UseTLS {
-		tlsConf, err := getTLSConfig(config, config.Redis.TLSCAPath, host)
+	if config.Valkey.UseTLS {
+		tlsConf, err := getTLSConfig(config, config.Valkey.TLSCAPath, host)
 		if err != nil {
 			return nil, err
 		}
 		opts.TLSConfig = tlsConf
 	}
+	conn, err := client.NewClient(opts)
+	if err != nil {
+		logger.Warn("Unable to establish initial connection", "fqdn", host, "error", err)
+		conn = nil
+	}
 	node := Node{
 		clusterID: "",
 		config:    config,
-		conn:      client.NewClient(&opts),
+		conn:      conn,
 		logger:    nodeLogger,
 		fqdn:      fqdn,
 		ips:       ips,
 		ipsTime:   now,
+		opts:      opts,
 	}
 	return &node, nil
 }
@@ -114,9 +122,22 @@ func (n *Node) String() string {
 	return n.fqdn
 }
 
-// Close closes underlying Redis connection
-func (n *Node) Close() error {
-	return n.conn.Close()
+// Close closes underlying valkey connection
+func (n *Node) Close() {
+	if n.conn != nil {
+		n.conn.Close()
+	}
+}
+
+func (n *Node) ensureConn() error {
+	if n.conn == nil {
+		conn, err := client.NewClient(n.opts)
+		if err != nil {
+			return err
+		}
+		n.conn = conn
+	}
+	return nil
 }
 
 // MatchHost checks if node has target hostname or ip
@@ -138,7 +159,7 @@ func (n *Node) MatchHost(host string) bool {
 
 // RefreshAddrs updates internal ip address list if ttl exceeded
 func (n *Node) RefreshAddrs() error {
-	if time.Since(n.ipsTime) < n.config.Redis.DNSTTL {
+	if time.Since(n.ipsTime) < n.config.Valkey.DNSTTL {
 		n.logger.Debug("Not updating ips cache due to ttl")
 		return nil
 	}
@@ -172,18 +193,25 @@ func (n *Node) GetIPs() []string {
 }
 
 func (n *Node) configRewrite(ctx context.Context) error {
-	setCmd := n.conn.Do(ctx, n.config.Renames.Config, "rewrite")
-	return setCmd.Err()
+	err := n.ensureConn()
+	if err != nil {
+		return err
+	}
+	return n.conn.Do(ctx, n.conn.B().ConfigRewrite().Build()).Error()
 }
 
 // IsReplPaused returns pause status of replication on node
 func (n *Node) IsReplPaused(ctx context.Context) (bool, error) {
-	cmd := client.NewStringSliceCmd(ctx, n.config.Renames.Config, "get", "repl-paused")
-	err := n.conn.Process(ctx, cmd)
+	err := n.ensureConn()
 	if err != nil {
 		return false, err
 	}
-	vals, err := cmd.Result()
+	cmd := n.conn.Do(ctx, n.conn.B().ConfigGet().Parameter("repl-paused").Build())
+	err = cmd.Error()
+	if err != nil {
+		return false, err
+	}
+	vals, err := cmd.AsStrSlice()
 	if err != nil {
 		return false, err
 	}
@@ -195,8 +223,12 @@ func (n *Node) IsReplPaused(ctx context.Context) (bool, error) {
 
 // PauseReplication pauses replication from master on node
 func (n *Node) PauseReplication(ctx context.Context) error {
-	setCmd := n.conn.Do(ctx, n.config.Renames.Config, "set", "repl-paused", "yes")
-	err := setCmd.Err()
+	err := n.ensureConn()
+	if err != nil {
+		return err
+	}
+	cmd := n.conn.Do(ctx, n.conn.B().Arbitrary("CONFIG", "SET", "repl-paused", "yes").Build())
+	err = cmd.Error()
 	if err != nil {
 		return err
 	}
@@ -205,8 +237,12 @@ func (n *Node) PauseReplication(ctx context.Context) error {
 
 // ResumeReplication starts replication from master on node
 func (n *Node) ResumeReplication(ctx context.Context) error {
-	setCmd := n.conn.Do(ctx, n.config.Renames.Config, "set", "repl-paused", "no")
-	err := setCmd.Err()
+	err := n.ensureConn()
+	if err != nil {
+		return err
+	}
+	cmd := n.conn.Do(ctx, n.conn.B().Arbitrary("CONFIG", "SET", "repl-paused", "no").Build())
+	err = cmd.Error()
 	if err != nil {
 		return err
 	}
@@ -215,12 +251,16 @@ func (n *Node) ResumeReplication(ctx context.Context) error {
 
 // IsOffline returns Offline status for node
 func (n *Node) IsOffline(ctx context.Context) (bool, error) {
-	cmd := client.NewStringSliceCmd(ctx, n.config.Renames.Config, "get", "offline")
-	err := n.conn.Process(ctx, cmd)
+	err := n.ensureConn()
 	if err != nil {
 		return false, err
 	}
-	vals, err := cmd.Result()
+	cmd := n.conn.Do(ctx, n.conn.B().ConfigGet().Parameter("offline").Build())
+	err = cmd.Error()
+	if err != nil {
+		return false, err
+	}
+	vals, err := cmd.AsStrSlice()
 	if err != nil {
 		return false, err
 	}
@@ -235,8 +275,12 @@ func (n *Node) SetOffline(ctx context.Context) error {
 	if !n.IsLocal() {
 		return fmt.Errorf("making %s offline is not possible - not local", n.fqdn)
 	}
-	setCmd := n.conn.Do(ctx, n.config.Renames.Config, "set", "offline", "yes")
-	err := setCmd.Err()
+	err := n.ensureConn()
+	if err != nil {
+		return err
+	}
+	cmd := n.conn.Do(ctx, n.conn.B().Arbitrary("CONFIG", "SET", "offline", "yes").Build())
+	err = cmd.Error()
 	if err != nil {
 		return err
 	}
@@ -253,18 +297,25 @@ func (n *Node) SetOffline(ctx context.Context) error {
 
 // DisconnectClients disconnects all connected clients with specified type
 func (n *Node) DisconnectClients(ctx context.Context, ctype string) error {
-	disconnectCmd := n.conn.Do(ctx, n.config.Renames.Client, "kill", "type", ctype)
-	return disconnectCmd.Err()
+	err := n.ensureConn()
+	if err != nil {
+		return err
+	}
+	return n.conn.Do(ctx, n.conn.B().Arbitrary("CLIENT", "KILL", "TYPE", ctype).Build()).Error()
 }
 
 // GetNumQuorumReplicas returns number of connected replicas to accept writes on node
 func (n *Node) GetNumQuorumReplicas(ctx context.Context) (int, error) {
-	cmd := client.NewStringSliceCmd(ctx, n.config.Renames.Config, "get", "quorum-replicas-to-write")
-	err := n.conn.Process(ctx, cmd)
+	err := n.ensureConn()
 	if err != nil {
 		return 0, err
 	}
-	vals, err := cmd.Result()
+	cmd := n.conn.Do(ctx, n.conn.B().ConfigGet().Parameter("quorum-replicas-to-write").Build())
+	err = cmd.Error()
+	if err != nil {
+		return 0, err
+	}
+	vals, err := cmd.AsStrSlice()
 	if err != nil {
 		return 0, err
 	}
@@ -280,8 +331,12 @@ func (n *Node) GetNumQuorumReplicas(ctx context.Context) (int, error) {
 
 // SetNumQuorumReplicas sets desired number of connected replicas to accept writes on node
 func (n *Node) SetNumQuorumReplicas(ctx context.Context, value int) (error, error) {
-	setCmd := n.conn.Do(ctx, n.config.Renames.Config, "set", "quorum-replicas-to-write", strconv.Itoa(value))
-	err := setCmd.Err()
+	err := n.ensureConn()
+	if err != nil {
+		return err, nil
+	}
+	cmd := n.conn.Do(ctx, n.conn.B().Arbitrary("CONFIG", "SET", "quorum-replicas-to-write", strconv.Itoa(value)).Build())
+	err = cmd.Error()
 	if err != nil {
 		return err, nil
 	}
@@ -290,12 +345,16 @@ func (n *Node) SetNumQuorumReplicas(ctx context.Context, value int) (error, erro
 
 // GetQuorumReplicas returns a set of quorum replicas
 func (n *Node) GetQuorumReplicas(ctx context.Context) (string, error) {
-	cmd := client.NewStringSliceCmd(ctx, n.config.Renames.Config, "get", "quorum-replicas")
-	err := n.conn.Process(ctx, cmd)
+	err := n.ensureConn()
 	if err != nil {
 		return "", err
 	}
-	vals, err := cmd.Result()
+	cmd := n.conn.Do(ctx, n.conn.B().ConfigGet().Parameter("quorum-replicas").Build())
+	err = cmd.Error()
+	if err != nil {
+		return "", err
+	}
+	vals, err := cmd.AsStrSlice()
 	if err != nil {
 		return "", err
 	}
@@ -309,8 +368,12 @@ func (n *Node) GetQuorumReplicas(ctx context.Context) (string, error) {
 
 // SetQuorumReplicas sets desired quorum replicas
 func (n *Node) SetQuorumReplicas(ctx context.Context, value string) (error, error) {
-	setCmd := n.conn.Do(ctx, n.config.Renames.Config, "set", "quorum-replicas", value)
-	err := setCmd.Err()
+	err := n.ensureConn()
+	if err != nil {
+		return err, nil
+	}
+	cmd := n.conn.Do(ctx, n.conn.B().Arbitrary("CONFIG", "SET", "quorum-replicas", value).Build())
+	err = cmd.Error()
 	if err != nil {
 		return err, nil
 	}
@@ -337,12 +400,16 @@ func (n *Node) EmptyQuorumReplicas(ctx context.Context) error {
 
 // GetAppendonly returns a setting of appendonly config
 func (n *Node) GetAppendonly(ctx context.Context) (bool, error) {
-	cmd := client.NewStringSliceCmd(ctx, n.config.Renames.Config, "get", "appendonly")
-	err := n.conn.Process(ctx, cmd)
+	err := n.ensureConn()
 	if err != nil {
 		return false, err
 	}
-	vals, err := cmd.Result()
+	cmd := n.conn.Do(ctx, n.conn.B().ConfigGet().Parameter("appendonly").Build())
+	err = cmd.Error()
+	if err != nil {
+		return false, err
+	}
+	vals, err := cmd.AsStrSlice()
 	if err != nil {
 		return false, err
 	}
@@ -358,8 +425,11 @@ func (n *Node) SetAppendonly(ctx context.Context, value bool) error {
 	if !value {
 		strValue = "no"
 	}
-	setCmd := n.conn.Do(ctx, n.config.Renames.Config, "set", "appendonly", strValue)
-	err := setCmd.Err()
+	err := n.ensureConn()
+	if err != nil {
+		return err
+	}
+	err = n.conn.Do(ctx, n.conn.B().Arbitrary("CONFIG", "SET", "appendonly", strValue).Build()).Error()
 	if err != nil {
 		return err
 	}
@@ -368,12 +438,16 @@ func (n *Node) SetAppendonly(ctx context.Context, value bool) error {
 
 // GetMinReplicasToWrite returns number of replicas required to write on node
 func (n *Node) GetMinReplicasToWrite(ctx context.Context) (int64, error) {
-	cmd := client.NewStringSliceCmd(ctx, n.config.Renames.Config, "get", "min-replicas-to-write")
-	err := n.conn.Process(ctx, cmd)
+	err := n.ensureConn()
 	if err != nil {
 		return 0, err
 	}
-	vals, err := cmd.Result()
+	cmd := n.conn.Do(ctx, n.conn.B().ConfigGet().Parameter("min-replicas-to-write").Build())
+	err = cmd.Error()
+	if err != nil {
+		return 0, err
+	}
+	vals, err := cmd.AsStrSlice()
 	if err != nil {
 		return 0, err
 	}
@@ -394,8 +468,11 @@ func (n *Node) IsReadOnly(minReplicasToWrite int64) bool {
 
 // SetReadOnly makes node read-only by setting min replicas to unreasonably high value and disconnecting clients
 func (n *Node) SetReadOnly(ctx context.Context, disconnect bool) (error, error) {
-	setCmd := n.conn.Do(ctx, n.config.Renames.Config, "set", "min-replicas-to-write", strconv.Itoa(highMinReplicas))
-	err := setCmd.Err()
+	err := n.ensureConn()
+	if err != nil {
+		return err, nil
+	}
+	err = n.conn.Do(ctx, n.conn.B().Arbitrary("CONFIG", "SET", "min-replicas-to-write", strconv.Itoa(highMinReplicas)).Build()).Error()
 	if err != nil {
 		return err, nil
 	}
@@ -415,8 +492,11 @@ func (n *Node) SetReadOnly(ctx context.Context, disconnect bool) (error, error) 
 
 // SetReadOnly makes node returns min-replicas-to-write to zero
 func (n *Node) SetReadWrite(ctx context.Context) (error, error) {
-	setCmd := n.conn.Do(ctx, n.config.Renames.Config, "set", "min-replicas-to-write", "0")
-	err := setCmd.Err()
+	err := n.ensureConn()
+	if err != nil {
+		return err, nil
+	}
+	err = n.conn.Do(ctx, n.conn.B().Arbitrary("CONFIG", "SET", "min-replicas-to-write", "0").Build()).Error()
 	if err != nil {
 		return err, nil
 	}
@@ -428,25 +508,33 @@ func (n *Node) SetOnline(ctx context.Context) error {
 	if !n.IsLocal() {
 		return fmt.Errorf("making %s online is not possible - not local", n.fqdn)
 	}
-	setCmd := n.conn.Do(ctx, n.config.Renames.Config, "set", "offline", "no")
-	return setCmd.Err()
+	err := n.ensureConn()
+	if err != nil {
+		return err
+	}
+	return n.conn.Do(ctx, n.conn.B().Arbitrary("CONFIG", "SET", "offline", "no").Build()).Error()
 }
 
-// Restart restarts redis server
+// Restart restarts valkey server
 func (n *Node) Restart(ctx context.Context) error {
 	if !n.IsLocal() {
 		return fmt.Errorf("restarting %s is not possible - not local", n.fqdn)
 	}
-	n.logger.Warn(fmt.Sprintf("Restarting with %s", n.config.Redis.RestartCommand))
-	split := strings.Fields(n.config.Redis.RestartCommand)
+	n.logger.Warn(fmt.Sprintf("Restarting with %s", n.config.Valkey.RestartCommand))
+	split := strings.Fields(n.config.Valkey.RestartCommand)
 	cmd := exec.CommandContext(ctx, split[0], split[1:]...)
 	return cmd.Run()
 }
 
 // GetInfo returns raw info map
 func (n *Node) GetInfo(ctx context.Context) (map[string]string, error) {
-	cmd := n.conn.Info(ctx)
-	err := cmd.Err()
+	var err error
+	var cmd client.ValkeyResult
+	err = n.ensureConn()
+	if err == nil {
+		cmd = n.conn.Do(ctx, n.conn.B().Info().Build())
+		err = cmd.Error()
+	}
 	if err != nil {
 		n.infoResults = append(n.infoResults, false)
 		if len(n.infoResults) > n.config.PingStable {
@@ -465,7 +553,10 @@ func (n *Node) GetInfo(ctx context.Context) (map[string]string, error) {
 		return n.cachedInfo, err
 	}
 
-	inp := cmd.Val()
+	inp, err := cmd.ToString()
+	if err != nil {
+		return nil, err
+	}
 	lines := strings.Count(inp, "\r\n")
 	res := make(map[string]string, lines)
 	pos := 0
@@ -512,8 +603,7 @@ func (n *Node) SentinelMakeReplica(ctx context.Context, target string) error {
 	if err != nil {
 		return err
 	}
-	cmd := n.conn.Do(ctx, n.config.Renames.ReplicaOf, target, n.config.Redis.Port)
-	err = cmd.Err()
+	err = n.conn.Do(ctx, n.conn.B().Replicaof().Host(target).Port(int64(n.config.Valkey.Port)).Build()).Error()
 	if err != nil {
 		return err
 	}
@@ -522,8 +612,11 @@ func (n *Node) SentinelMakeReplica(ctx context.Context, target string) error {
 
 // SentinelPromote makes node primary in sentinel mode
 func (n *Node) SentinelPromote(ctx context.Context) error {
-	cmd := n.conn.Do(ctx, n.config.Renames.ReplicaOf, "NO", "ONE")
-	err := cmd.Err()
+	err := n.ensureConn()
+	if err != nil {
+		return err
+	}
+	err = n.conn.Do(ctx, n.conn.B().Replicaof().No().One().Build()).Error()
 	if err != nil {
 		return err
 	}
@@ -535,17 +628,17 @@ func (n *Node) ClusterGetID(ctx context.Context) (string, error) {
 	if n.clusterID != "" {
 		return n.clusterID, nil
 	}
-	cmd := client.NewStringCmd(ctx, n.config.Renames.Cluster, n.config.Renames.ClusterMyID)
-	err := n.conn.Process(ctx, cmd)
+	err := n.ensureConn()
 	if err != nil {
 		return "", err
 	}
-	clusterID, err := cmd.Result()
+	cmd := n.conn.Do(ctx, n.conn.B().ClusterMyid().Build())
+	err = cmd.Error()
 	if err != nil {
 		return "", err
 	}
-	n.clusterID = clusterID
-	return n.clusterID, nil
+	n.clusterID, err = cmd.ToString()
+	return n.clusterID, err
 }
 
 // ClusterMakeReplica makes node replica of target in cluster mode
@@ -554,20 +647,27 @@ func (n *Node) ClusterMakeReplica(ctx context.Context, targetID string) error {
 	if err != nil {
 		return err
 	}
-	cmd := n.conn.Do(ctx, n.config.Renames.Cluster, n.config.Renames.ClusterReplicate, targetID)
-	return cmd.Err()
+	return n.conn.Do(ctx, n.conn.B().ClusterReplicate().NodeId(targetID).Build()).Error()
 }
 
 // IsClusterMajorityAlive checks if majority of masters in cluster are not failed
 func (n *Node) IsClusterMajorityAlive(ctx context.Context) (bool, error) {
-	cmd := n.conn.ClusterNodes(ctx)
-	err := cmd.Err()
+	err := n.ensureConn()
+	if err != nil {
+		return false, err
+	}
+	cmd := n.conn.Do(ctx, n.conn.B().ClusterNodes().Build())
+	err = cmd.Error()
 	if err != nil {
 		return false, err
 	}
 	totalMasters := 0
 	failedMasters := 0
-	lines := strings.Split(cmd.Val(), "\n")
+	strVal, err := cmd.ToString()
+	if err != nil {
+		return false, err
+	}
+	lines := strings.Split(strVal, "\n")
 	for _, line := range lines {
 		split := strings.Split(line, " ")
 		if len(split) < 3 {
@@ -587,24 +687,38 @@ func (n *Node) IsClusterMajorityAlive(ctx context.Context) (bool, error) {
 
 // ClusterPromoteForce makes node primary in cluster mode if master/majority of masters is reachable
 func (n *Node) ClusterPromoteForce(ctx context.Context) error {
-	cmd := n.conn.Do(ctx, n.config.Renames.Cluster, n.config.Renames.ClusterFailover, "FORCE")
-	return cmd.Err()
+	err := n.ensureConn()
+	if err != nil {
+		return err
+	}
+	return n.conn.Do(ctx, n.conn.B().ClusterFailover().Force().Build()).Error()
 }
 
 // ClusterPromoteTakeover makes node primary in cluster mode if majority of masters is not reachable
 func (n *Node) ClusterPromoteTakeover(ctx context.Context) error {
-	cmd := n.conn.Do(ctx, n.config.Renames.Cluster, n.config.Renames.ClusterFailover, "TAKEOVER")
-	return cmd.Err()
+	err := n.ensureConn()
+	if err != nil {
+		return err
+	}
+	return n.conn.Do(ctx, n.conn.B().ClusterFailover().Takeover().Build()).Error()
 }
 
 // IsClusterNodeAlone checks if node sees only itself
 func (n *Node) IsClusterNodeAlone(ctx context.Context) (bool, error) {
-	cmd := n.conn.ClusterNodes(ctx)
-	err := cmd.Err()
+	err := n.ensureConn()
 	if err != nil {
 		return false, err
 	}
-	lines := strings.Split(cmd.Val(), "\n")
+	cmd := n.conn.Do(ctx, n.conn.B().ClusterNodes().Build())
+	err = cmd.Error()
+	if err != nil {
+		return false, err
+	}
+	strVal, err := cmd.ToString()
+	if err != nil {
+		return false, err
+	}
+	lines := strings.Split(strVal, "\n")
 	var count int
 	for _, line := range lines {
 		if len(strings.TrimSpace(line)) > 0 {
@@ -616,18 +730,29 @@ func (n *Node) IsClusterNodeAlone(ctx context.Context) (bool, error) {
 
 // ClusterMeet makes replica join the cluster
 func (n *Node) ClusterMeet(ctx context.Context, addr string, port, clusterBusPort int) error {
-	cmd := n.conn.Do(ctx, n.config.Renames.Cluster, n.config.Renames.ClusterMeet, addr, strconv.Itoa(port), strconv.Itoa(clusterBusPort))
-	return cmd.Err()
+	err := n.ensureConn()
+	if err != nil {
+		return err
+	}
+	return n.conn.Do(ctx, n.conn.B().ClusterMeet().Ip(addr).Port(int64(port)).ClusterBusPort(int64(clusterBusPort)).Build()).Error()
 }
 
 // HasClusterSlots checks if node has any slot assigned
 func (n *Node) HasClusterSlots(ctx context.Context) (bool, error) {
-	cmd := n.conn.ClusterNodes(ctx)
-	err := cmd.Err()
+	err := n.ensureConn()
 	if err != nil {
 		return false, err
 	}
-	lines := strings.Split(cmd.Val(), "\n")
+	cmd := n.conn.Do(ctx, n.conn.B().ClusterNodes().Build())
+	err = cmd.Error()
+	if err != nil {
+		return false, err
+	}
+	strVal, err := cmd.ToString()
+	if err != nil {
+		return false, err
+	}
+	lines := strings.Split(strVal, "\n")
 	for _, line := range lines {
 		split := strings.Split(line, " ")
 		if len(split) < 3 {

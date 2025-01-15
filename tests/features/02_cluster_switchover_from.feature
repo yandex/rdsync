@@ -2,7 +2,7 @@ Feature: Cluster mode switchover from old master
 
     Scenario: Cluster mode switchover (from) with healthy master works
         Given clustered shard is up and running
-        Then zookeeper node "/test/health/redis1" should match json within "30" seconds
+        Then zookeeper node "/test/health/valkey1" should match json within "30" seconds
         """
         {
             "ping_ok": true,
@@ -10,23 +10,23 @@ Feature: Cluster mode switchover from old master
             "is_read_only": false
         }
         """
-        And zookeeper node "/test/health/redis2" should match json within "30" seconds
+        And zookeeper node "/test/health/valkey2" should match json within "30" seconds
         """
         {
             "ping_ok": true,
             "is_master": false
         }
         """
-        And zookeeper node "/test/health/redis3" should match json within "30" seconds
+        And zookeeper node "/test/health/valkey3" should match json within "30" seconds
         """
         {
             "ping_ok": true,
             "is_master": false
         }
         """
-        When I run command on host "redis1"
+        When I run command on host "valkey1"
         """
-            rdsync switch --from redis1
+            rdsync switch --from valkey1
         """
         Then command return code should be "0"
         And command output should match regexp
@@ -36,7 +36,7 @@ Feature: Cluster mode switchover from old master
         And zookeeper node "/test/last_switch" should match json within "30" seconds
         """
         {
-            "from": "redis1",
+            "from": "valkey1",
             "result": {
                 "ok": true
             }
@@ -44,14 +44,14 @@ Feature: Cluster mode switchover from old master
         """
         When I get zookeeper node "/test/master"
         And I save zookeeper query result as "new_master"
-        Then redis host "{{.new_master}}" should be master
+        Then valkey host "{{.new_master}}" should be master
         When I wait for "30" seconds
-        Then path "/var/lib/redis/appendonlydir" exists on "redis1"
-        Then path "/var/lib/redis/appendonlydir" does not exist on "{{.new_master}}"
+        Then path "/var/lib/valkey/appendonlydir" exists on "valkey1"
+        Then path "/var/lib/valkey/appendonlydir" does not exist on "{{.new_master}}"
 
     Scenario: Cluster mode switchover (from) with unhealthy replicas is rejected
         Given clustered shard is up and running
-        Then zookeeper node "/test/health/redis1" should match json within "30" seconds
+        Then zookeeper node "/test/health/valkey1" should match json within "30" seconds
         """
         {
             "ping_ok": true,
@@ -59,25 +59,25 @@ Feature: Cluster mode switchover from old master
             "is_read_only": false
         }
         """
-        And zookeeper node "/test/health/redis2" should match json within "30" seconds
+        And zookeeper node "/test/health/valkey2" should match json within "30" seconds
         """
         {
             "ping_ok": true,
             "is_master": false
         }
         """
-        And zookeeper node "/test/health/redis3" should match json within "30" seconds
+        And zookeeper node "/test/health/valkey3" should match json within "30" seconds
         """
         {
             "ping_ok": true,
             "is_master": false
         }
         """
-        When redis on host "redis3" is killed
-        And redis on host "redis2" is killed
-        And I run command on host "redis1"
+        When valkey on host "valkey3" is killed
+        And valkey on host "valkey2" is killed
+        And I run command on host "valkey1"
         """
-            rdsync switch --from redis1 --wait=0s
+            rdsync switch --from valkey1 --wait=0s
         """
         Then command return code should be "0"
         And command output should match regexp
@@ -87,10 +87,10 @@ Feature: Cluster mode switchover from old master
         And zookeeper node "/test/last_rejected_switch" should match json within "30" seconds
         """
         {
-            "from": "redis1",
+            "from": "valkey1",
             "to": "",
             "cause": "manual",
-            "initiated_by": "redis1",
+            "initiated_by": "valkey1",
             "result": {
                 "ok": false,
                 "error": "no quorum, have 0 replicas while 2 is required"
@@ -100,7 +100,7 @@ Feature: Cluster mode switchover from old master
 
     Scenario: Cluster mode switchover (from) with unhealthy replicas is not rejected if was approved before
         Given clustered shard is up and running
-        Then zookeeper node "/test/health/redis1" should match json within "30" seconds
+        Then zookeeper node "/test/health/valkey1" should match json within "30" seconds
         """
         {
             "ping_ok": true,
@@ -108,43 +108,43 @@ Feature: Cluster mode switchover from old master
             "is_read_only": false
         }
         """
-        And zookeeper node "/test/health/redis2" should match json within "30" seconds
+        And zookeeper node "/test/health/valkey2" should match json within "30" seconds
         """
         {
             "ping_ok": true,
             "is_master": false
         }
         """
-        And zookeeper node "/test/health/redis3" should match json within "30" seconds
+        And zookeeper node "/test/health/valkey3" should match json within "30" seconds
         """
         {
             "ping_ok": true,
             "is_master": false
         }
         """
-        When redis on host "redis3" is stopped
-        And redis on host "redis2" is stopped
+        When valkey on host "valkey3" is stopped
+        And valkey on host "valkey2" is stopped
         And I set zookeeper node "/test/current_switch" to
         """
         {
-            "from": "redis1",
+            "from": "valkey1",
             "to": "",
             "cause": "manual",
-            "initiated_by": "redis1",
+            "initiated_by": "valkey1",
             "run_count": 1
         }
         """
         Then zookeeper node "/test/last_switch" should not exist within "30" seconds
         And zookeeper node "/test/last_rejected_switch" should not exist within "30" seconds
-        When redis on host "redis3" is started
-        And redis on host "redis2" is started
+        When valkey on host "valkey3" is started
+        And valkey on host "valkey2" is started
         Then zookeeper node "/test/last_switch" should match json within "60" seconds
         """
         {
-            "from": "redis1",
+            "from": "valkey1",
             "to": "",
             "cause": "manual",
-            "initiated_by": "redis1",
+            "initiated_by": "valkey1",
             "result": {
                 "ok": true
             }
@@ -153,7 +153,7 @@ Feature: Cluster mode switchover from old master
 
     Scenario: Cluster mode switchover (from) works with dead replica
         Given clustered shard is up and running
-        Then zookeeper node "/test/health/redis1" should match json within "30" seconds
+        Then zookeeper node "/test/health/valkey1" should match json within "30" seconds
         """
         {
             "ping_ok": true,
@@ -161,22 +161,22 @@ Feature: Cluster mode switchover from old master
             "is_read_only": false
         }
         """
-        And zookeeper node "/test/health/redis2" should match json within "30" seconds
+        And zookeeper node "/test/health/valkey2" should match json within "30" seconds
         """
         {
             "ping_ok": true,
             "is_master": false
         }
         """
-        And zookeeper node "/test/health/redis3" should match json within "30" seconds
+        And zookeeper node "/test/health/valkey3" should match json within "30" seconds
         """
         {
             "ping_ok": true,
             "is_master": false
         }
         """
-        When redis on host "redis3" is stopped
-        Then zookeeper node "/test/health/redis3" should match json within "30" seconds
+        When valkey on host "valkey3" is stopped
+        Then zookeeper node "/test/health/valkey3" should match json within "30" seconds
         """
         {
             "ping_ok": false,
@@ -185,11 +185,11 @@ Feature: Cluster mode switchover from old master
         """
         And zookeeper node "/test/active_nodes" should match json_exactly within "60" seconds
         """
-            ["redis1","redis2"]
+            ["valkey1","valkey2"]
         """
-        When I run command on host "redis1"
+        When I run command on host "valkey1"
         """
-            rdsync switch --from redis1 --wait=0s
+            rdsync switch --from valkey1 --wait=0s
         """
         Then command return code should be "0"
         And command output should match regexp
@@ -199,7 +199,7 @@ Feature: Cluster mode switchover from old master
         And zookeeper node "/test/last_switch" should match json within "30" seconds
         """
         {
-            "from": "redis1",
+            "from": "valkey1",
             "result": {
                 "ok": true
             }
@@ -207,11 +207,11 @@ Feature: Cluster mode switchover from old master
         """
         When I get zookeeper node "/test/master"
         And I save zookeeper query result as "new_master"
-        Then redis host "{{.new_master}}" should be master
+        Then valkey host "{{.new_master}}" should be master
 
     Scenario: Cluster mode switchover (from) with read-only fs master works
         Given clustered shard is up and running
-        Then zookeeper node "/test/health/redis1" should match json within "30" seconds
+        Then zookeeper node "/test/health/valkey1" should match json within "30" seconds
         """
         {
             "ping_ok": true,
@@ -219,27 +219,27 @@ Feature: Cluster mode switchover from old master
             "is_read_only": false
         }
         """
-        And zookeeper node "/test/health/redis2" should match json within "30" seconds
+        And zookeeper node "/test/health/valkey2" should match json within "30" seconds
         """
         {
             "ping_ok": true,
             "is_master": false
         }
         """
-        And zookeeper node "/test/health/redis3" should match json within "30" seconds
+        And zookeeper node "/test/health/valkey3" should match json within "30" seconds
         """
         {
             "ping_ok": true,
             "is_master": false
         }
         """
-        When I run command on host "redis1"
+        When I run command on host "valkey1"
         """
-            chattr +i /etc/redis/redis.conf
+            chattr +i /etc/valkey/valkey.conf
         """
-        And I run command on host "redis1"
+        And I run command on host "valkey1"
         """
-            rdsync switch --from redis1
+            rdsync switch --from valkey1
         """
         Then command return code should be "0"
         And command output should match regexp
@@ -249,7 +249,7 @@ Feature: Cluster mode switchover from old master
         And zookeeper node "/test/last_switch" should match json within "30" seconds
         """
         {
-            "from": "redis1",
+            "from": "valkey1",
             "result": {
                 "ok": true
             }
@@ -257,9 +257,9 @@ Feature: Cluster mode switchover from old master
         """
         When I get zookeeper node "/test/master"
         And I save zookeeper query result as "new_master"
-        Then redis host "{{.new_master}}" should be master
+        Then valkey host "{{.new_master}}" should be master
         # Just to make docker cleanup happy
-        When I run command on host "redis1"
+        When I run command on host "valkey1"
         """
-            chattr -i /etc/redis/redis.conf
+            chattr -i /etc/valkey/valkey.conf
         """

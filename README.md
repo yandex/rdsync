@@ -4,14 +4,14 @@
 
 # rdsync
 
-Rdsync is a redis high-availability tool.
-It uses a patched redis version to make a cluster or sentinel-like setup less prone to data loss.
+Rdsync is a valkey high-availability tool.
+It uses a patched valkey version to make a cluster or sentinel-like setup less prone to data loss.
 
 ## Limitations and requirements
 
-* Patched redis (patches for redis 7.2 are included in this repo)
+* Patched valkey (patches for valkey 8.0 are included in this repo)
 * ZooKeeper as DCS
-* Single redis instance per host
+* Single valkey instance per host
 * In clustered setup each shard must have it's own DCS prefix
 * Client application must use `WAITQUORUM` command to make data loss less usual (check jepsen test for example).
 

@@ -25,9 +25,9 @@ func (app *App) adjustAofMode(master string) error {
 			return err
 		}
 	}
-	if app.config.Redis.AofPath != "" && !targetMode {
-		if _, err := os.Stat(app.config.Redis.AofPath); err == nil {
-			return os.RemoveAll(app.config.Redis.AofPath)
+	if app.config.Valkey.AofPath != "" && !targetMode {
+		if _, err := os.Stat(app.config.Valkey.AofPath); err == nil {
+			return os.RemoveAll(app.config.Valkey.AofPath)
 		}
 	}
 	return nil

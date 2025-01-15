@@ -49,10 +49,10 @@ services:
       rdsync_net:
         ipv4_address: 192.168.234.12
 
-  redis1:
+  valkey1:
     build:
-      context: ./redis
-    hostname: redis1
+      context: ./valkey
+    hostname: valkey1
     ports:
       - 6379
       - 26379
@@ -62,10 +62,10 @@ services:
       rdsync_net:
         ipv4_address: 192.168.234.13
 
-  redis2:
+  valkey2:
     build:
-      context: ./redis
-    hostname: redis2
+      context: ./valkey
+    hostname: valkey2
     ports:
       - 6379
       - 26379
@@ -75,10 +75,10 @@ services:
       rdsync_net:
         ipv4_address: 192.168.234.14
 
-  redis3:
+  valkey3:
     build:
-      context: ./redis
-    hostname: redis3
+      context: ./valkey
+    hostname: valkey3
     ports:
       - 6379
       - 26379

@@ -15,7 +15,7 @@ var verbose bool
 
 var rootCmd = &cobra.Command{
 	Use:   "rdsync",
-	Short: "Rdsync is a Redis HA cluster coordination tool",
+	Short: "Rdsync is a Valkey HA cluster coordination tool",
 	Long:  `Running without additional arguments will start rdsync service for current node.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		app, err := app.NewApp(configFile, "")

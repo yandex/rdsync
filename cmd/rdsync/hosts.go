@@ -12,7 +12,7 @@ import (
 
 var priority int
 var dryRun bool
-var skipRedisCheck bool
+var skipValkeyCheck bool
 
 var hostListCmd = &cobra.Command{
 	Use:     "host",
@@ -47,7 +47,7 @@ var hostAddCmd = &cobra.Command{
 			}
 		})
 
-		os.Exit(app.CliHostAdd(args[0], priorityVal, dryRun, skipRedisCheck))
+		os.Exit(app.CliHostAdd(args[0], priorityVal, dryRun, skipValkeyCheck))
 	},
 }
 
@@ -67,7 +67,7 @@ var hostRemoveCmd = &cobra.Command{
 
 func init() {
 	hostAddCmd.Flags().IntVar(&priority, "priority", 100, "host priority")
-	hostAddCmd.Flags().BoolVar(&skipRedisCheck, "skip-redis-check", false, "do not check redis availability")
+	hostAddCmd.Flags().BoolVar(&skipValkeyCheck, "skip-valkey-check", false, "do not check valkey availability")
 	hostAddCmd.Flags().BoolVar(&dryRun, "dry-run", false, "tests suggested changes."+
 		" Exits codes:"+
 		" 0 - when no changes detected,"+

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yandex/rdsync/internal/redis"
+	"github.com/yandex/rdsync/internal/valkey"
 )
 
 func (app *App) repairShard(shardState map[string]*HostState, activeNodes []string, master string) {
@@ -41,17 +41,17 @@ func (app *App) repairShard(shardState map[string]*HostState, activeNodes []stri
 		}
 		rs := state.ReplicaState
 		if rs == nil || state.IsReplPaused || !replicates(masterState, rs, host, masterNode, true) {
-			if syncing < app.config.Redis.MaxParallelSyncs {
+			if syncing < app.config.Valkey.MaxParallelSyncs {
 				app.repairReplica(node, masterState, state, master, host)
 				syncing++
 			} else {
-				app.logger.Error(fmt.Sprintf("Leaving replica %s broken: currently syncing %d/%d", host, syncing, app.config.Redis.MaxParallelSyncs))
+				app.logger.Error(fmt.Sprintf("Leaving replica %s broken: currently syncing %d/%d", host, syncing, app.config.Valkey.MaxParallelSyncs))
 			}
 		}
 	}
 }
 
-func (app *App) repairMaster(node *redis.Node, activeNodes []string, state *HostState) {
+func (app *App) repairMaster(node *valkey.Node, activeNodes []string, state *HostState) {
 	if state.IsReadOnly || state.MinReplicasToWrite != 0 {
 		err, rewriteErr := node.SetReadWrite(app.ctx)
 		if err != nil {
@@ -85,7 +85,7 @@ func (app *App) repairMaster(node *redis.Node, activeNodes []string, state *Host
 	}
 }
 
-func (app *App) repairReplica(node *redis.Node, masterState, state *HostState, master, replicaFQDN string) {
+func (app *App) repairReplica(node *valkey.Node, masterState, state *HostState, master, replicaFQDN string) {
 	masterNode := app.shard.Get(master)
 	rs := state.ReplicaState
 	if !replicates(masterState, rs, replicaFQDN, masterNode, true) {
@@ -108,9 +108,9 @@ func (app *App) repairReplica(node *redis.Node, masterState, state *HostState, m
 					app.logger.Error(fmt.Sprintf("Unable to make %s replica of %s", node.FQDN(), master), "error", err)
 					return
 				}
-				err = node.ClusterMeet(app.ctx, masterIP, app.config.Redis.Port, app.config.Redis.ClusterBusPort)
+				err = node.ClusterMeet(app.ctx, masterIP, app.config.Valkey.Port, app.config.Valkey.ClusterBusPort)
 				if err != nil {
-					app.logger.Error(fmt.Sprintf("Unable to make %s meet with master %s at %s:%d:%d", node.FQDN(), master, masterIP, app.config.Redis.Port, app.config.Redis.ClusterBusPort), "error", err)
+					app.logger.Error(fmt.Sprintf("Unable to make %s meet with master %s at %s:%d:%d", node.FQDN(), master, masterIP, app.config.Valkey.Port, app.config.Valkey.ClusterBusPort), "error", err)
 					return
 				}
 			}
@@ -143,7 +143,7 @@ func (app *App) repairLocalNode(master string) bool {
 			app.nodeFailTime[local.FQDN()] = time.Now()
 		}
 		failedTime := time.Since(app.nodeFailTime[local.FQDN()])
-		if failedTime > app.config.Redis.RestartTimeout && !strings.HasPrefix(err.Error(), "LOADING ") {
+		if failedTime > app.config.Valkey.RestartTimeout && !strings.HasPrefix(err.Error(), "LOADING ") {
 			app.nodeFailTime[local.FQDN()] = time.Now()
 			err = local.Restart(app.ctx)
 			if err != nil {

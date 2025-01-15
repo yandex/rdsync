@@ -1,17 +1,17 @@
 diff --git a/src/config.c b/src/config.c
-index 1d720132a..a7231868c 100644
+index c1351d74f..a53cb6992 100644
 --- a/src/config.c
 +++ b/src/config.c
-@@ -628,6 +628,8 @@ void loadServerConfigFromString(char *config) {
-     if (server.config_hz < CONFIG_MIN_HZ) server.config_hz = CONFIG_MIN_HZ;
-     if (server.config_hz > CONFIG_MAX_HZ) server.config_hz = CONFIG_MAX_HZ;
+@@ -594,6 +594,8 @@ void loadServerConfigFromString(char *config) {
+     /* To ensure backward compatibility when io_threads_num is according to the previous maximum of 128. */
+     if (server.io_threads_num > IO_THREADS_MAX_NUM) server.io_threads_num = IO_THREADS_MAX_NUM;
  
 +    server.offline_initial = server.offline;
 +
-     sdsfreesplitres(lines,totlines);
+     sdsfreesplitres(lines, totlines);
      reading_config_file = 0;
      return;
-@@ -3066,6 +3068,31 @@ static int applyClientMaxMemoryUsage(const char **err) {
+@@ -3072,6 +3074,31 @@ static int applyClientMaxMemoryUsage(const char **err) {
      return 1;
  }
  
@@ -41,9 +41,9 @@ index 1d720132a..a7231868c 100644
 +}
 +
  standardConfig static_configs[] = {
+     /* clang-format off */
      /* Bool configs */
-     createBoolConfig("rdbchecksum", NULL, IMMUTABLE_CONFIG, server.rdb_checksum, 1, NULL, NULL),
-@@ -3281,6 +3308,7 @@ standardConfig static_configs[] = {
+@@ -3304,6 +3331,7 @@ standardConfig static_configs[] = {
      createSpecialConfig("bind", NULL, MODIFIABLE_CONFIG | MULTI_ARG_CONFIG, setConfigBindOption, getConfigBindOption, rewriteConfigBindOption, applyBind),
      createSpecialConfig("replicaof", "slaveof", IMMUTABLE_CONFIG | MULTI_ARG_CONFIG, setConfigReplicaOfOption, getConfigReplicaOfOption, rewriteConfigReplicaOfOption, NULL),
      createSpecialConfig("latency-tracking-info-percentiles", NULL, MODIFIABLE_CONFIG | MULTI_ARG_CONFIG, setConfigLatencyTrackingInfoPercentilesOutputOption, getConfigLatencyTrackingInfoPercentilesOutputOption, rewriteConfigLatencyTrackingInfoPercentilesOutputOption, NULL),
@@ -52,10 +52,10 @@ index 1d720132a..a7231868c 100644
      /* NULL Terminator, this is dropped when we convert to the runtime array. */
      {NULL}
 diff --git a/src/server.c b/src/server.c
-index 438325f28..2aa63df77 100644
+index 1bdf2dd9e..f63c1f463 100644
 --- a/src/server.c
 +++ b/src/server.c
-@@ -2447,11 +2447,17 @@ int listenToPort(connListener *sfd) {
+@@ -2455,9 +2455,15 @@ int listenToPort(connListener *sfd) {
      int j;
      int port = sfd->port;
      char **bindaddr = sfd->bindaddr;
@@ -70,37 +70,42 @@ index 438325f28..2aa63df77 100644
 -    if (sfd->bindaddr_count == 0) return C_OK;
 +    if (bindaddr_count == 0) return C_OK;
  
--    for (j = 0; j < sfd->bindaddr_count; j++) {
-+    for (j = 0; j < bindaddr_count; j++) {
-         char* addr = bindaddr[j];
-         int optional = *addr == '-';
-         if (optional) addr++;
+     for (j = 0; j < sfd->bindaddr_count; j++) {
+         char *addr = bindaddr[j];
+@@ -6435,8 +6441,8 @@ void dismissMemoryInChild(void) {
+     /* madvise(MADV_DONTNEED) may not work if Transparent Huge Pages is enabled. */
+     if (server.thp_enabled) return;
+ 
+-        /* Currently we use zmadvise_dontneed only when we use jemalloc with Linux.
+-         * so we avoid these pointless loops when they're not going to do anything. */
++    /* Currently we use zmadvise_dontneed only when we use jemalloc with Linux.
++     * so we avoid these pointless loops when they're not going to do anything. */
+ #if defined(USE_JEMALLOC) && defined(__linux__)
+     listIter li;
+     listNode *ln;
+@@ -6948,7 +6954,7 @@ int main(int argc, char **argv) {
+     }
+     if (server.sentinel_mode) sentinelCheckConfigFile();
+ 
+-        /* Do system checks */
++    /* Do system checks */
+ #ifdef __linux__
+     linuxMemoryWarnings();
+     sds err_msg = NULL;
 diff --git a/src/server.h b/src/server.h
-index be2405170..05bdf5c0c 100644
+index d6dcd98fe..14e9e1fa9 100644
 --- a/src/server.h
 +++ b/src/server.h
-@@ -1908,6 +1908,9 @@ struct redisServer {
-     list *clients_waiting_acks;         /* Clients waiting in WAIT or WAITAOF. */
-     int get_ack_from_slaves;            /* If true we send REPLCONF GETACK. */
-     int repl_paused;                    /* If true we don't try to connect to master */
+@@ -2096,6 +2096,9 @@ struct valkeyServer {
+     list *clients_waiting_acks; /* Clients waiting in WAIT or WAITAOF. */
+     int get_ack_from_replicas;  /* If true we send REPLCONF GETACK. */
+     int repl_paused;            /* If true we don't try to connect to master */
 +    /* Offline mode */
-+    int offline;                        /* If true only localhost connections are accepted */
-+    int offline_initial;                /* Initial state of offline mode (from config) */
++    int offline;         /* If true only localhost connectiona are accepted */
++    int offline_initial; /* Initial state of offline mode (from config) */
      /* Limits */
-     unsigned int maxclients;            /* Max number of simultaneous clients */
-     unsigned long long maxmemory;   /* Max number of memory bytes to use */
-diff --git a/tests/test_helper.tcl b/tests/test_helper.tcl
-index ad7707a29..a5447701e 100644
---- a/tests/test_helper.tcl
-+++ b/tests/test_helper.tcl
-@@ -104,6 +104,7 @@ set ::all_tests {
-     unit/cluster/links
-     unit/cluster/cluster-response-tls
-     integration/yandex-cloud-patches
-+    unit/yandex-cloud-patches
- }
- # Index to the next test to run in the ::all_tests list.
- set ::next_test 0
+     unsigned int maxclients;                    /* Max number of simultaneous clients */
+     unsigned long long maxmemory;               /* Max number of memory bytes to use */
 diff --git a/tests/unit/yandex-cloud-patches.tcl b/tests/unit/yandex-cloud-patches.tcl
 new file mode 100644
 index 000000000..b8c3ba453
@@ -130,3 +135,6 @@ index 000000000..b8c3ba453
 +        }
 +    }
 +}
+-- 
+2.48.0
+

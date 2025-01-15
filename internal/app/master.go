@@ -24,7 +24,7 @@ func (app *App) getCurrentMaster(shardState map[string]*HostState) (string, erro
 			return master, nil
 		}
 		if stateMaster != "" && stateMaster != master {
-			app.logger.Warn(fmt.Sprintf("DCS and redis master state diverged: %s and %s", master, stateMaster))
+			app.logger.Warn(fmt.Sprintf("DCS and valkey master state diverged: %s and %s", master, stateMaster))
 			allStable := true
 			for host, state := range shardState {
 				if !state.PingStable || state.IsOffline {
@@ -105,7 +105,7 @@ func (app *App) changeMaster(host, master string) error {
 
 	app.repairReplica(node, masterState, state, master, host)
 
-	deadline := time.Now().Add(app.config.Redis.WaitReplicationTimeout)
+	deadline := time.Now().Add(app.config.Valkey.WaitReplicationTimeout)
 	for time.Now().Before(deadline) {
 		state = app.getHostState(host)
 		rs := state.ReplicaState
@@ -137,7 +137,7 @@ func (app *App) waitForCatchup(host, master string) error {
 		return fmt.Errorf("waiting for %s to catchup with itself", host)
 	}
 
-	deadline := time.Now().Add(app.config.Redis.WaitCatchupTimeout)
+	deadline := time.Now().Add(app.config.Valkey.WaitCatchupTimeout)
 	for time.Now().Before(deadline) {
 		masterState := app.getHostState(master)
 		if !masterState.PingOk {
