@@ -101,7 +101,7 @@ index d6dcd98fe..14e9e1fa9 100644
      int get_ack_from_replicas;  /* If true we send REPLCONF GETACK. */
      int repl_paused;            /* If true we don't try to connect to master */
 +    /* Offline mode */
-+    int offline;         /* If true only localhost connectiona are accepted */
++    int offline;         /* If true only localhost connections are accepted */
 +    int offline_initial; /* Initial state of offline mode (from config) */
      /* Limits */
      unsigned int maxclients;                    /* Max number of simultaneous clients */
