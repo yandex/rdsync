@@ -78,7 +78,7 @@ func NewRemoteSentiCacheNode(config *config.Config, host string, logger *slog.Lo
 		DisableAutoPipelining: true,
 		DisableCache:          true,
 		BlockingPoolMinSize:   1,
-		BlockingPoolCleanup:   time.Second,
+		BlockingPoolCleanup:   time.Hour,
 	}
 	if config.SentinelMode.UseTLS {
 		tlsConf, err := getTLSConfig(config, config.SentinelMode.TLSCAPath, host)

@@ -81,7 +81,7 @@ func NewNode(config *config.Config, logger *slog.Logger, fqdn string) (*Node, er
 		DisableAutoPipelining: true,
 		DisableCache:          true,
 		BlockingPoolMinSize:   1,
-		BlockingPoolCleanup:   time.Second,
+		BlockingPoolCleanup:   time.Hour,
 	}
 	if config.Valkey.UseTLS {
 		tlsConf, err := getTLSConfig(config, config.Valkey.TLSCAPath, host)
