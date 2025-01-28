@@ -113,8 +113,8 @@ func (app *App) getHostState(fqdn string) *HostState {
 			replicaID := fmt.Sprintf("slave%d", i)
 			replicaValue, ok := info[replicaID]
 			if !ok {
-				app.setStateError(&state, fqdn, fmt.Sprintf("Master has no %s in info", replicaID))
-				return &state
+				app.logger.Warn(fmt.Sprintf("Master has no %s in info but connected_slaves is %d", replicaID, numReplicas), "fqdn", fqdn)
+				continue
 			}
 			// ip is first value in slaveN info
 			start := strings.Index(replicaValue, "=")
