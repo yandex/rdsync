@@ -73,7 +73,6 @@ func NewRemoteSentiCacheNode(config *config.Config, host string, logger *slog.Lo
 		Password:              config.SentinelMode.CacheAuthPassword,
 		Dialer:                net.Dialer{Timeout: config.Valkey.DialTimeout},
 		ConnWriteTimeout:      config.Valkey.WriteTimeout,
-		AlwaysRESP2:           true,
 		ForceSingleClient:     true,
 		DisableAutoPipelining: true,
 		DisableCache:          true,

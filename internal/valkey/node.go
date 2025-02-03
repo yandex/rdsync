@@ -76,7 +76,6 @@ func NewNode(config *config.Config, logger *slog.Logger, fqdn string) (*Node, er
 		Password:              config.Valkey.AuthPassword,
 		Dialer:                net.Dialer{Timeout: config.Valkey.DialTimeout},
 		ConnWriteTimeout:      config.Valkey.WriteTimeout,
-		AlwaysRESP2:           true,
 		ForceSingleClient:     true,
 		DisableAutoPipelining: true,
 		DisableCache:          true,
@@ -200,25 +199,32 @@ func (n *Node) configRewrite(ctx context.Context) error {
 	return n.conn.Do(ctx, n.conn.B().ConfigRewrite().Build()).Error()
 }
 
-// IsReplPaused returns pause status of replication on node
-func (n *Node) IsReplPaused(ctx context.Context) (bool, error) {
+// configGet returns str value of config key
+func (n *Node) configGet(ctx context.Context, key string) (string, error) {
 	err := n.ensureConn()
 	if err != nil {
-		return false, err
+		return "", err
 	}
-	cmd := n.conn.Do(ctx, n.conn.B().ConfigGet().Parameter("repl-paused").Build())
+	cmd := n.conn.Do(ctx, n.conn.B().ConfigGet().Parameter(key).Build())
 	err = cmd.Error()
 	if err != nil {
-		return false, err
+		return "", err
 	}
-	vals, err := cmd.AsStrSlice()
+	vals, err := cmd.AsStrMap()
 	if err != nil {
-		return false, err
+		return "", err
 	}
-	if len(vals) != 2 {
-		return false, fmt.Errorf("unexpected config get result for repl-paused: %v", vals)
+	val, ok := vals[key]
+	if !ok {
+		return "", fmt.Errorf("unexpected config get result for %s: %v", key, vals)
 	}
-	return vals[1] == "yes", nil
+	return val, nil
+}
+
+// IsReplPaused returns pause status of replication on node
+func (n *Node) IsReplPaused(ctx context.Context) (bool, error) {
+	val, err := n.configGet(ctx, "repl-paused")
+	return val == "yes", err
 }
 
 // PauseReplication pauses replication from master on node
@@ -251,23 +257,8 @@ func (n *Node) ResumeReplication(ctx context.Context) error {
 
 // IsOffline returns Offline status for node
 func (n *Node) IsOffline(ctx context.Context) (bool, error) {
-	err := n.ensureConn()
-	if err != nil {
-		return false, err
-	}
-	cmd := n.conn.Do(ctx, n.conn.B().ConfigGet().Parameter("offline").Build())
-	err = cmd.Error()
-	if err != nil {
-		return false, err
-	}
-	vals, err := cmd.AsStrSlice()
-	if err != nil {
-		return false, err
-	}
-	if len(vals) != 2 {
-		return false, fmt.Errorf("unexpected config get result for offline: %v", vals)
-	}
-	return vals[1] == "yes", nil
+	val, err := n.configGet(ctx, "offline")
+	return val == "yes", err
 }
 
 // SetOffline disallows non-localhost connections and drops all existing clients (except rdsync ones)
@@ -306,23 +297,11 @@ func (n *Node) DisconnectClients(ctx context.Context, ctype string) error {
 
 // GetNumQuorumReplicas returns number of connected replicas to accept writes on node
 func (n *Node) GetNumQuorumReplicas(ctx context.Context) (int, error) {
-	err := n.ensureConn()
+	val, err := n.configGet(ctx, "quorum-replicas-to-write")
 	if err != nil {
 		return 0, err
 	}
-	cmd := n.conn.Do(ctx, n.conn.B().ConfigGet().Parameter("quorum-replicas-to-write").Build())
-	err = cmd.Error()
-	if err != nil {
-		return 0, err
-	}
-	vals, err := cmd.AsStrSlice()
-	if err != nil {
-		return 0, err
-	}
-	if len(vals) != 2 {
-		return 0, fmt.Errorf("unexpected config get result for quorum-replicas-to-write: %v", vals)
-	}
-	ret, err := strconv.ParseInt(vals[1], 10, 32)
+	ret, err := strconv.ParseInt(val, 10, 32)
 	if err != nil {
 		return 0, fmt.Errorf("unable to parse quorum-replicas-to-write value: %s", err.Error())
 	}
@@ -345,23 +324,11 @@ func (n *Node) SetNumQuorumReplicas(ctx context.Context, value int) (error, erro
 
 // GetQuorumReplicas returns a set of quorum replicas
 func (n *Node) GetQuorumReplicas(ctx context.Context) (string, error) {
-	err := n.ensureConn()
+	val, err := n.configGet(ctx, "quorum-replicas")
 	if err != nil {
 		return "", err
 	}
-	cmd := n.conn.Do(ctx, n.conn.B().ConfigGet().Parameter("quorum-replicas").Build())
-	err = cmd.Error()
-	if err != nil {
-		return "", err
-	}
-	vals, err := cmd.AsStrSlice()
-	if err != nil {
-		return "", err
-	}
-	if len(vals) != 2 {
-		return "", fmt.Errorf("unexpected config get result for quorum-replicas: %v", vals)
-	}
-	split := strings.Split(vals[1], " ")
+	split := strings.Split(val, " ")
 	sort.Strings(split)
 	return strings.Join(split, " "), nil
 }
@@ -400,23 +367,8 @@ func (n *Node) EmptyQuorumReplicas(ctx context.Context) error {
 
 // GetAppendonly returns a setting of appendonly config
 func (n *Node) GetAppendonly(ctx context.Context) (bool, error) {
-	err := n.ensureConn()
-	if err != nil {
-		return false, err
-	}
-	cmd := n.conn.Do(ctx, n.conn.B().ConfigGet().Parameter("appendonly").Build())
-	err = cmd.Error()
-	if err != nil {
-		return false, err
-	}
-	vals, err := cmd.AsStrSlice()
-	if err != nil {
-		return false, err
-	}
-	if len(vals) != 2 {
-		return false, fmt.Errorf("unexpected config get result for repl-paused: %v", vals)
-	}
-	return vals[1] == "yes", nil
+	val, err := n.configGet(ctx, "appendonly")
+	return val == "yes", err
 }
 
 // SetOffline disallows non-localhost connections and drops all existing clients (except rdsync ones)
@@ -438,23 +390,11 @@ func (n *Node) SetAppendonly(ctx context.Context, value bool) error {
 
 // GetMinReplicasToWrite returns number of replicas required to write on node
 func (n *Node) GetMinReplicasToWrite(ctx context.Context) (int64, error) {
-	err := n.ensureConn()
+	val, err := n.configGet(ctx, "min-replicas-to-write")
 	if err != nil {
 		return 0, err
 	}
-	cmd := n.conn.Do(ctx, n.conn.B().ConfigGet().Parameter("min-replicas-to-write").Build())
-	err = cmd.Error()
-	if err != nil {
-		return 0, err
-	}
-	vals, err := cmd.AsStrSlice()
-	if err != nil {
-		return 0, err
-	}
-	if len(vals) != 2 {
-		return 0, fmt.Errorf("unexpected config get result for min-replicas-to-write: %v", vals)
-	}
-	ret, err := strconv.ParseInt(vals[1], 10, 64)
+	ret, err := strconv.ParseInt(val, 10, 64)
 	if err != nil {
 		return 0, fmt.Errorf("unable to parse min-replicas-to-write value: %s", err.Error())
 	}

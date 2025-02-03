@@ -215,7 +215,6 @@ func (tctx *testContext) connectZookeeper(addrs []string, timeout time.Duration)
 func (tctx *testContext) connectValkey(addr string, timeout time.Duration) (client.Client, error) {
 	opts := client.ClientOption{
 		InitAddress:           []string{addr},
-		AlwaysRESP2:           true,
 		ForceSingleClient:     true,
 		DisableAutoPipelining: true,
 		DisableCache:          true,
@@ -250,7 +249,6 @@ func (tctx *testContext) connectValkey(addr string, timeout time.Duration) (clie
 func (tctx *testContext) connectSenticache(addr string, timeout time.Duration) (client.Client, error) {
 	opts := client.ClientOption{
 		InitAddress:           []string{addr},
-		AlwaysRESP2:           true,
 		ForceSingleClient:     true,
 		DisableAutoPipelining: true,
 		DisableCache:          true,
@@ -343,7 +341,18 @@ func (tctx *testContext) runValkeyCmd(host string, cmd []string) (string, error)
 			tctx.valkeyCmdResult = err.Error()
 			return tctx.valkeyCmdResult, err
 		}
-		if message.IsArray() {
+		if message.IsMap() {
+			strMap, err := message.AsStrMap()
+			if err != nil {
+				tctx.valkeyCmdResult = err.Error()
+			} else {
+				var pairs []string
+				for k, v := range strMap {
+					pairs = append(pairs, k+" "+v)
+				}
+				tctx.valkeyCmdResult = strings.Join(pairs, " ")
+			}
+		} else if message.IsArray() {
 			strSlice, err := message.AsStrSlice()
 			if err != nil {
 				tctx.valkeyCmdResult = err.Error()
