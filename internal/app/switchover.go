@@ -295,6 +295,12 @@ func (app *App) performSwitchover(shardState map[string]*HostState, activeNodes 
 		app.logger.Info("Switchover: phase 4: catch up")
 
 		if newMaster != mostRecent && getOffset(states[newMaster]) != getOffset(states[mostRecent]) {
+			recentNode := app.shard.Get(mostRecent)
+			err = recentNode.PauseReplication(app.ctx)
+			if err != nil {
+				return err
+			}
+
 			err = app.changeMaster(newMaster, mostRecent)
 			if err != nil {
 				return err
