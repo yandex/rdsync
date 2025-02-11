@@ -212,11 +212,6 @@ func (app *App) performSwitchover(shardState map[string]*HostState, activeNodes 
 			app.logger.Error("Pausing replication", "error", err)
 			return err
 		}
-		rs := shardState[host].ReplicaState
-		if (rs == nil || !rs.MasterLinkState) && !app.config.Valkey.TurnBeforeSwitchover {
-			app.logger.Info(fmt.Sprintf("Switchover: skipping replication pause on %s", host))
-			return nil
-		}
 		node := app.shard.Get(host)
 		err := node.PauseReplication(app.ctx)
 		if err != nil {
