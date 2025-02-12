@@ -114,6 +114,7 @@ func (app *App) getHostState(fqdn string) *HostState {
 			replicaValue, ok := info[replicaID]
 			if !ok {
 				app.logger.Warn(fmt.Sprintf("Master has no %s in info but connected_slaves is %d", replicaID, numReplicas), "fqdn", fqdn)
+				i++
 				continue
 			}
 			// ip is first value in slaveN info
