@@ -20,19 +20,19 @@ jobs:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v4
 
-      - name: Patched redis cache
-        id: patched-redis-cache
+      - name: Patched valkey cache
+        id: patched-valkey-cache
         uses: actions/cache@v4
         with:
           path: |
-            redis/src/redis-server
-            redis/src/redis-senticache
-            redis/src/redis-cli
-          key: rdsync-redis-${{ hashFiles('redis_patches/*') }}
+            valkey/src/valkey-server
+            valkey/src/valkey-senticache
+            valkey/src/valkey-cli
+          key: rdsync-valkey-${{ hashFiles('valkey_patches/*') }}
 
-      - name: Build patched redis
-        if: steps.patched-redis-cache.outputs.cache-hit != 'true'
-        run: make redis/src/redis-server
+      - name: Build patched valkey
+        if: steps.patched-valkey-cache.outputs.cache-hit != 'true'
+        run: make valkey/src/valkey-server
 
       - name: Zookeeper cache
         id: zookeeper-cache
@@ -97,20 +97,20 @@ jobs:
       - name: Get dependencies
         run: go get -v -t -d ./...
 
-      - name: Load patched redis
-        id: patched-redis-cache
+      - name: Load patched valkey
+        id: patched-valkey-cache
         uses: actions/cache@v4
         with:
           path: |
-            redis/src/redis-server
-            redis/src/redis-senticache
-            redis/src/redis-cli
-          key: rdsync-redis-${{ hashFiles('redis_patches/*') }}
+            valkey/src/valkey-server
+            valkey/src/valkey-senticache
+            valkey/src/valkey-cli
+          key: rdsync-valkey-${{ hashFiles('valkey_patches/*') }}
 
-      - name: Fail if no cached patched redis
-        if: steps.patched-redis-cache.outputs.cache-hit != 'true'
+      - name: Fail if no cached patched valkey
+        if: steps.patched-valkey-cache.outputs.cache-hit != 'true'
         run: |
-          echo "Failed to fetch cached patched redis. Will now exit..."
+          echo "Failed to fetch cached patched valkey. Will now exit..."
           exit 1
 
       - name: Load zookeeper
