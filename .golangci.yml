@@ -1,5 +1,4 @@
 linters-settings:
-  modules-download-mode: vendor
   dupl:
     threshold: 400
   funlen:
@@ -62,7 +61,8 @@ linters:
     - whitespace
 
 run:
-  go: 1.23
+  modules-download-mode: mod
+  go: "1.24"
   timeout: 5m
 
 severity:
