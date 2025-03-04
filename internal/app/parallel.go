@@ -6,15 +6,15 @@ import (
 
 func getHostStatesInParallel(hosts []string, getter func(string) (*HostState, error)) (map[string]*HostState, error) {
 	type result struct {
-		name  string
-		state *HostState
 		err   error
+		state *HostState
+		name  string
 	}
 	results := make(chan result, len(hosts))
 	for _, host := range hosts {
 		go func(host string) {
 			state, err := getter(host)
-			results <- result{host, state, err}
+			results <- result{err, state, host}
 		}(host)
 	}
 	shardState := make(map[string]*HostState)
@@ -35,13 +35,13 @@ func getHostStatesInParallel(hosts []string, getter func(string) (*HostState, er
 
 func runParallel(f func(string) error, arguments []string) map[string]error {
 	type pair struct {
-		key string
 		err error
+		key string
 	}
 	errs := make(chan pair, len(arguments))
 	for _, argValue := range arguments {
 		go func(host string) {
-			errs <- pair{host, f(host)}
+			errs <- pair{f(host), host}
 		}(argValue)
 	}
 	result := make(map[string]error)

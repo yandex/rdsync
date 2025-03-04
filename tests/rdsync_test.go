@@ -56,19 +56,19 @@ func (noLogger) Printf(string, ...interface{}) {}
 func (noLogger) Print(...interface{}) {}
 
 type testContext struct {
-	variables           map[string]interface{}
 	templateErr         error
 	composer            testutil.Composer
-	composerEnv         []string
+	senticaches         map[string]client.Client
+	variables           map[string]interface{}
 	zk                  *zk.Conn
 	conns               map[string]client.Client
-	senticaches         map[string]client.Client
+	senticacheCmdResult string
 	zkQueryResult       string
 	valkeyCmdResult     string
-	senticacheCmdResult string
-	commandRetcode      int
 	commandOutput       string
+	composerEnv         []string
 	acl                 []zk.ACL
+	commandRetcode      int
 }
 
 func newTestContext() (*testContext, error) {

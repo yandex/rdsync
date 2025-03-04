@@ -26,12 +26,12 @@ type SentiCacheSentinel struct {
 // SentiCacheReplica represents the valkey replica as seen by senticache
 type SentiCacheReplica struct {
 	IP                    string
-	Port                  int
 	RunID                 string
+	MasterHost            string
+	Port                  int
 	MasterLinkDownTime    int64
 	SlavePriority         int
 	ReplicaAnnounced      int
-	MasterHost            string
 	MasterPort            int
 	SlaveMasterLinkStatus int
 	SlaveReplOffset       int64
@@ -41,8 +41,8 @@ type SentiCacheReplica struct {
 type SentiCacheMaster struct {
 	Name          string
 	IP            string
-	Port          int
 	RunID         string
+	Port          int
 	Quorum        int
 	ParallelSyncs int
 	ConfigEpoch   uint64
@@ -50,9 +50,9 @@ type SentiCacheMaster struct {
 
 // SentiCacheState represents the desired senticache state
 type SentiCacheState struct {
-	Master    SentiCacheMaster
 	Replicas  []SentiCacheReplica
 	Sentinels []SentiCacheSentinel
+	Master    SentiCacheMaster
 }
 
 // SentiCacheNode represents API to query/manipulate a single Valkey SentiCache node
