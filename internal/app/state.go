@@ -155,6 +155,17 @@ func (app *App) getHostState(fqdn string) *HostState {
 				app.setStateError(&state, fqdn, err.Error())
 				return &state
 			}
+		} else if rs.MasterLinkState && !rs.MasterSyncInProgress {
+			lastIOSeconds, ok := info["master_last_io_seconds_ago"]
+			if !ok {
+				app.setStateError(&state, fqdn, "Replica with link up but no master_last_io_seconds_ago in info")
+				return &state
+			}
+			rs.MasterLastIOSeconds, err = strconv.ParseInt(lastIOSeconds, 10, 64)
+			if err != nil {
+				app.setStateError(&state, fqdn, err.Error())
+				return &state
+			}
 		}
 		replicaOffset, ok := info["slave_repl_offset"]
 		if !ok {

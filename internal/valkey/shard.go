@@ -12,12 +12,12 @@ import (
 
 // Shard contains a set of valkey nodes
 type Shard struct {
-	sync.Mutex
+	dcs    dcs.DCS
 	config *config.Config
 	logger *slog.Logger
 	nodes  map[string]*Node
 	local  *Node
-	dcs    dcs.DCS
+	sync.Mutex
 }
 
 // NodeConfiguration is a dcs node configuration for valkey replica

@@ -131,27 +131,27 @@ const (
 
 // HostState contains status check performed by some rdsync process
 type HostState struct {
-	CheckBy                 string           `json:"check_by"`
 	CheckAt                 time.Time        `json:"check_at"`
-	PingOk                  bool             `json:"ping_ok"`
-	PingStable              bool             `json:"ping_stable"`
-	IP                      string           `json:"ip"`
-	RunID                   string           `json:"runid"`
-	IsMaster                bool             `json:"is_master"`
-	IsOffline               bool             `json:"is_offline"`
-	IsReadOnly              bool             `json:"is_read_only"`
-	IsReplPaused            bool             `json:"is_repl_paused"`
-	MasterReplicationOffset int64            `json:"master_replication_offset"`
-	SecondReplicationOffset int64            `json:"second_replication_offset"`
-	ReplicationBacklogStart int64            `json:"replication_backlog_start"`
-	ReplicationBacklogSize  int64            `json:"replication_backlog_size"`
-	MinReplicasToWrite      int64            `json:"min_replicas_to_write"`
-	ReplicationID           string           `json:"replication_id"`
-	ReplicationID2          string           `json:"replication_id2"`
-	Error                   string           `json:"error"`
-	ConnectedReplicas       []string         `json:"connected_replicas"`
 	ReplicaState            *ReplicaState    `json:"replica_state"`
 	SentiCacheState         *SentiCacheState `json:"senticache_state"`
+	ReplicationID           string           `json:"replication_id"`
+	IP                      string           `json:"ip"`
+	RunID                   string           `json:"runid"`
+	Error                   string           `json:"error"`
+	ReplicationID2          string           `json:"replication_id2"`
+	CheckBy                 string           `json:"check_by"`
+	ConnectedReplicas       []string         `json:"connected_replicas"`
+	ReplicationBacklogStart int64            `json:"replication_backlog_start"`
+	SecondReplicationOffset int64            `json:"second_replication_offset"`
+	MasterReplicationOffset int64            `json:"master_replication_offset"`
+	ReplicationBacklogSize  int64            `json:"replication_backlog_size"`
+	MinReplicasToWrite      int64            `json:"min_replicas_to_write"`
+	IsReplPaused            bool             `json:"is_repl_paused"`
+	IsReadOnly              bool             `json:"is_read_only"`
+	IsOffline               bool             `json:"is_offline"`
+	IsMaster                bool             `json:"is_master"`
+	PingStable              bool             `json:"ping_stable"`
+	PingOk                  bool             `json:"ping_ok"`
 }
 
 func (hs *HostState) String() string {
@@ -180,10 +180,11 @@ func (hs *HostState) String() string {
 // Master always has this state empty
 type ReplicaState struct {
 	MasterHost           string `json:"master_host"`
-	MasterLinkState      bool   `json:"master_link_state"`
 	MasterLinkDownTime   int64  `json:"master_link_down_time"`
-	MasterSyncInProgress bool   `json:"master_sync_in_progress"`
 	ReplicationOffset    int64  `json:"replication_offset"`
+	MasterLastIOSeconds  int64  `json:"master_last_io_seconds"`
+	MasterLinkState      bool   `json:"master_link_state"`
+	MasterSyncInProgress bool   `json:"master_sync_in_progress"`
 }
 
 func (rs *ReplicaState) String() string {
@@ -212,15 +213,15 @@ const (
 
 // Switchover contains info about currently running or scheduled switchover/failover process
 type Switchover struct {
+	InitiatedAt time.Time           `json:"initiated_at"`
+	StartedAt   time.Time           `json:"started_at"`
+	Result      *SwitchoverResult   `json:"result"`
+	Progress    *SwitchoverProgress `json:"progress"`
 	From        string              `json:"from"`
 	To          string              `json:"to"`
 	Cause       string              `json:"cause"`
 	InitiatedBy string              `json:"initiated_by"`
-	InitiatedAt time.Time           `json:"initiated_at"`
 	StartedBy   string              `json:"started_by"`
-	StartedAt   time.Time           `json:"started_at"`
-	Result      *SwitchoverResult   `json:"result"`
-	Progress    *SwitchoverProgress `json:"progress"`
 	RunCount    int                 `json:"run_count"`
 }
 
@@ -250,23 +251,23 @@ func (sw *Switchover) String() string {
 
 // SwitchoverResult contains results of finished/failed switchover
 type SwitchoverResult struct {
-	Ok         bool      `json:"ok"`
-	Error      string    `json:"error"`
 	FinishedAt time.Time `json:"finished_at"`
+	Error      string    `json:"error"`
+	Ok         bool      `json:"ok"`
 }
 
 // SwitchoverProgress contains intents and status of running switchover
 type SwitchoverProgress struct {
-	Version    int    `json:"version"`
-	Phase      int    `json:"phase"`
 	NewMaster  string `json:"new_master"`
 	MostRecent string `json:"most_recent"`
+	Version    int    `json:"version"`
+	Phase      int    `json:"phase"`
 }
 
 // Maintenance struct presence means that cluster under manual control
 type Maintenance struct {
-	InitiatedBy  string    `json:"initiated_by"`
 	InitiatedAt  time.Time `json:"initiated_at"`
+	InitiatedBy  string    `json:"initiated_by"`
 	RdSyncPaused bool      `json:"rdsync_paused"`
 	ShouldLeave  bool      `json:"should_leave"`
 }
@@ -283,11 +284,11 @@ func (m *Maintenance) String() string {
 }
 
 type PoisonPill struct {
-	Applied     bool      `json:"applied"`
 	InitiatedAt time.Time `json:"initiated_at"`
 	InitiatedBy string    `json:"initiated_by"`
 	TargetHost  string    `json:"target_host"`
 	Cause       string    `json:"cause"`
+	Applied     bool      `json:"applied"`
 }
 
 func (pp *PoisonPill) String() string {
