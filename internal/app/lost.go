@@ -50,7 +50,7 @@ func (app *App) stateLost() appState {
 				app.logger.Error("Failed to get node offline state", "fqdn", local.FQDN(), "error", err)
 				return stateLost
 			}
-			if shardState[master].PingOk && shardState[master].PingStable && replicates(shardState[master], shardState[local.FQDN()].ReplicaState, local.FQDN(), app.shard.Get(master), false) {
+			if shardState[master].PingOk && shardState[master].PingStable && replicates(shardState[master], shardState[local.FQDN()].ReplicaState, local.FQDN(), app.shard.Get(master), false) && !app.isReplicaStale(shardState[local.FQDN()].ReplicaState, false) {
 				if offline {
 					app.logger.Info("Rdsync have lost connection to ZK. However our replication connection is alive. Setting local node online")
 					err = node.SetOnline(app.ctx)

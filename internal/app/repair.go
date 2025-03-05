@@ -159,6 +159,10 @@ func (app *App) repairLocalNode(master string) bool {
 		if err != nil {
 			app.logger.Error("Unable to adjust aof config on local node", "error", err)
 		}
+		err = app.closeStaleReplica(master)
+		if err != nil {
+			app.logger.Error("Unable to close local node on staleness", "error", err)
+		}
 		return true
 	}
 
@@ -208,6 +212,36 @@ func (app *App) repairLocalNode(master string) bool {
 		if rewriteErr != nil {
 			app.logger.Error("Unable rewrite conf after making local node read-only", "error", rewriteErr)
 			return true
+		}
+	} else if app.isReplicaStale(state.ReplicaState, true) {
+		shardState, err := app.getShardStateFromDcs()
+		if err != nil {
+			app.logger.Error("Unable to get shard state from dcs on slate replica open", "error", err)
+		}
+		syncing := 0
+		for host, hostState := range shardState {
+			if !hostState.PingOk {
+				continue
+			}
+			if host != master {
+				rs := hostState.ReplicaState
+				if rs != nil && rs.MasterSyncInProgress {
+					syncing++
+				}
+			}
+		}
+
+		if state.IsReplPaused || !replicates(shardState[master], state.ReplicaState, local.FQDN(), nil, true) {
+			if syncing < app.config.Valkey.MaxParallelSyncs {
+				app.logger.Info("Repairing local replica as it is offline and not replicates from primary")
+				app.repairReplica(local, shardState[master], state, master, local.FQDN())
+			} else {
+				app.logger.Error(fmt.Sprintf("Leaving local offline replica broken: currently syncing %d/%d", syncing, app.config.Valkey.MaxParallelSyncs))
+			}
+		}
+		if shardState[master].PingOk && shardState[master].PingStable && time.Since(shardState[master].CheckAt) < 3*app.config.HealthCheckInterval {
+			app.logger.Error("Not making local node online: considered stale")
+			return false
 		}
 	}
 	err = local.SetOnline(app.ctx)

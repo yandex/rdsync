@@ -32,6 +32,8 @@ type ValkeyConfig struct {
 	DialTimeout             time.Duration `yaml:"dial_timeout"`
 	WaitPromoteForceTimeout time.Duration `yaml:"wait_promote_force_timeout"`
 	WaitPoisonPillTimeout   time.Duration `yaml:"wait_poison_pill_timeout"`
+	StaleReplicaLagClose    time.Duration `yaml:"stale_replica_lag_close"`
+	StaleReplicaLagOpen     time.Duration `yaml:"stale_replica_lag_open"`
 	MaxParallelSyncs        int           `yaml:"max_parallel_syncs"`
 	ClusterBusPort          int           `yaml:"cluster_bus_port"`
 	TurnBeforeSwitchover    bool          `yaml:"turn_before_switchover"`
@@ -95,6 +97,8 @@ func DefaultValkeyConfig() ValkeyConfig {
 		WaitPromoteTimeout:      5 * time.Minute,
 		WaitPromoteForceTimeout: 10 * time.Second,
 		WaitPoisonPillTimeout:   30 * time.Second,
+		StaleReplicaLagClose:    60 * time.Second,
+		StaleReplicaLagOpen:     10 * time.Second,
 		MaxParallelSyncs:        1,
 		AllowDataLoss:           false,
 		TurnBeforeSwitchover:    false,
