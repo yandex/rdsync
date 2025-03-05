@@ -1,7 +1,9 @@
 package app
 
 import (
+	"fmt"
 	"slices"
+	"time"
 
 	"github.com/yandex/rdsync/internal/valkey"
 )
@@ -14,4 +16,63 @@ func replicates(masterState *HostState, replicaState *ReplicaState, replicaFQDN 
 		return true
 	}
 	return masterNode != nil && masterNode.MatchHost(replicaState.MasterHost)
+}
+
+func (app *App) isReplicaStale(replicaState *ReplicaState, checkOpenLag bool) bool {
+	targetLag := app.config.Valkey.StaleReplicaLagClose
+	if checkOpenLag {
+		targetLag = app.config.Valkey.StaleReplicaLagOpen
+	}
+	if replicaState == nil {
+		return false
+	}
+	if !replicaState.MasterLinkState {
+		if replicaState.MasterSyncInProgress || checkOpenLag {
+			return true
+		}
+		return replicaState.MasterLinkDownTime < 0 || time.Duration(replicaState.MasterLinkDownTime)*time.Millisecond > targetLag
+	} else {
+		return replicaState.MasterLastIOSeconds < 0 || time.Duration(replicaState.MasterLastIOSeconds)*time.Second > targetLag
+	}
+}
+
+func (app *App) closeStaleReplica(master string) error {
+	local := app.shard.Local()
+	if local.FQDN() == master {
+		return nil
+	}
+	paused, err := local.IsReplPaused(app.ctx)
+	if err != nil {
+		return err
+	}
+	if paused {
+		return nil
+	}
+	localState := app.getHostState(local.FQDN())
+	if app.isReplicaStale(localState.ReplicaState, false) {
+		app.logger.Debug("Local node seems stale. Checking if we could close.")
+		shardState, err := app.getShardStateFromDcs()
+		if err != nil {
+			return err
+		}
+		if shardState[master].PingOk && shardState[master].PingStable && time.Since(shardState[master].CheckAt) < 3*app.config.HealthCheckInterval {
+			okReplicas := 0
+			staleReplicas := 0
+			for host, state := range shardState {
+				if host == master {
+					continue
+				}
+				if !state.IsReplPaused && app.isReplicaStale(state.ReplicaState, false) {
+					staleReplicas++
+				} else if host != local.FQDN() {
+					okReplicas++
+				}
+			}
+			if okReplicas >= staleReplicas {
+				app.logger.Error(fmt.Sprintf("Local node is stale. Alive replicas: %d, stale replicas: %d. Making local node offline.", okReplicas, staleReplicas))
+				return local.SetOffline(app.ctx)
+			}
+		}
+	}
+	return nil
 }

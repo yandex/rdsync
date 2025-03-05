@@ -44,8 +44,12 @@ type Composer interface {
 	AttachToNet(service string) error
 	// Blocks port on host
 	BlockPort(service string, port int) error
+	// Block host/port pair on host
+	BlockHostPort(service string, host string, port int) error
 	// Unblocks port on host
 	UnBlockPort(service string, port int) error
+	// Unblocks host/port pair on host
+	UnBlockHostPort(service string, host string, port int) error
 	// Executes command inside container/VM with given timeout.
 	// Returns command retcode and output (stdoud and stderr are mixed)
 	RunCommand(service, cmd string, timeout time.Duration) (retcode int, output string, err error)
@@ -358,6 +362,27 @@ func (dc *DockerComposer) BlockPort(service string, port int) error {
 	return nil
 }
 
+// BlockHostPort blocks host/port for host
+func (dc *DockerComposer) BlockHostPort(service, host string, port int) error {
+	_, ok := dc.containers[service]
+	if !ok {
+		return fmt.Errorf("no such service: %s", service)
+	}
+	cmds := []string{
+		fmt.Sprintf("iptables -A INPUT -i eth0 -s %s -p tcp --dport %d -j DROP", host, port),
+		fmt.Sprintf("iptables -A OUTPUT -o eth0 -d %s -p tcp --dport %d -j DROP", host, port),
+		fmt.Sprintf("ip6tables -A INPUT -i eth0 -s %s -p tcp --dport %d -j DROP", host, port),
+		fmt.Sprintf("ip6tables -A OUTPUT -o eth0 -d %s -p tcp --dport %d -j DROP", host, port),
+	}
+	for _, cmd := range cmds {
+		_, _, err := dc.RunCommand(service, cmd, defaultDockerTimeout)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // UnBlockPort removes blocking rules for port on host
 func (dc *DockerComposer) UnBlockPort(service string, port int) error {
 	_, ok := dc.containers[service]
@@ -369,6 +394,27 @@ func (dc *DockerComposer) UnBlockPort(service string, port int) error {
 		fmt.Sprintf("iptables -D OUTPUT -o eth0 -p tcp --dport %d -j DROP", port),
 		fmt.Sprintf("ip6tables -D INPUT -i eth0 -p tcp --dport %d -j DROP", port),
 		fmt.Sprintf("ip6tables -D OUTPUT -o eth0 -p tcp --dport %d -j DROP", port),
+	}
+	for _, cmd := range cmds {
+		_, _, err := dc.RunCommand(service, cmd, defaultDockerTimeout)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// UnblockHostPort blocks host/port for host
+func (dc *DockerComposer) UnBlockHostPort(service, host string, port int) error {
+	_, ok := dc.containers[service]
+	if !ok {
+		return fmt.Errorf("no such service: %s", service)
+	}
+	cmds := []string{
+		fmt.Sprintf("iptables -D INPUT -i eth0 -s %s -p tcp --dport %d -j DROP", host, port),
+		fmt.Sprintf("iptables -D OUTPUT -o eth0 -d %s -p tcp --dport %d -j DROP", host, port),
+		fmt.Sprintf("ip6tables -D INPUT -i eth0 -s %s -p tcp --dport %d -j DROP", host, port),
+		fmt.Sprintf("ip6tables -D OUTPUT -o eth0 -d %s -p tcp --dport %d -j DROP", host, port),
 	}
 	for _, cmd := range cmds {
 		_, _, err := dc.RunCommand(service, cmd, defaultDockerTimeout)

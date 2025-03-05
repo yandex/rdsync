@@ -370,7 +370,7 @@ Feature: Sentinel mode failover from dead master
         And host "valkey1" is stopped
         Then valkey host "valkey1" should become unavailable within "10" seconds
         When host "valkey2" is started
-        Then valkey host "valkey2" should become available within "10" seconds
+        Then valkey host "valkey2" should become available within "60" seconds
         Then zookeeper node "/test/manager" should match regexp within "10" seconds
         """
             .*valkey2.*
