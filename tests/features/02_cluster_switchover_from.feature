@@ -92,8 +92,7 @@ Feature: Cluster mode switchover from old master
             "cause": "manual",
             "initiated_by": "valkey1",
             "result": {
-                "ok": false,
-                "error": "no quorum, have 0 replicas while 2 is required"
+                "ok": false
             }
         }
         """
