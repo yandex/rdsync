@@ -54,6 +54,15 @@ func (app *App) closeStaleReplica(master string) error {
 		}
 		return nil
 	}
+	if app.mode == modeCluster {
+		hasSlots, err := local.HasClusterSlots(app.ctx)
+		if err != nil {
+			return err
+		}
+		if hasSlots {
+			return nil
+		}
+	}
 	paused, err := local.IsReplPaused(app.ctx)
 	if err != nil {
 		return err
