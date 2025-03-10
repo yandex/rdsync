@@ -203,16 +203,6 @@ func (app *App) repairLocalNode(master string) bool {
 				return false
 			}
 		}
-	} else if state.ReplicaState == nil {
-		err, rewriteErr := local.SetReadOnly(app.ctx, false)
-		if err != nil {
-			app.logger.Error("Unable to make local node read-only", "error", err)
-			return true
-		}
-		if rewriteErr != nil {
-			app.logger.Error("Unable rewrite conf after making local node read-only", "error", rewriteErr)
-			return true
-		}
 	} else if app.isReplicaStale(state.ReplicaState, true) {
 		shardState, err := app.getShardStateFromDcs()
 		if err != nil {
@@ -248,6 +238,10 @@ func (app *App) repairLocalNode(master string) bool {
 	if err != nil {
 		app.logger.Error("Unable to set local node online", "error", err)
 		return false
+	}
+	if !app.dcsDivergeTime.IsZero() {
+		app.logger.Info("Clearing DCS divergence time state")
+		app.dcsDivergeTime = time.Time{}
 	}
 	return true
 }

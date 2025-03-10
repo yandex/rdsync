@@ -19,19 +19,20 @@ import (
 
 // App is main application structure
 type App struct {
-	dcs          dcs.DCS
-	critical     atomic.Value
-	ctx          context.Context
-	nodeFailTime map[string]time.Time
-	splitTime    map[string]time.Time
-	logger       *slog.Logger
-	config       *config.Config
-	shard        *valkey.Shard
-	cache        *valkey.SentiCacheNode
-	daemonLock   *flock.Flock
-	mode         appMode
-	aofMode      aofMode
-	state        appState
+	dcs            dcs.DCS
+	critical       atomic.Value
+	ctx            context.Context
+	nodeFailTime   map[string]time.Time
+	splitTime      map[string]time.Time
+	dcsDivergeTime time.Time
+	logger         *slog.Logger
+	config         *config.Config
+	shard          *valkey.Shard
+	cache          *valkey.SentiCacheNode
+	daemonLock     *flock.Flock
+	mode           appMode
+	aofMode        aofMode
+	state          appState
 }
 
 func baseContext() context.Context {

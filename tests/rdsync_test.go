@@ -584,6 +584,14 @@ func (tctx *testContext) stepHostPortOnHostIsUnBlocked(target string, port int, 
 	return tctx.composer.UnBlockHostPort(host, target, port)
 }
 
+func (tctx *testContext) stepHostIncomingConnectionsAreBlocked(host, target string) error {
+	return tctx.composer.BlockHostConnections(host, target)
+}
+
+func (tctx *testContext) stepHostIncomingConnectionsAreUnBlocked(host, target string) error {
+	return tctx.composer.UnBlockHostConnections(host, target)
+}
+
 func (tctx *testContext) stepHostIsAdded(host string) error {
 	err := tctx.composer.Start(host)
 	if err != nil {
@@ -1093,6 +1101,8 @@ func InitializeScenario(s *godog.ScenarioContext) {
 	s.Step(`^port "(\d+)" on host "([^"]*)" is unblocked$`, tctx.stepPortOnHostIsUnBlocked)
 	s.Step(`^host "([^"]*)" and port "(\d+)" on host "([^"]*)" is blocked$`, tctx.stepHostPortOnHostIsBlocked)
 	s.Step(`^host "([^"]*)" and port "(\d+)" on host "([^"]*)" is unblocked$`, tctx.stepHostPortOnHostIsUnBlocked)
+	s.Step(`^host "([^"]*)" blocks incoming connections from host "([^"]*)"`, tctx.stepHostIncomingConnectionsAreBlocked)
+	s.Step(`^host "([^"]*)" unblocks incoming connections from host "([^"]*)"`, tctx.stepHostIncomingConnectionsAreUnBlocked)
 	s.Step(`^host "([^"]*)" is added`, tctx.stepHostIsAdded)
 	s.Step(`^host "([^"]*)" is deleted$`, tctx.stepHostIsDeleted)
 

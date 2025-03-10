@@ -275,13 +275,12 @@ func (n *Node) SetOffline(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	err = n.DisconnectClients(ctx, "normal")
+	err, rewriteErr := n.SetReadOnly(ctx, true)
 	if err != nil {
 		return err
 	}
-	err = n.DisconnectClients(ctx, "pubsub")
-	if err != nil {
-		return err
+	if rewriteErr != nil {
+		n.logger.Error("Config rewrite after setting node offline failed", "error", rewriteErr)
 	}
 	return nil
 }
