@@ -168,12 +168,6 @@ func (app *App) performSwitchover(shardState map[string]*HostState, activeNodes 
 	if err, ok := errsRO[oldMaster]; ok && err != nil && shardState[oldMaster].PingOk {
 		err = fmt.Errorf("failed to set old master %s read-only: %s", oldMaster, err.Error())
 		app.logger.Error("Switchover", "error", err)
-		switchErr := app.finishSwitchover(switchover, err)
-		if switchErr != nil {
-			return fmt.Errorf("failed to reject switchover %s", switchErr)
-		}
-		app.logger.Info("Switchover: rejected")
-		return err
 	}
 
 	poisonPill, err := app.getPoisonPill()

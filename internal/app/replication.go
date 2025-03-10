@@ -24,7 +24,16 @@ func (app *App) isReplicaStale(replicaState *ReplicaState, checkOpenLag bool) bo
 		targetLag = app.config.Valkey.StaleReplicaLagOpen
 	}
 	if replicaState == nil {
-		return false
+		if app.dcsDivergeTime.IsZero() {
+			app.dcsDivergeTime = time.Now()
+		}
+		result := time.Since(app.dcsDivergeTime) > targetLag
+		if !result {
+			app.logger.Info(fmt.Sprintf("Local node is primary and we got a dcs info divergence at %v. Waiting for %v to make decision.", app.dcsDivergeTime, time.Since(app.dcsDivergeTime)-targetLag))
+		} else {
+			app.logger.Info(fmt.Sprintf("Local node is primary and we got a dcs info divergence at %v. Marking local node as stale.", app.dcsDivergeTime))
+		}
+		return result
 	}
 	if !replicaState.MasterLinkState {
 		if replicaState.MasterSyncInProgress || checkOpenLag {
@@ -39,6 +48,10 @@ func (app *App) isReplicaStale(replicaState *ReplicaState, checkOpenLag bool) bo
 func (app *App) closeStaleReplica(master string) error {
 	local := app.shard.Local()
 	if local.FQDN() == master {
+		if !app.dcsDivergeTime.IsZero() {
+			app.logger.Info("Clearing DCS divergence time state")
+			app.dcsDivergeTime = time.Time{}
+		}
 		return nil
 	}
 	paused, err := local.IsReplPaused(app.ctx)

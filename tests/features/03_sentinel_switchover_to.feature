@@ -159,3 +159,81 @@ Feature: Sentinel mode switchover to specified host
         """
         valkey3 is not active
         """
+
+    Scenario: Sentinel mode switchover with partial unavailability works
+        Given sentinel shard is up and running
+        Then zookeeper node "/test/health/valkey1" should match json within "30" seconds
+        """
+        {
+            "ping_ok": true,
+            "is_master": true,
+            "is_read_only": false
+        }
+        """
+        And zookeeper node "/test/health/valkey2" should match json within "30" seconds
+        """
+        {
+            "ping_ok": true,
+            "is_master": false
+        }
+        """
+        And zookeeper node "/test/health/valkey3" should match json within "30" seconds
+        """
+        {
+            "ping_ok": true,
+            "is_master": false
+        }
+        """
+        When I run command on host "valkey1"
+        """
+            rdsync switch --to valkey2
+        """
+        Then command return code should be "0"
+        And command output should match regexp
+        """
+            switchover done
+        """
+        And zookeeper node "/test/active_nodes" should match json_exactly within "60" seconds
+        """
+            ["valkey1","valkey2","valkey3"]
+        """
+        When host "valkey2" blocks incoming connections from host "valkey1"
+        And I run command on valkey host "valkey2"
+        """
+            CLIENT KILL TYPE NORMAL
+        """
+        And I wait for "30" seconds
+        And I run command on host "valkey2" with timeout "60" seconds
+        """
+            rdsync switch --to valkey1
+        """
+        Then command return code should be "0"
+        And command output should match regexp
+        """
+            switchover done
+        """
+        And zookeeper node "/test/health/valkey1" should match json within "30" seconds
+        """
+        {
+            "ping_ok": true,
+            "is_master": true,
+            "is_read_only": false
+        }
+        """
+        And zookeeper node "/test/health/valkey2" should match json within "180" seconds
+        """
+        {
+            "ping_ok": true,
+            "is_master": false
+        }
+        """
+        And zookeeper node "/test/active_nodes" should match json_exactly within "60" seconds
+        """
+            ["valkey1","valkey3"]
+        """
+        And replication on valkey host "valkey2" should run fine within "120" seconds
+        When host "valkey2" unblocks incoming connections from host "valkey1"
+        Then zookeeper node "/test/active_nodes" should match json_exactly within "60" seconds
+        """
+            ["valkey1","valkey2","valkey3"]
+        """

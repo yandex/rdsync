@@ -192,7 +192,8 @@ func (app *App) promote(master, oldMaster string, shardState map[string]*HostSta
 		}
 		majorityAlive, err := node.IsClusterMajorityAlive(app.ctx)
 		if err != nil {
-			return fmt.Errorf("new master is not able to check cluster majority state: %s", err.Error())
+			app.logger.Error("New master is not able to check cluster majority state. Assuming that majority is alive.", "error", err)
+			majorityAlive = true
 		}
 		if majorityAlive {
 			app.logger.Info("Majority of master nodes in cluster alive. Using FORCE to promote")
