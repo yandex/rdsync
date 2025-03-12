@@ -143,6 +143,12 @@ func (app *App) repairLocalNode(master string) bool {
 			app.nodeFailTime[local.FQDN()] = time.Now()
 		}
 		failedTime := time.Since(app.nodeFailTime[local.FQDN()])
+		if failedTime > app.config.Valkey.BusyTimeout && strings.HasPrefix(err.Error(), "BUSY ") {
+			err = local.ScriptKill(app.ctx)
+			if err != nil {
+				app.logger.Error("Local node is busy running a script. But SCRIPT KILL failed", "error", err)
+			}
+		}
 		if failedTime > app.config.Valkey.RestartTimeout && !strings.HasPrefix(err.Error(), "LOADING ") {
 			app.nodeFailTime[local.FQDN()] = time.Now()
 			err = local.Restart(app.ctx)

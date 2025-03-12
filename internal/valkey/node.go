@@ -703,3 +703,12 @@ func (n *Node) HasClusterSlots(ctx context.Context) (bool, error) {
 	}
 	return false, nil
 }
+
+// ScriptKill kills a running script if node is in BUSY state
+func (n *Node) ScriptKill(ctx context.Context) error {
+	err := n.ensureConn()
+	if err != nil {
+		return err
+	}
+	return n.conn.Do(ctx, n.conn.B().ScriptKill().Build()).Error()
+}
