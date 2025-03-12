@@ -25,6 +25,7 @@ type ValkeyConfig struct {
 	WriteTimeout            time.Duration `yaml:"write_timeout"`
 	DNSTTL                  time.Duration `yaml:"dns_ttl"`
 	FailoverTimeout         time.Duration `yaml:"failover_timeout"`
+	BusyTimeout             time.Duration `yaml:"busy_timeout"`
 	Port                    int           `yaml:"port"`
 	RestartTimeout          time.Duration `yaml:"restart_timeout"`
 	WaitReplicationTimeout  time.Duration `yaml:"wait_replication_timeout"`
@@ -99,6 +100,7 @@ func DefaultValkeyConfig() ValkeyConfig {
 		WaitPoisonPillTimeout:   30 * time.Second,
 		StaleReplicaLagClose:    60 * time.Second,
 		StaleReplicaLagOpen:     10 * time.Second,
+		BusyTimeout:             5 * time.Second,
 		MaxParallelSyncs:        1,
 		AllowDataLoss:           false,
 		TurnBeforeSwitchover:    false,

@@ -1,5 +1,22 @@
 Feature: Cluster mode local node repair
 
+    Scenario: Busy cluster node gets a SCRIPT KILL
+        Given clustered shard is up and running
+        Then valkey host "valkey1" should be master
+        And valkey host "valkey2" should become replica of "valkey1" within "15" seconds
+        And replication on valkey host "valkey2" should run fine within "15" seconds
+        And valkey host "valkey3" should become replica of "valkey1" within "15" seconds
+        And replication on valkey host "valkey3" should run fine within "15" seconds
+        And zookeeper node "/test/active_nodes" should match json_exactly within "30" seconds
+        """
+            ["valkey1","valkey2","valkey3"]
+        """
+        When I run async command on host "valkey1"
+        """
+            valkey-cli -a functestpassword eval 'while true do end' 0
+        """
+        Then valkey host "valkey1" should become available within "60" seconds
+
     Scenario: Cluster mode replica is restarted after OOM
         Given clustered shard is up and running
         Then valkey host "valkey1" should be master
