@@ -176,13 +176,17 @@ func matchPrefix(hosts []string, prefix string) []string {
 }
 
 // CliSwitch performs manual switch-over of the master node
-func (app *App) CliSwitch(switchFrom, switchTo string, waitTimeout time.Duration) int {
+func (app *App) CliSwitch(switchFrom, switchTo string, waitTimeout time.Duration, switchForce bool) int {
 	if switchFrom == "" && switchTo == "" {
 		app.logger.Error("Either --from or --to should be set")
 		return 1
 	}
 	if switchFrom != "" && switchTo != "" {
 		app.logger.Error("Option --from and --to can't be used at the same time")
+		return 1
+	}
+	if switchFrom != "" && switchForce {
+		app.logger.Error("Option --from and --force can't be used at the same time")
 		return 1
 	}
 	err := app.connectDCS()
@@ -292,6 +296,14 @@ func (app *App) CliSwitch(switchFrom, switchTo string, waitTimeout time.Duration
 	switchover.InitiatedBy = app.config.Hostname
 	switchover.InitiatedAt = time.Now()
 	switchover.Cause = CauseManual
+	if switchForce {
+		switchover.RunCount = 1
+		err = app.dcs.Set(pathActiveNodes, []string{toHost})
+		if err != nil {
+			app.logger.Error("Unable to update active nodes")
+			return 1
+		}
+	}
 
 	err = app.dcs.Create(pathCurrentSwitch, switchover)
 	if err == dcs.ErrExists {

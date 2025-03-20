@@ -13,6 +13,7 @@ import (
 var switchTo string
 var switchFrom string
 var switchWait time.Duration
+var switchForce bool
 
 var switchCmd = &cobra.Command{
 	Use:   "switch",
@@ -24,7 +25,7 @@ var switchCmd = &cobra.Command{
 			fmt.Println(err)
 			os.Exit(1)
 		}
-		os.Exit(app.CliSwitch(switchFrom, switchTo, switchWait))
+		os.Exit(app.CliSwitch(switchFrom, switchTo, switchWait, switchForce))
 	},
 }
 
@@ -32,6 +33,7 @@ func init() {
 	rootCmd.AddCommand(switchCmd)
 	switchCmd.Flags().StringVar(&switchFrom, "from", "", "switch master from specific (or current master if empty) host")
 	switchCmd.Flags().StringVar(&switchTo, "to", "", "switch master to specific (or most up-to-date if empty) host")
+	switchCmd.Flags().BoolVar(&switchForce, "force", false, "make switchover preapproved")
 	switchCmd.Flags().DurationVarP(&switchWait, "wait", "w", 5*time.Minute,
 		"how long wait for switchover to complete, 0s to return immediately")
 }
