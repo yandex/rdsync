@@ -465,17 +465,18 @@ func (app *App) CliGetMaintenance() int {
 
 	var maintenance Maintenance
 	err = app.dcs.Get(pathMaintenance, &maintenance)
-	if err == nil {
+	switch err {
+	case nil:
 		if maintenance.RdSyncPaused {
 			fmt.Println("on")
 		} else {
 			fmt.Println("scheduled")
 		}
 		return 0
-	} else if err == dcs.ErrNotFound {
+	case dcs.ErrNotFound:
 		fmt.Println("off")
 		return 0
-	} else {
+	default:
 		app.logger.Error("Unable to get maintenance status", "error", err)
 		return 1
 	}
