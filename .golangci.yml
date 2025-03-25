@@ -1,45 +1,9 @@
-linters-settings:
-  dupl:
-    threshold: 400
-  funlen:
-    lines: 400
-    statements: 200
-  gocritic:
-    enabled-tags:
-      - performance
-    disabled-tags:
-      - diagnostic
-      - experimental
-      - opinionated
-      - style
-  misspell:
-    locale: US
-  revive:
-    rules:
-      - name: blank-imports
-      - name: context-as-argument
-      - name: context-keys-type
-      - name: dot-imports
-      - name: error-return
-      - name: error-naming
-      - name: exported
-      - name: var-naming
-      - name: var-declaration
-      - name: package-comments
-      - name: range
-      - name: receiver-naming
-      - name: time-naming
-      - name: unexported-return
-      - name: errorf
-      - name: empty-block
-      - name: unreachable-code
-      - name: redefines-builtin-id
-  govet:
-    enable:
-      - fieldalignment
-
+version: "2"
+run:
+  go: "1.24"
+  modules-download-mode: mod
 linters:
-  disable-all: true
+  default: none
   enable:
     - bodyclose
     - copyloopvar
@@ -47,26 +11,75 @@ linters:
     - errcheck
     - funlen
     - gocritic
-    - gofmt
-    - goimports
     - govet
     - ineffassign
     - misspell
     - nakedret
     - revive
     - staticcheck
-    - typecheck
     - unconvert
     - unparam
     - unused
-    - stylecheck
-    - gosimple
     - whitespace
-
-run:
-  modules-download-mode: mod
-  go: "1.24"
-  timeout: 5m
-
+  settings:
+    dupl:
+      threshold: 400
+    funlen:
+      lines: 400
+      statements: 200
+    gocritic:
+      enabled-tags:
+        - performance
+      disabled-tags:
+        - diagnostic
+        - experimental
+        - opinionated
+        - style
+    govet:
+      enable:
+        - fieldalignment
+    misspell:
+      locale: US
+    revive:
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: dot-imports
+        - name: error-return
+        - name: error-naming
+        - name: exported
+        - name: var-naming
+        - name: var-declaration
+        - name: package-comments
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+        - name: errorf
+        - name: empty-block
+        - name: unreachable-code
+        - name: redefines-builtin-id
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
 severity:
-  default-severity: error
+  default: error
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

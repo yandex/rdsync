@@ -9,7 +9,7 @@ import (
 )
 
 func replicates(masterState *HostState, replicaState *ReplicaState, replicaFQDN string, masterNode *valkey.Node, allowSync bool) bool {
-	if replicaState == nil || !(replicaState.MasterLinkState || allowSync) {
+	if replicaState == nil || (!replicaState.MasterLinkState && !allowSync) {
 		return false
 	}
 	if masterState != nil && slices.Contains(masterState.ConnectedReplicas, replicaFQDN) {
