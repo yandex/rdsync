@@ -6,7 +6,7 @@ import (
 )
 
 func getOffset(state *HostState) int64 {
-	if !state.PingOk || !state.PingStable {
+	if state == nil || !state.PingOk || !state.PingStable {
 		return 0
 	}
 	if state.IsMaster {
