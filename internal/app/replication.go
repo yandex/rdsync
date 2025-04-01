@@ -95,6 +95,9 @@ func (app *App) closeStaleReplica(master string) error {
 				return local.SetOffline(app.ctx)
 			}
 		}
+	} else if !app.replFailTime.IsZero() {
+		app.logger.Debug("Clearing local node replication fail time")
+		app.replFailTime = time.Time{}
 	}
 	return nil
 }

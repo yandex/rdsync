@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -88,6 +89,23 @@ func (app *App) repairMaster(node *valkey.Node, activeNodes []string, state *Hos
 func (app *App) repairReplica(node *valkey.Node, masterState, state *HostState, master, replicaFQDN string) {
 	masterNode := app.shard.Get(master)
 	rs := state.ReplicaState
+	if node.IsLocal() {
+		if app.replFailTime.IsZero() {
+			app.replFailTime = time.Now()
+		}
+		if time.Since(app.replFailTime) > app.config.Valkey.DestructiveReplicationRepairTimeout && app.config.Valkey.DestructiveReplicationRepairCommand != "" {
+			app.logger.Error(fmt.Sprintf("Replication is broken for too long: %s. Using destructive repair: %s",
+				time.Since(app.replFailTime), app.config.Valkey.DestructiveReplicationRepairCommand))
+			split := strings.Fields(app.config.Valkey.DestructiveReplicationRepairCommand)
+			cmd := exec.CommandContext(app.ctx, split[0], split[1:]...)
+			err := cmd.Run()
+			if err != nil {
+				app.logger.Error("Unable to run destructive replication repair on local node", "error", err)
+			} else {
+				app.replFailTime = time.Now()
+			}
+		}
+	}
 	if !replicates(masterState, rs, replicaFQDN, masterNode, true) {
 		app.logger.Info("Initiating replica repair", "fqdn", replicaFQDN)
 		switch app.mode {

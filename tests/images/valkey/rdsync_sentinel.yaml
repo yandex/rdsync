@@ -9,6 +9,8 @@ valkey:
   auth_password: functestpassword
   restart_command: supervisorctl restart valkey
   aof_path: /var/lib/valkey/appendonlydir
+  destructive_replication_repair_timeout: 5m
+  destructive_replication_repair_command: chattr -i /var/lib/valkey/dump.rdb
 sentinel_mode:
   announce_hostname: true
   cluster_name: functest
