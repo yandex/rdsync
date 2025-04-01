@@ -280,3 +280,44 @@ Feature: Cluster mode broken replication fix
         When host "valkey1" and port "6379" on host "valkey3" is unblocked
         Then valkey host "valkey3" should become replica of "valkey1" within "30" seconds
         And replication on valkey host "valkey3" should run fine within "15" seconds
+
+    Scenario: Cluster mode destructive replication repair works
+        Given clustered shard is up and running
+        Then valkey host "valkey1" should be master
+        And valkey host "valkey2" should become replica of "valkey1" within "15" seconds
+        And replication on valkey host "valkey2" should run fine within "15" seconds
+        And valkey host "valkey3" should become replica of "valkey1" within "15" seconds
+        And replication on valkey host "valkey3" should run fine within "15" seconds
+        And zookeeper node "/test/active_nodes" should match json_exactly within "30" seconds
+        """
+            ["valkey1","valkey2","valkey3"]
+        """
+        When I run command on host "valkey2" with timeout "20" seconds
+        """
+            supervisorctl stop rdsync
+        """
+        And I run command on host "valkey2" with timeout "20" seconds
+        """
+            supervisorctl stop valkey
+        """
+        And I run command on host "valkey2"
+        """
+            rm -rf /var/lib/valkey/appendonlydir
+        """
+        And I run command on host "valkey2"
+        """
+            truncate -s 0 /var/lib/valkey/dump.rdb
+        """
+        And I run command on host "valkey2"
+        """
+            chattr +i /var/lib/valkey/dump.rdb
+        """
+        And I run command on host "valkey2" with timeout "20" seconds
+        """
+            supervisorctl start valkey
+        """
+        And I run command on host "valkey2" with timeout "20" seconds
+        """
+            supervisorctl start rdsync
+        """
+        Then replication on valkey host "valkey2" should run fine within "600" seconds

@@ -25,6 +25,7 @@ type App struct {
 	nodeFailTime   map[string]time.Time
 	splitTime      map[string]time.Time
 	dcsDivergeTime time.Time
+	replFailTime   time.Time
 	logger         *slog.Logger
 	config         *config.Config
 	shard          *valkey.Shard

@@ -15,31 +15,33 @@ import (
 
 // ValkeyConfig contains valkey connection info and params
 type ValkeyConfig struct {
-	AuthPassword            string        `yaml:"auth_password"`
-	AofPath                 string        `yaml:"aof_path"`
-	RestartCommand          string        `yaml:"restart_command"`
-	TLSCAPath               string        `yaml:"tls_ca_path"`
-	AuthUser                string        `yaml:"auth_user"`
-	FailoverCooldown        time.Duration `yaml:"failover_cooldown"`
-	WaitPromoteTimeout      time.Duration `yaml:"wait_promote_timeout"`
-	WriteTimeout            time.Duration `yaml:"write_timeout"`
-	DNSTTL                  time.Duration `yaml:"dns_ttl"`
-	FailoverTimeout         time.Duration `yaml:"failover_timeout"`
-	BusyTimeout             time.Duration `yaml:"busy_timeout"`
-	Port                    int           `yaml:"port"`
-	RestartTimeout          time.Duration `yaml:"restart_timeout"`
-	WaitReplicationTimeout  time.Duration `yaml:"wait_replication_timeout"`
-	WaitCatchupTimeout      time.Duration `yaml:"wait_catchup_timeout"`
-	DialTimeout             time.Duration `yaml:"dial_timeout"`
-	WaitPromoteForceTimeout time.Duration `yaml:"wait_promote_force_timeout"`
-	WaitPoisonPillTimeout   time.Duration `yaml:"wait_poison_pill_timeout"`
-	StaleReplicaLagClose    time.Duration `yaml:"stale_replica_lag_close"`
-	StaleReplicaLagOpen     time.Duration `yaml:"stale_replica_lag_open"`
-	MaxParallelSyncs        int           `yaml:"max_parallel_syncs"`
-	ClusterBusPort          int           `yaml:"cluster_bus_port"`
-	TurnBeforeSwitchover    bool          `yaml:"turn_before_switchover"`
-	UseTLS                  bool          `yaml:"use_tls"`
-	AllowDataLoss           bool          `yaml:"allow_data_loss"`
+	AuthPassword                        string        `yaml:"auth_password"`
+	AofPath                             string        `yaml:"aof_path"`
+	RestartCommand                      string        `yaml:"restart_command"`
+	TLSCAPath                           string        `yaml:"tls_ca_path"`
+	AuthUser                            string        `yaml:"auth_user"`
+	DestructiveReplicationRepairCommand string        `yaml:"destructive_replication_repair_command"`
+	RestartTimeout                      time.Duration `yaml:"restart_timeout"`
+	WaitPoisonPillTimeout               time.Duration `yaml:"wait_poison_pill_timeout"`
+	DNSTTL                              time.Duration `yaml:"dns_ttl"`
+	FailoverTimeout                     time.Duration `yaml:"failover_timeout"`
+	BusyTimeout                         time.Duration `yaml:"busy_timeout"`
+	Port                                int           `yaml:"port"`
+	WaitPromoteTimeout                  time.Duration `yaml:"wait_promote_timeout"`
+	WaitReplicationTimeout              time.Duration `yaml:"wait_replication_timeout"`
+	WaitCatchupTimeout                  time.Duration `yaml:"wait_catchup_timeout"`
+	DialTimeout                         time.Duration `yaml:"dial_timeout"`
+	WaitPromoteForceTimeout             time.Duration `yaml:"wait_promote_force_timeout"`
+	WriteTimeout                        time.Duration `yaml:"write_timeout"`
+	StaleReplicaLagClose                time.Duration `yaml:"stale_replica_lag_close"`
+	StaleReplicaLagOpen                 time.Duration `yaml:"stale_replica_lag_open"`
+	DestructiveReplicationRepairTimeout time.Duration `yaml:"destructive_replication_repair_timeout"`
+	FailoverCooldown                    time.Duration `yaml:"failover_cooldown"`
+	MaxParallelSyncs                    int           `yaml:"max_parallel_syncs"`
+	ClusterBusPort                      int           `yaml:"cluster_bus_port"`
+	TurnBeforeSwitchover                bool          `yaml:"turn_before_switchover"`
+	UseTLS                              bool          `yaml:"use_tls"`
+	AllowDataLoss                       bool          `yaml:"allow_data_loss"`
 }
 
 // SentinelModeConfig contains sentinel-mode specific configuration
@@ -81,31 +83,31 @@ type Config struct {
 // DefaultValkeyConfig returns default configuration for valkey connection info and params
 func DefaultValkeyConfig() ValkeyConfig {
 	return ValkeyConfig{
-		Port:                    6379,
-		ClusterBusPort:          16379,
-		UseTLS:                  false,
-		TLSCAPath:               "",
-		AuthUser:                "",
-		AuthPassword:            "",
-		DialTimeout:             5 * time.Second,
-		WriteTimeout:            5 * time.Second,
-		DNSTTL:                  5 * time.Minute,
-		FailoverTimeout:         30 * time.Second,
-		FailoverCooldown:        30 * time.Minute,
-		RestartTimeout:          5 * time.Minute,
-		WaitReplicationTimeout:  15 * time.Minute,
-		WaitCatchupTimeout:      10 * time.Minute,
-		WaitPromoteTimeout:      5 * time.Minute,
-		WaitPromoteForceTimeout: 10 * time.Second,
-		WaitPoisonPillTimeout:   30 * time.Second,
-		StaleReplicaLagClose:    60 * time.Second,
-		StaleReplicaLagOpen:     10 * time.Second,
-		BusyTimeout:             5 * time.Second,
-		MaxParallelSyncs:        1,
-		AllowDataLoss:           false,
-		TurnBeforeSwitchover:    false,
-		RestartCommand:          "systemctl restart valkey-server",
-		AofPath:                 "",
+		Port:                                6379,
+		ClusterBusPort:                      16379,
+		UseTLS:                              false,
+		TLSCAPath:                           "",
+		AuthUser:                            "",
+		AuthPassword:                        "",
+		DialTimeout:                         5 * time.Second,
+		WriteTimeout:                        5 * time.Second,
+		DNSTTL:                              5 * time.Minute,
+		FailoverTimeout:                     30 * time.Second,
+		FailoverCooldown:                    30 * time.Minute,
+		RestartTimeout:                      5 * time.Minute,
+		WaitReplicationTimeout:              15 * time.Minute,
+		WaitCatchupTimeout:                  10 * time.Minute,
+		WaitPromoteTimeout:                  5 * time.Minute,
+		WaitPromoteForceTimeout:             10 * time.Second,
+		WaitPoisonPillTimeout:               30 * time.Second,
+		StaleReplicaLagClose:                60 * time.Second,
+		StaleReplicaLagOpen:                 10 * time.Second,
+		BusyTimeout:                         5 * time.Second,
+		DestructiveReplicationRepairTimeout: 30 * time.Minute,
+		MaxParallelSyncs:                    1,
+		AllowDataLoss:                       false,
+		TurnBeforeSwitchover:                false,
+		RestartCommand:                      "systemctl restart valkey-server",
 	}
 }
 
