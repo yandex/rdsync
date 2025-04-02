@@ -1,8 +1,8 @@
 diff --git a/src/cluster_legacy.c b/src/cluster_legacy.c
-index 46b63c6cd..0449ca0c9 100644
+index 040b578cb..6ad76a0bf 100644
 --- a/src/cluster_legacy.c
 +++ b/src/cluster_legacy.c
-@@ -6642,7 +6642,7 @@ int clusterCommandSpecial(client *c) {
+@@ -7065,7 +7065,7 @@ int clusterCommandSpecial(client *c) {
          }
  
          /* Can't replicate a replica. */
@@ -44,5 +44,5 @@ index 6d0c1007b..04b644128 100644
      assert {[R 1 config set repl-paused no] eq {OK}}
      wait_for_condition 1000 50 {
 -- 
-2.48.0
+2.49.0
 
