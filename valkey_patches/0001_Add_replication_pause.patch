@@ -1,8 +1,8 @@
 diff --git a/src/config.c b/src/config.c
-index 2d4e703d9..c1351d74f 100644
+index 312d47b94..5c28738a0 100644
 --- a/src/config.c
 +++ b/src/config.c
-@@ -2526,6 +2526,25 @@ static int updateExtendedRedisCompat(const char **err) {
+@@ -2551,6 +2551,25 @@ static int updateExtendedRedisCompat(const char **err) {
      return 1;
  }
  
@@ -28,27 +28,27 @@ index 2d4e703d9..c1351d74f 100644
  static int updateSighandlerEnabled(const char **err) {
      UNUSED(err);
      if (server.crashlog_enabled)
-@@ -3107,6 +3126,7 @@ standardConfig static_configs[] = {
-     createBoolConfig("enable-debug-assert", NULL, IMMUTABLE_CONFIG | HIDDEN_CONFIG, server.enable_debug_assert, 0, NULL, NULL),
+@@ -3193,6 +3212,7 @@ standardConfig static_configs[] = {
      createBoolConfig("cluster-slot-stats-enabled", NULL, MODIFIABLE_CONFIG, server.cluster_slot_stats_enabled, 0, NULL, NULL),
      createBoolConfig("hide-user-data-from-log", NULL, MODIFIABLE_CONFIG, server.hide_user_data_from_log, 1, NULL, NULL),
+     createBoolConfig("import-mode", NULL, DEBUG_CONFIG | MODIFIABLE_CONFIG, server.import_mode, 0, NULL, NULL),
 +    createBoolConfig("repl-paused", NULL, MODIFIABLE_CONFIG, server.repl_paused, 0, NULL, updateReplPaused),
  
      /* String Configs */
      createStringConfig("aclfile", NULL, IMMUTABLE_CONFIG, ALLOW_EMPTY_STRING, server.acl_filename, "", NULL, NULL),
 diff --git a/src/replication.c b/src/replication.c
-index 249c190ea..a1ec23f38 100644
+index 981e1f410..db67c7953 100644
 --- a/src/replication.c
 +++ b/src/replication.c
-@@ -51,7 +51,6 @@ void replicationResurrectProvisionalPrimary(void);
+@@ -58,7 +58,6 @@ void replicationResurrectProvisionalPrimary(void);
  void replicationSendAck(void);
  int replicaPutOnline(client *replica);
  void replicaStartCommandStream(client *replica);
 -int cancelReplicationHandshake(int reconnect);
  void replicationSteadyStateInit(void);
- void setupMainConnForPsync(connection *conn);
+ void dualChannelSetupMainConnForPsync(connection *conn);
  void dualChannelSyncHandleRdbLoadCompletion(void);
-@@ -1067,7 +1066,7 @@ void syncCommand(client *c) {
+@@ -1080,7 +1079,7 @@ void syncCommand(client *c) {
  
      /* Refuse SYNC requests if we are a replica but the link with our primary
       * is not ok... */
@@ -57,7 +57,7 @@ index 249c190ea..a1ec23f38 100644
          addReplyError(c, "-NOMASTERLINK Can't SYNC while not connected with my master");
          return;
      }
-@@ -4520,7 +4519,7 @@ void replicationCron(void) {
+@@ -4724,7 +4723,7 @@ void replicationCron(void) {
      }
  
      /* Check if we should connect to a PRIMARY */
@@ -67,10 +67,10 @@ index 249c190ea..a1ec23f38 100644
          connectWithPrimary();
      }
 diff --git a/src/server.h b/src/server.h
-index fceb2894a..d6dcd98fe 100644
+index 42856e4e5..10241b2e4 100644
 --- a/src/server.h
 +++ b/src/server.h
-@@ -2095,6 +2095,7 @@ struct valkeyServer {
+@@ -1988,6 +1988,7 @@ struct valkeyServer {
      /* Synchronous replication. */
      list *clients_waiting_acks; /* Clients waiting in WAIT or WAITAOF. */
      int get_ack_from_replicas;  /* If true we send REPLCONF GETACK. */
@@ -78,7 +78,7 @@ index fceb2894a..d6dcd98fe 100644
      /* Limits */
      unsigned int maxclients;                    /* Max number of simultaneous clients */
      unsigned long long maxmemory;               /* Max number of memory bytes to use */
-@@ -3082,6 +3083,8 @@ void clearFailoverState(void);
+@@ -2949,6 +2950,8 @@ void clearFailoverState(void);
  void updateFailoverStatus(void);
  void abortFailover(const char *err);
  const char *getFailoverStateString(void);
@@ -86,7 +86,7 @@ index fceb2894a..d6dcd98fe 100644
 +int replicaIsInHandshakeState(void);
  int sendCurrentOffsetToReplica(client *replica);
  void addRdbReplicaToPsyncWait(client *replica);
- 
+ void initClientReplicationData(client *c);
 diff --git a/tests/cluster/tests/99-yandex-cloud-patches.tcl b/tests/cluster/tests/99-yandex-cloud-patches.tcl
 new file mode 100644
 index 000000000..6d0c1007b
@@ -204,5 +204,5 @@ index 000000000..a2c9bb949
 +    }
 +}
 -- 
-2.48.0
+2.49.0
 

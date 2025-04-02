@@ -25,7 +25,7 @@ test: base_image valkey/src/valkey-server cmd/rdsync/rdsync recreate_logs
 	rm -rf ./tests/images/valkey/valkey-senticache && cp valkey/src/valkey-senticache ./tests/images/valkey/valkey-senticache
 	rm -rf ./tests/images/valkey/valkey-cli && cp valkey/src/valkey-cli ./tests/images/valkey/valkey-cli
 	go build ./tests/...
-	(cd tests; go test -timeout 150m)
+	(cd tests; go test -timeout 180m)
 
 recreate_logs:
 	@if [ "$(shell ls tests/logs 2>/dev/null | wc -l)" != "0" ]; then\

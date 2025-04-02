@@ -1,17 +1,17 @@
 diff --git a/src/config.c b/src/config.c
-index c1351d74f..a53cb6992 100644
+index 5c28738a0..861a2a345 100644
 --- a/src/config.c
 +++ b/src/config.c
-@@ -594,6 +594,8 @@ void loadServerConfigFromString(char *config) {
-     /* To ensure backward compatibility when io_threads_num is according to the previous maximum of 128. */
-     if (server.io_threads_num > IO_THREADS_MAX_NUM) server.io_threads_num = IO_THREADS_MAX_NUM;
+@@ -619,6 +619,8 @@ void loadServerConfigFromString(char *config) {
+     if (server.hz < CONFIG_MIN_HZ) server.hz = CONFIG_MIN_HZ;
+     if (server.hz > CONFIG_MAX_HZ) server.hz = CONFIG_MAX_HZ;
  
 +    server.offline_initial = server.offline;
 +
      sdsfreesplitres(lines, totlines);
      reading_config_file = 0;
      return;
-@@ -3072,6 +3074,31 @@ static int applyClientMaxMemoryUsage(const char **err) {
+@@ -3160,6 +3162,31 @@ static int applyClientMaxMemoryUsage(const char **err) {
      return 1;
  }
  
@@ -41,21 +41,21 @@ index c1351d74f..a53cb6992 100644
 +}
 +
  standardConfig static_configs[] = {
-     /* clang-format off */
      /* Bool configs */
-@@ -3304,6 +3331,7 @@ standardConfig static_configs[] = {
-     createSpecialConfig("bind", NULL, MODIFIABLE_CONFIG | MULTI_ARG_CONFIG, setConfigBindOption, getConfigBindOption, rewriteConfigBindOption, applyBind),
+     createBoolConfig("rdbchecksum", NULL, IMMUTABLE_CONFIG, server.rdb_checksum, 1, NULL, NULL),
+@@ -3403,6 +3430,7 @@ standardConfig static_configs[] = {
+     createSpecialConfig("rdma-bind", NULL, MODIFIABLE_CONFIG | MULTI_ARG_CONFIG, setConfigRdmaBindOption, getConfigRdmaBindOption, rewriteConfigRdmaBindOption, applyRdmaBind),
      createSpecialConfig("replicaof", "slaveof", IMMUTABLE_CONFIG | MULTI_ARG_CONFIG, setConfigReplicaOfOption, getConfigReplicaOfOption, rewriteConfigReplicaOfOption, NULL),
      createSpecialConfig("latency-tracking-info-percentiles", NULL, MODIFIABLE_CONFIG | MULTI_ARG_CONFIG, setConfigLatencyTrackingInfoPercentilesOutputOption, getConfigLatencyTrackingInfoPercentilesOutputOption, rewriteConfigLatencyTrackingInfoPercentilesOutputOption, NULL),
 +    createSpecialConfig("offline", NULL, MODIFIABLE_CONFIG, setOfflineMode, getOfflineMode, rewriteConfigOfflineMode, applyBind),
  
      /* NULL Terminator, this is dropped when we convert to the runtime array. */
-     {NULL}
+     {NULL},
 diff --git a/src/server.c b/src/server.c
-index 1bdf2dd9e..f63c1f463 100644
+index 5affc8d8a..a4985c6af 100644
 --- a/src/server.c
 +++ b/src/server.c
-@@ -2455,9 +2455,15 @@ int listenToPort(connListener *sfd) {
+@@ -2641,9 +2641,15 @@ int listenToPort(connListener *sfd) {
      int j;
      int port = sfd->port;
      char **bindaddr = sfd->bindaddr;
@@ -72,7 +72,7 @@ index 1bdf2dd9e..f63c1f463 100644
  
      for (j = 0; j < sfd->bindaddr_count; j++) {
          char *addr = bindaddr[j];
-@@ -6435,8 +6441,8 @@ void dismissMemoryInChild(void) {
+@@ -6650,8 +6656,8 @@ void dismissMemoryInChild(void) {
      /* madvise(MADV_DONTNEED) may not work if Transparent Huge Pages is enabled. */
      if (server.thp_enabled) return;
  
@@ -83,7 +83,7 @@ index 1bdf2dd9e..f63c1f463 100644
  #if defined(USE_JEMALLOC) && defined(__linux__)
      listIter li;
      listNode *ln;
-@@ -6948,7 +6954,7 @@ int main(int argc, char **argv) {
+@@ -7096,7 +7102,7 @@ __attribute__((weak)) int main(int argc, char **argv) {
      }
      if (server.sentinel_mode) sentinelCheckConfigFile();
  
@@ -93,10 +93,10 @@ index 1bdf2dd9e..f63c1f463 100644
      linuxMemoryWarnings();
      sds err_msg = NULL;
 diff --git a/src/server.h b/src/server.h
-index d6dcd98fe..14e9e1fa9 100644
+index 10241b2e4..b77c82328 100644
 --- a/src/server.h
 +++ b/src/server.h
-@@ -2096,6 +2096,9 @@ struct valkeyServer {
+@@ -1989,6 +1989,9 @@ struct valkeyServer {
      list *clients_waiting_acks; /* Clients waiting in WAIT or WAITAOF. */
      int get_ack_from_replicas;  /* If true we send REPLCONF GETACK. */
      int repl_paused;            /* If true we don't try to connect to master */
@@ -136,5 +136,5 @@ index 000000000..b8c3ba453
 +    }
 +}
 -- 
-2.48.0
+2.49.0
 
