@@ -242,8 +242,8 @@ github.com/stretchr/testify v1.10.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf
 github.com/tmc/grpc-websocket-proxy v0.0.0-20190109142713-0ad062ec5ee5/go.mod h1:ncp9v5uamzpCO7NfCPTXjqaC+bZgJeR0sMTm6dMHP7U=
 github.com/tv42/httpunix v0.0.0-20150427012821-b75d8614f926/go.mod h1:9ESjWnEqriFuLhtthL60Sar/7RFoluCcXsuvEwTV5KM=
 github.com/ugorji/go v1.1.4/go.mod h1:uQMGLiO92mf5W77hV/PUCpI3pbzQx3CRekS0kk+RGrc=
-github.com/valkey-io/valkey-go v1.0.56 h1:7qp/9dqqPbYEEKeFZCnpX6nzM5XzO2MPp0iKh9+c9Wg=
-github.com/valkey-io/valkey-go v1.0.56/go.mod h1:sxpCChk8i3oTG+A/lUi9Lj8C/7WI+yhnQCvDJlPVKNM=
+github.com/valkey-io/valkey-go v1.0.57 h1:rMpREZ7kvWwv9vHkB1WTpI9rX4dQHsvPHimSWenScvI=
+github.com/valkey-io/valkey-go v1.0.57/go.mod h1:sxpCChk8i3oTG+A/lUi9Lj8C/7WI+yhnQCvDJlPVKNM=
 github.com/xiang90/probing v0.0.0-20190116061207-43a291ad63a2/go.mod h1:UETIi67q53MR2AWcXfiuqkDkRtnGDLqkBTpCHuJHxtU=
 github.com/yuin/goldmark v1.1.27/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=
 github.com/yuin/goldmark v1.2.1/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=
