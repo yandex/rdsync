@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net"
 	"os/exec"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -148,12 +149,7 @@ func (n *Node) MatchHost(host string) bool {
 	if hostIP == nil {
 		return false
 	}
-	for _, ip := range n.ips {
-		if hostIP.Equal(ip) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(n.ips, hostIP.Equal)
 }
 
 // RefreshAddrs updates internal ip address list if ttl exceeded
@@ -199,14 +195,8 @@ func (n *Node) configRewrite(ctx context.Context) error {
 	return n.conn.Do(ctx, n.conn.B().ConfigRewrite().Build()).Error()
 }
 
-// configGet returns str value of config key
-func (n *Node) configGet(ctx context.Context, key string) (string, error) {
-	err := n.ensureConn()
-	if err != nil {
-		return "", err
-	}
-	cmd := n.conn.Do(ctx, n.conn.B().ConfigGet().Parameter(key).Build())
-	err = cmd.Error()
+func configParse(key string, cmd client.ValkeyResult) (string, error) {
+	err := cmd.Error()
 	if err != nil {
 		return "", err
 	}
@@ -219,6 +209,16 @@ func (n *Node) configGet(ctx context.Context, key string) (string, error) {
 		return "", fmt.Errorf("unexpected config get result for %s: %v", key, vals)
 	}
 	return val, nil
+}
+
+// configGet returns str value of config key
+func (n *Node) configGet(ctx context.Context, key string) (string, error) {
+	err := n.ensureConn()
+	if err != nil {
+		return "", err
+	}
+	cmd := n.conn.Do(ctx, n.conn.B().ConfigGet().Parameter(key).Build())
+	return configParse(key, cmd)
 }
 
 // IsReplPaused returns pause status of replication on node
@@ -387,24 +387,6 @@ func (n *Node) SetAppendonly(ctx context.Context, value bool) error {
 	return n.configRewrite(ctx)
 }
 
-// GetMinReplicasToWrite returns number of replicas required to write on node
-func (n *Node) GetMinReplicasToWrite(ctx context.Context) (int64, error) {
-	val, err := n.configGet(ctx, "min-replicas-to-write")
-	if err != nil {
-		return 0, err
-	}
-	ret, err := strconv.ParseInt(val, 10, 64)
-	if err != nil {
-		return 0, fmt.Errorf("unable to parse min-replicas-to-write value: %s", err.Error())
-	}
-	return ret, nil
-}
-
-// IsReadOnly returns ReadOnly status for node
-func (n *Node) IsReadOnly(minReplicasToWrite int64) bool {
-	return minReplicasToWrite == highMinReplicas
-}
-
 // SetReadOnly makes node read-only by setting min replicas to unreasonably high value and disconnecting clients
 func (n *Node) SetReadOnly(ctx context.Context, disconnect bool) (error, error) {
 	err := n.ensureConn()
@@ -465,14 +447,21 @@ func (n *Node) Restart(ctx context.Context) error {
 	return cmd.Run()
 }
 
-// GetInfo returns raw info map
-func (n *Node) GetInfo(ctx context.Context) (map[string]string, error) {
+// GetState returns raw info map, min-replicas-to-write setting value and flags: read-only, offline, repl-paused
+func (n *Node) GetState(ctx context.Context) (map[string]string, int64, bool, bool, bool, error) {
 	var err error
-	var cmd client.ValkeyResult
+	var resps []client.ValkeyResult
 	err = n.ensureConn()
 	if err == nil {
-		cmd = n.conn.Do(ctx, n.conn.B().Info().Build())
-		err = cmd.Error()
+		resps = n.conn.DoMulti(
+			ctx,
+			n.conn.B().Ping().Build(),
+			n.conn.B().Info().Build(),
+			n.conn.B().ConfigGet().Parameter("min-replicas-to-write").Build(),
+			n.conn.B().ConfigGet().Parameter("offline").Build(),
+			n.conn.B().ConfigGet().Parameter("repl-paused").Build(),
+		)
+		err = resps[0].Error()
 	}
 	if err != nil {
 		n.infoResults = append(n.infoResults, false)
@@ -489,12 +478,12 @@ func (n *Node) GetInfo(ctx context.Context) (map[string]string, error) {
 		if clearCache {
 			n.cachedInfo = nil
 		}
-		return n.cachedInfo, err
+		return n.cachedInfo, 0, false, false, false, err
 	}
 
-	inp, err := cmd.ToString()
+	inp, err := resps[1].ToString()
 	if err != nil {
-		return nil, err
+		return nil, 0, false, false, false, err
 	}
 	lines := strings.Count(inp, "\r\n")
 	res := make(map[string]string, lines)
@@ -517,7 +506,25 @@ func (n *Node) GetInfo(ctx context.Context) (map[string]string, error) {
 		n.infoResults = n.infoResults[1:]
 	}
 	n.cachedInfo = res
-	return res, nil
+	minReplicasStr, err := configParse("min-replicas-to-write", resps[2])
+	if err != nil {
+		return res, 0, false, false, false, err
+	}
+	minReplicas, err := strconv.ParseInt(minReplicasStr, 10, 64)
+	if err != nil {
+		return res, 0, false, false, false, fmt.Errorf("unable to parse min-replicas-to-write value: %s", err.Error())
+	}
+	isReadOnly := minReplicas == highMinReplicas
+	offline, err := configParse("offline", resps[3])
+	if err != nil {
+		return res, minReplicas, isReadOnly, false, false, err
+	}
+	isOffline := offline == "yes"
+	replPaused, err := configParse("repl-paused", resps[4])
+	if err != nil {
+		return res, minReplicas, isReadOnly, isOffline, false, err
+	}
+	return res, minReplicas, isReadOnly, isOffline, replPaused == "yes", nil
 }
 
 func (n *Node) EvaluatePing() (bool, bool) {
@@ -606,8 +613,7 @@ func (n *Node) IsClusterMajorityAlive(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	lines := strings.Split(strVal, "\n")
-	for _, line := range lines {
+	for line := range strings.SplitSeq(strVal, "\n") {
 		split := strings.Split(line, " ")
 		if len(split) < 3 {
 			continue
@@ -691,8 +697,7 @@ func (n *Node) HasClusterSlots(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	lines := strings.Split(strVal, "\n")
-	for _, line := range lines {
+	for line := range strings.SplitSeq(strVal, "\n") {
 		split := strings.Split(line, " ")
 		if len(split) < 3 {
 			continue

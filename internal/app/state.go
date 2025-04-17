@@ -25,7 +25,7 @@ func (app *App) getHostState(fqdn string) *HostState {
 			RunID: app.config.SentinelMode.RunID,
 		}
 	}
-	info, err := node.GetInfo(app.ctx)
+	info, minReplicasToWrite, isReadOnly, isOffline, isReplPaused, err := node.GetState(app.ctx)
 	if err != nil {
 		app.setStateError(&state, fqdn, err.Error())
 		if len(info) == 0 {
@@ -179,22 +179,10 @@ func (app *App) getHostState(fqdn string) *HostState {
 		}
 		state.ReplicaState = &rs
 	}
-	state.MinReplicasToWrite, err = node.GetMinReplicasToWrite(app.ctx)
-	if err != nil {
-		app.setStateError(&state, fqdn, err.Error())
-		return &state
-	}
-	state.IsReadOnly = node.IsReadOnly(state.MinReplicasToWrite)
-	state.IsOffline, err = node.IsOffline(app.ctx)
-	if err != nil {
-		app.setStateError(&state, fqdn, err.Error())
-		return &state
-	}
-	state.IsReplPaused, err = node.IsReplPaused(app.ctx)
-	if err != nil {
-		app.setStateError(&state, fqdn, err.Error())
-		return &state
-	}
+	state.MinReplicasToWrite = minReplicasToWrite
+	state.IsReadOnly = isReadOnly
+	state.IsOffline = isOffline
+	state.IsReplPaused = isReplPaused
 	err = node.RefreshAddrs()
 	if err != nil {
 		app.setStateError(&state, fqdn, err.Error())
