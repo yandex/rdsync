@@ -51,15 +51,15 @@ var zkLogsToSave = map[string]string{
 
 type noLogger struct{}
 
-func (noLogger) Printf(string, ...interface{}) {}
+func (noLogger) Printf(string, ...any) {}
 
-func (noLogger) Print(...interface{}) {}
+func (noLogger) Print(...any) {}
 
 type testContext struct {
 	templateErr         error
 	composer            testutil.Composer
 	senticaches         map[string]client.Client
-	variables           map[string]interface{}
+	variables           map[string]any
 	zk                  *zk.Conn
 	conns               map[string]client.Client
 	senticacheCmdResult string
@@ -184,7 +184,7 @@ func (tctx *testContext) cleanup() {
 		log.Printf("failed to tear down compose: %s", err)
 	}
 
-	tctx.variables = make(map[string]interface{})
+	tctx.variables = make(map[string]any)
 	tctx.composerEnv = make([]string, 0)
 	tctx.zkQueryResult = ""
 	tctx.valkeyCmdResult = ""
@@ -198,7 +198,7 @@ func (tctx *testContext) connectZookeeper(addrs []string, timeout time.Duration)
 	if err != nil {
 		return nil, err
 	}
-	err = conn.AddAuth("digest", []byte(fmt.Sprintf("%s:%s", testUser, testPassword)))
+	err = conn.AddAuth("digest", (fmt.Appendf([]byte{}, "%s:%s", testUser, testPassword)))
 	if err != nil {
 		return nil, err
 	}
@@ -995,7 +995,7 @@ func (tctx *testContext) stepSenticacheHostShouldHaveMasterWithin(host, master s
 }
 
 func (tctx *testContext) stepISaveZookeeperQueryResultAs(varname string) error {
-	var j interface{}
+	var j any
 	if tctx.zkQueryResult != "" {
 		if err := json.Unmarshal([]byte(tctx.zkQueryResult), &j); err != nil {
 			return err

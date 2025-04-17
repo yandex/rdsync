@@ -35,7 +35,7 @@ const (
 	PathHANodesPrefix = "ha_nodes"
 )
 
-func (zklp zkLoggerProxy) Printf(fmtString string, args ...interface{}) {
+func (zklp zkLoggerProxy) Printf(fmtString string, args ...any) {
 	zklp.Debug(fmt.Sprintf(fmtString, args...))
 }
 
@@ -112,7 +112,7 @@ func NewZookeeper(ctx context.Context, config *ZookeeperConfig, logger *slog.Log
 			return nil, fmt.Errorf("zookeeper auth not configured, fill username/password in config or disable auth flag")
 		}
 		acl = zk.DigestACL(zk.PermAll, config.Username, config.Password)
-		err = conn.AddAuth("digest", []byte(fmt.Sprintf("%s:%s", config.Username, config.Password)))
+		err = conn.AddAuth("digest", fmt.Appendf([]byte{}, "%s:%s", config.Username, config.Password))
 		if err != nil {
 			return nil, err
 		}
@@ -137,7 +137,7 @@ func (z *zkDCS) buildFullPath(path string) string {
 	bsep := []byte(sep)[0]
 	res := []byte(JoinPath(z.config.Namespace, path))
 	j := 0
-	for i := 0; i < len(res); i++ {
+	for i := range len(res) {
 		if i > 0 && res[i] == bsep && res[i-1] == bsep {
 			continue
 		}
@@ -396,7 +396,7 @@ func (z *zkDCS) ReleaseLockOrError(path string) error {
 	return nil
 }
 
-func (z *zkDCS) create(path string, val interface{}, flags int32) error {
+func (z *zkDCS) create(path string, val any, flags int32) error {
 	fullPath := z.buildFullPath(path)
 	data, err := json.Marshal(val)
 	if err != nil {
@@ -412,15 +412,15 @@ func (z *zkDCS) create(path string, val interface{}, flags int32) error {
 	return err
 }
 
-func (z *zkDCS) Create(path string, val interface{}) error {
+func (z *zkDCS) Create(path string, val any) error {
 	return z.create(path, val, 0)
 }
 
-func (z *zkDCS) CreateEphemeral(path string, val interface{}) error {
+func (z *zkDCS) CreateEphemeral(path string, val any) error {
 	return z.create(path, val, zk.FlagEphemeral)
 }
 
-func (z *zkDCS) set(path string, val interface{}, flags int32) error {
+func (z *zkDCS) set(path string, val any, flags int32) error {
 	fullPath := z.buildFullPath(path)
 	data, err := json.Marshal(val)
 	if err != nil {
@@ -453,11 +453,11 @@ func (z *zkDCS) set(path string, val interface{}, flags int32) error {
 	return err
 }
 
-func (z *zkDCS) Set(path string, val interface{}) error {
+func (z *zkDCS) Set(path string, val any) error {
 	return z.set(path, val, 0)
 }
 
-func (z *zkDCS) SetEphemeral(path string, val interface{}) error {
+func (z *zkDCS) SetEphemeral(path string, val any) error {
 	return z.set(path, val, zk.FlagEphemeral)
 }
 
@@ -478,7 +478,7 @@ func (z *zkDCS) Delete(path string) error {
 	return err
 }
 
-func (z *zkDCS) Get(path string, dest interface{}) error {
+func (z *zkDCS) Get(path string, dest any) error {
 	fullPath := z.buildFullPath(path)
 	data, _, err := z.retryGet(fullPath)
 	if err == zk.ErrNoNode {
@@ -495,7 +495,7 @@ func (z *zkDCS) Get(path string, dest interface{}) error {
 	return nil
 }
 
-func (z *zkDCS) GetTree(path string) (interface{}, error) {
+func (z *zkDCS) GetTree(path string) (any, error) {
 	fullPath := z.buildFullPath(path)
 	children, err := z.retryChildren(fullPath)
 	if err != nil {
@@ -512,7 +512,7 @@ func (z *zkDCS) GetTree(path string) (interface{}, error) {
 		if len(data) == 0 {
 			return nil, nil
 		}
-		var ret interface{}
+		var ret any
 		err = json.Unmarshal(data, &ret)
 		if err != nil {
 			z.logger.Error(fmt.Sprintf("Malformed node data %s (%s)", fullPath, data), "error", err)
@@ -520,7 +520,7 @@ func (z *zkDCS) GetTree(path string) (interface{}, error) {
 		}
 		return ret, nil
 	}
-	ret := make(map[string]interface{})
+	ret := make(map[string]any)
 	for _, name := range children {
 		ret[name], err = z.GetTree(JoinPath(path, name))
 		if err != nil {

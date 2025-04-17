@@ -33,9 +33,9 @@ func (app *App) CliInfo(verbose bool) int {
 		return 1
 	}
 
-	var tree interface{}
+	var tree any
 	if !verbose {
-		data := make(map[string]interface{})
+		data := make(map[string]any)
 
 		haNodes, err := app.shard.GetShardHostsFromDcs()
 		if err != nil {
@@ -57,7 +57,7 @@ func (app *App) CliInfo(verbose bool) int {
 			app.logger.Error("Failed to get shard state", "error", err)
 			return 1
 		}
-		health := make(map[string]interface{})
+		health := make(map[string]any)
 		for host, state := range shardState {
 			health[host] = state.String()
 		}
@@ -146,7 +146,7 @@ func (app *App) CliState(verbose bool) int {
 		app.logger.Error("Failed to get state", "error", err)
 		return 1
 	}
-	var tree interface{}
+	var tree any
 	if !verbose {
 		shardStateStrings := make(map[string]string)
 		for host, state := range shardState {
@@ -538,7 +538,7 @@ func (app *App) CliHostList() int {
 	app.shard = valkey.NewShard(app.config, app.logger, app.dcs)
 	defer app.shard.Close()
 
-	data := make(map[string]interface{})
+	data := make(map[string]any)
 
 	hosts, err := app.shard.GetShardHostsFromDcs()
 	if err != nil {
@@ -649,13 +649,7 @@ func (app *App) processPriority(priority *int, dryRun bool, host string) (change
 		if err != nil {
 			return false, err
 		}
-		exists := false
-		for _, h := range hosts {
-			if h == host {
-				exists = true
-				break
-			}
-		}
+		exists := slices.Contains(hosts, host)
 		if !exists {
 			fmt.Print("dry run: node can be created\n")
 			return true, nil
