@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -1011,7 +1012,8 @@ func (tctx *testContext) stepISaveValkeyCmdResultAs(varname string) error {
 }
 
 func (tctx *testContext) stepISaveCommandOutputAs(varname string) error {
-	tctx.variables[varname] = strings.TrimSpace(tctx.commandOutput)
+	alphaNumRegexp := regexp.MustCompile(`[^a-zA-Z0-9 ]+`)
+	tctx.variables[varname] = strings.TrimSpace(alphaNumRegexp.ReplaceAllString(tctx.commandOutput, ""))
 	return nil
 }
 

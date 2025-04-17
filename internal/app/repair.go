@@ -154,7 +154,7 @@ func (app *App) repairReplica(node *valkey.Node, masterState, state *HostState, 
 func (app *App) repairLocalNode(master string) bool {
 	local := app.shard.Local()
 
-	offline, err := local.IsOffline(app.ctx)
+	_, _, _, offline, replPaused, err := local.GetState(app.ctx)
 	if err != nil {
 		app.logger.Error("Unable to get local node offline state", "error", err)
 		if app.nodeFailTime[local.FQDN()].IsZero() {
@@ -245,7 +245,7 @@ func (app *App) repairLocalNode(master string) bool {
 			}
 		}
 
-		if state.IsReplPaused || !replicates(shardState[master], state.ReplicaState, local.FQDN(), nil, true) {
+		if replPaused || !replicates(shardState[master], state.ReplicaState, local.FQDN(), nil, true) {
 			if syncing < app.config.Valkey.MaxParallelSyncs {
 				app.logger.Info("Repairing local replica as it is offline and not replicates from primary")
 				app.repairReplica(local, shardState[master], state, master, local.FQDN())

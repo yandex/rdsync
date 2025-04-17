@@ -588,7 +588,7 @@ func (app *App) CliHostAdd(host string, priority *int, dryRun bool, skipValkeyCh
 			return 1
 		}
 		defer node.Close()
-		_, err = node.GetInfo(app.ctx)
+		_, _, _, _, _, err = node.GetState(app.ctx)
 		if err != nil {
 			app.logger.Error(fmt.Sprintf("Node %s is dead", host), "error", err)
 			return 1
