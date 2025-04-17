@@ -45,7 +45,7 @@ func runParallel(f func(string) error, arguments []string) map[string]error {
 		}(argValue)
 	}
 	result := make(map[string]error)
-	for i := 0; i < len(arguments); i++ {
+	for range arguments {
 		pairValue := <-errs
 		result[pairValue.key] = pairValue.err
 	}
