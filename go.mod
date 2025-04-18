@@ -7,7 +7,7 @@ toolchain go1.24.2
 require (
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cucumber/godog v0.15.0
-	github.com/docker/docker v28.0.4+incompatible
+	github.com/docker/docker v28.1.0+incompatible
 	github.com/go-zookeeper/zk v1.0.4
 	github.com/gofrs/flock v0.12.1
 	github.com/heetch/confita v0.10.0
@@ -38,6 +38,7 @@ require (
 	github.com/hashicorp/golang-lru v0.5.4 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
+	github.com/moby/sys/atomicwriter v0.1.0 // indirect
 	github.com/moby/term v0.5.0 // indirect
 	github.com/morikuni/aec v1.0.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
