@@ -2,7 +2,7 @@ module github.com/yandex/rdsync
 
 go 1.24.0
 
-toolchain go1.24.2
+toolchain go1.24.3
 
 require (
 	github.com/cenkalti/backoff/v4 v4.3.0
@@ -51,7 +51,7 @@ require (
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.22.0 // indirect
 	go.opentelemetry.io/otel/metric v1.35.0 // indirect
 	go.opentelemetry.io/otel/trace v1.35.0 // indirect
-	golang.org/x/sys v0.31.0 // indirect
+	golang.org/x/sys v0.33.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20240814211410-ddb44dafa142 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240814211410-ddb44dafa142 // indirect
 	google.golang.org/grpc v1.65.0 // indirect
