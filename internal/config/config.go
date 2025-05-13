@@ -100,7 +100,7 @@ func DefaultValkeyConfig() ValkeyConfig {
 		WaitPromoteTimeout:                  5 * time.Minute,
 		WaitPromoteForceTimeout:             10 * time.Second,
 		WaitPoisonPillTimeout:               30 * time.Second,
-		StaleReplicaLagClose:                60 * time.Second,
+		StaleReplicaLagClose:                90 * time.Second,
 		StaleReplicaLagOpen:                 10 * time.Second,
 		BusyTimeout:                         5 * time.Second,
 		DestructiveReplicationRepairTimeout: 30 * time.Minute,
