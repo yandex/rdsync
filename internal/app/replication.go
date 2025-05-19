@@ -5,6 +5,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/yandex/rdsync/internal/dcs"
 	"github.com/yandex/rdsync/internal/valkey"
 )
 
@@ -73,6 +74,15 @@ func (app *App) closeStaleReplica(master string) error {
 	localState := app.getHostState(local.FQDN())
 	if app.isReplicaStale(localState.ReplicaState, false) {
 		app.logger.Debug("Local node seems stale. Checking if we could close.")
+		var switchover Switchover
+		err := app.dcs.Get(pathCurrentSwitch, &switchover)
+		if err == nil {
+			app.logger.Debug(fmt.Sprintf("Skipping staleness close due to switchover in progress: %v.", switchover))
+			return nil
+		}
+		if err != dcs.ErrNotFound {
+			return err
+		}
 		shardState, err := app.getShardStateFromDcs()
 		if err != nil {
 			return err
