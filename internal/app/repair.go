@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
@@ -151,10 +152,48 @@ func (app *App) repairReplica(node *valkey.Node, masterState, state *HostState, 
 	}
 }
 
+func (app *App) reservedConnectionsWatchdog(info map[string]string) error {
+	maxClients, ok := info["maxclients"]
+	if !ok {
+		return fmt.Errorf("no maxclients in info")
+	}
+	parsedMaxClients, err := strconv.ParseInt(maxClients, 10, 64)
+	if err != nil {
+		return fmt.Errorf("unable to parse maxclients from info: %w", err)
+	}
+	clusterConns, ok := info["cluster_connections"]
+	if !ok {
+		return fmt.Errorf("no cluster_connections in info")
+	}
+	parsedClusterConns, err := strconv.ParseInt(clusterConns, 10, 64)
+	if err != nil {
+		return fmt.Errorf("unable to parse cluster_connections from info: %w", err)
+	}
+	connectedCliends, ok := info["connected_clients"]
+	if !ok {
+		return fmt.Errorf("no connected_clients in info")
+	}
+	parsedConnectedClients, err := strconv.ParseInt(connectedCliends, 10, 64)
+	if err != nil {
+		return fmt.Errorf("unable to parse connected_clients from info: %w", err)
+	}
+	freeConns := parsedMaxClients - parsedClusterConns - parsedConnectedClients
+	if freeConns < int64(app.config.Valkey.ReservedConnections) {
+		app.logger.Warn(fmt.Sprintf("Local node has %d free connections left. Killing all client connections.", freeConns))
+		node := app.shard.Local()
+		err = node.DisconnectClients(app.ctx, "normal")
+		if err != nil {
+			return err
+		}
+		return node.DisconnectClients(app.ctx, "pubsub")
+	}
+	return nil
+}
+
 func (app *App) repairLocalNode(master string) bool {
 	local := app.shard.Local()
 
-	_, _, _, offline, replPaused, err := local.GetState(app.ctx)
+	info, _, _, offline, replPaused, err := local.GetState(app.ctx)
 	if err != nil {
 		app.logger.Error("Unable to get local node offline state", "error", err)
 		if app.nodeFailTime[local.FQDN()].IsZero() {
@@ -188,6 +227,10 @@ func (app *App) repairLocalNode(master string) bool {
 		err = app.closeStaleReplica(master)
 		if err != nil {
 			app.logger.Error("Unable to close local node on staleness", "error", err)
+		}
+		err = app.reservedConnectionsWatchdog(info)
+		if err != nil {
+			app.logger.Error("Unable to run reserved connections watchdog", "error", err)
 		}
 		return true
 	}
