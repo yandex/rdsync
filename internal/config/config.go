@@ -39,6 +39,7 @@ type ValkeyConfig struct {
 	FailoverCooldown                    time.Duration `yaml:"failover_cooldown"`
 	MaxParallelSyncs                    int           `yaml:"max_parallel_syncs"`
 	ClusterBusPort                      int           `yaml:"cluster_bus_port"`
+	ReservedConnections                 int           `yaml:"reserved_connections"`
 	TurnBeforeSwitchover                bool          `yaml:"turn_before_switchover"`
 	UseTLS                              bool          `yaml:"use_tls"`
 	AllowDataLoss                       bool          `yaml:"allow_data_loss"`
@@ -105,6 +106,7 @@ func DefaultValkeyConfig() ValkeyConfig {
 		BusyTimeout:                         5 * time.Second,
 		DestructiveReplicationRepairTimeout: 30 * time.Minute,
 		MaxParallelSyncs:                    1,
+		ReservedConnections:                 10,
 		AllowDataLoss:                       false,
 		TurnBeforeSwitchover:                false,
 		RestartCommand:                      "systemctl restart valkey-server",
