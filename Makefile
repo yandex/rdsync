@@ -3,14 +3,14 @@ PROJECT=rdsync
 ZK_VERSION=3.9.3
 
 cmd/rdsync/rdsync:
-	GOOS=linux go build -tags netgo,osusergo -o ./cmd/rdsync/rdsync ./cmd/rdsync/...
+	GOOS=linux GOEXPERIMENT=jsonv2 go build -tags netgo,osusergo -o ./cmd/rdsync/rdsync ./cmd/rdsync/...
 
 format:
 	gofmt -s -w `find . -name '*.go'`
 	goimports -w `find . -name '*.go'`
 
 lint:
-	docker run --rm -v ${CURDIR}:/app -w /app golangci/golangci-lint:v2.3-alpine golangci-lint run -v
+	docker run --rm -v ${CURDIR}:/app -w /app golangci/golangci-lint:v2.4-alpine golangci-lint run -v
 
 unittests:
 	go test ./cmd/... ./internal/...
