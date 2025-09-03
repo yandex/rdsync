@@ -10,7 +10,7 @@ require (
 	github.com/gofrs/flock v0.12.1
 	github.com/heetch/confita v0.10.0
 	github.com/spf13/cobra v1.9.1
-	github.com/spf13/pflag v1.0.7
+	github.com/spf13/pflag v1.0.9
 	github.com/stretchr/testify v1.11.1
 	github.com/valkey-io/valkey-go v1.0.64
 	gopkg.in/yaml.v2 v2.4.0
