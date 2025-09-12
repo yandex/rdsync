@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 )
 
@@ -33,7 +34,7 @@ func (app *App) applyPoisonPill(poisonPill *PoisonPill) error {
 	local := app.shard.Local()
 	isOffline, err := local.IsOffline(app.ctx)
 	if err != nil {
-		app.logger.Error("Unable to check offline status for poison pill apply", "error", err)
+		app.logger.Error("Unable to check offline status for poison pill apply", slog.Any("error", err))
 		return local.Restart(app.ctx)
 	}
 	if !isOffline {
@@ -62,11 +63,11 @@ Out:
 		case <-ticker.C:
 			err := app.dcs.Get(pathPoisonPill, &poisonPill)
 			if err != nil {
-				app.logger.Error("Wait for poison pill apply", "error", err)
+				app.logger.Error("Wait for poison pill apply", slog.Any("error", err))
 			}
 			err = app.applyPoisonPill(&poisonPill)
 			if err != nil {
-				app.logger.Error("Poison pill apply", "error", err.Error())
+				app.logger.Error("Poison pill apply", slog.Any("error", err))
 			}
 			if poisonPill.Applied {
 				break Out

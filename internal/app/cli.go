@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"slices"
 	"sort"
@@ -20,7 +21,7 @@ import (
 func (app *App) CliInfo(verbose bool) int {
 	err := app.connectDCS()
 	if err != nil {
-		app.logger.Error("Unable to connect to dcs", "error", err)
+		app.logger.Error("Unable to connect to dcs", slog.Any("error", err))
 		return 1
 	}
 	app.dcs.Initialize()
@@ -29,7 +30,7 @@ func (app *App) CliInfo(verbose bool) int {
 	app.shard = valkey.NewShard(app.config, app.logger, app.dcs)
 	defer app.shard.Close()
 	if err := app.shard.UpdateHostsInfo(); err != nil {
-		app.logger.Error("Unable to update hosts info", "error", err)
+		app.logger.Error("Unable to update hosts info", slog.Any("error", err))
 		return 1
 	}
 
@@ -39,14 +40,14 @@ func (app *App) CliInfo(verbose bool) int {
 
 		haNodes, err := app.shard.GetShardHostsFromDcs()
 		if err != nil {
-			app.logger.Error("Failed to get hosts", "error", err)
+			app.logger.Error("Failed to get hosts", slog.Any("error", err))
 			return 1
 		}
 		data[pathHANodes] = haNodes
 
 		activeNodes, err := app.GetActiveNodes()
 		if err != nil {
-			app.logger.Error("Failed to get active nodes", "error", err)
+			app.logger.Error("Failed to get active nodes", slog.Any("error", err))
 			return 1
 		}
 		sort.Strings(activeNodes)
@@ -54,7 +55,7 @@ func (app *App) CliInfo(verbose bool) int {
 
 		shardState, err := app.getShardStateFromDcs()
 		if err != nil {
-			app.logger.Error("Failed to get shard state", "error", err)
+			app.logger.Error("Failed to get shard state", slog.Any("error", err))
 			return 1
 		}
 		health := make(map[string]any)
@@ -69,7 +70,7 @@ func (app *App) CliInfo(verbose bool) int {
 			if err == nil {
 				data[path] = switchover.String()
 			} else if err != dcs.ErrNotFound {
-				app.logger.Error(fmt.Sprintf("Failed to get %s", path), "error", err)
+				app.logger.Error(fmt.Sprintf("Failed to get %s", path), slog.Any("error", err))
 				return 1
 			}
 		}
@@ -79,7 +80,7 @@ func (app *App) CliInfo(verbose bool) int {
 		if err == nil {
 			data[pathMaintenance] = maintenance.String()
 		} else if err != dcs.ErrNotFound {
-			app.logger.Error(fmt.Sprintf("Failed to get %s", pathMaintenance), "error", err)
+			app.logger.Error(fmt.Sprintf("Failed to get %s", pathMaintenance), slog.Any("error", err))
 			return 1
 		}
 
@@ -88,14 +89,14 @@ func (app *App) CliInfo(verbose bool) int {
 		if err == nil {
 			data[pathPoisonPill] = poisonPill.String()
 		} else if err != dcs.ErrNotFound {
-			app.logger.Error(fmt.Sprintf("Failed to get %s", pathPoisonPill), "error", err)
+			app.logger.Error(fmt.Sprintf("Failed to get %s", pathPoisonPill), slog.Any("error", err))
 			return 1
 		}
 
 		var manager dcs.LockOwner
 		err = app.dcs.Get(pathManagerLock, &manager)
 		if err != nil && err != dcs.ErrNotFound {
-			app.logger.Error(fmt.Sprintf("Failed to get %s", pathManagerLock), "error", err)
+			app.logger.Error(fmt.Sprintf("Failed to get %s", pathManagerLock), slog.Any("error", err))
 			return 1
 		}
 		data[pathManagerLock] = manager.Hostname
@@ -103,7 +104,7 @@ func (app *App) CliInfo(verbose bool) int {
 		var master string
 		err = app.dcs.Get(pathMasterNode, &master)
 		if err != nil && err != dcs.ErrNotFound {
-			app.logger.Error(fmt.Sprintf("Failed to get %s", pathMasterNode), "error", err)
+			app.logger.Error(fmt.Sprintf("Failed to get %s", pathMasterNode), slog.Any("error", err))
 			return 1
 		}
 		data[pathMasterNode] = master
@@ -111,13 +112,13 @@ func (app *App) CliInfo(verbose bool) int {
 	} else {
 		tree, err = app.dcs.GetTree("")
 		if err != nil {
-			app.logger.Error("Failed to get tree", "error", err)
+			app.logger.Error("Failed to get tree", slog.Any("error", err))
 			return 1
 		}
 	}
 	data, err := yaml.Marshal(tree)
 	if err != nil {
-		app.logger.Error("failed to marshal yaml", "error", err)
+		app.logger.Error("failed to marshal yaml", slog.Any("error", err))
 		return 1
 	}
 	fmt.Print(string(data))
@@ -128,7 +129,7 @@ func (app *App) CliInfo(verbose bool) int {
 func (app *App) CliState(verbose bool) int {
 	err := app.connectDCS()
 	if err != nil {
-		app.logger.Error("Unable to connect to dcs", "error", err)
+		app.logger.Error("Unable to connect to dcs", slog.Any("error", err))
 		return 1
 	}
 	defer app.dcs.Close()
@@ -137,13 +138,13 @@ func (app *App) CliState(verbose bool) int {
 	defer app.shard.Close()
 
 	if err := app.shard.UpdateHostsInfo(); err != nil {
-		app.logger.Error("Unable to update hosts info", "error", err)
+		app.logger.Error("Unable to update hosts info", slog.Any("error", err))
 		return 1
 	}
 
 	shardState, err := app.getShardStateFromDB()
 	if err != nil {
-		app.logger.Error("Failed to get state", "error", err)
+		app.logger.Error("Failed to get state", slog.Any("error", err))
 		return 1
 	}
 	var tree any
@@ -158,7 +159,7 @@ func (app *App) CliState(verbose bool) int {
 	}
 	data, err := yaml.Marshal(tree)
 	if err != nil {
-		app.logger.Error("Failed to marshal yaml", "error", err)
+		app.logger.Error("Failed to marshal yaml", slog.Any("error", err))
 		return 1
 	}
 	fmt.Print(string(data))
@@ -191,7 +192,7 @@ func (app *App) CliSwitch(switchFrom, switchTo string, waitTimeout time.Duration
 	}
 	err := app.connectDCS()
 	if err != nil {
-		app.logger.Error("Unable to connect to dcs", "error", err)
+		app.logger.Error("Unable to connect to dcs", slog.Any("error", err))
 		return 1
 	}
 	defer app.dcs.Close()
@@ -200,7 +201,7 @@ func (app *App) CliSwitch(switchFrom, switchTo string, waitTimeout time.Duration
 	defer app.shard.Close()
 
 	if err := app.shard.UpdateHostsInfo(); err != nil {
-		app.logger.Error("Unable to update hosts info", "error", err)
+		app.logger.Error("Unable to update hosts info", slog.Any("error", err))
 		return 1
 	}
 
@@ -214,12 +215,12 @@ func (app *App) CliSwitch(switchFrom, switchTo string, waitTimeout time.Duration
 
 	var currentMaster string
 	if err := app.dcs.Get(pathMasterNode, &currentMaster); err != nil {
-		app.logger.Error("Failed to get current master", "error", err)
+		app.logger.Error("Failed to get current master", slog.Any("error", err))
 		return 1
 	}
 	activeNodes, err := app.GetActiveNodes()
 	if err != nil {
-		app.logger.Error("Unable to get active nodes", "error", err)
+		app.logger.Error("Unable to get active nodes", slog.Any("error", err))
 		return 1
 	}
 
@@ -269,12 +270,12 @@ func (app *App) CliSwitch(switchFrom, switchTo string, waitTimeout time.Duration
 		} else {
 			states, err := app.getShardStateFromDB()
 			if err != nil {
-				app.logger.Error("No actual shard state", "error", err)
+				app.logger.Error("No actual shard state", slog.Any("error", err))
 				return 1
 			}
 			toHost, err = app.getMostDesirableNode(states, switchFrom)
 			if err != nil {
-				app.logger.Error("No desirable node", "error", err)
+				app.logger.Error("No desirable node", slog.Any("error", err))
 				return 1
 			}
 		}
@@ -287,7 +288,7 @@ func (app *App) CliSwitch(switchFrom, switchTo string, waitTimeout time.Duration
 		return 2
 	}
 	if err != dcs.ErrNotFound {
-		app.logger.Error("Unable to get current switchover status", "error", err)
+		app.logger.Error("Unable to get current switchover status", slog.Any("error", err))
 		return 2
 	}
 
@@ -311,7 +312,7 @@ func (app *App) CliSwitch(switchFrom, switchTo string, waitTimeout time.Duration
 		return 2
 	}
 	if err != nil {
-		app.logger.Error("Unable to create switchover in dcs", "error", err)
+		app.logger.Error("Unable to create switchover in dcs", slog.Any("error", err))
 		return 1
 	}
 	// wait for switchover to complete
@@ -352,7 +353,7 @@ func (app *App) CliSwitch(switchFrom, switchTo string, waitTimeout time.Duration
 func (app *App) CliEnableMaintenance(waitTimeout time.Duration) int {
 	err := app.connectDCS()
 	if err != nil {
-		app.logger.Error("Unable to connect to dcs", "error", err)
+		app.logger.Error("Unable to connect to dcs", slog.Any("error", err))
 		return 1
 	}
 	defer app.dcs.Close()
@@ -364,7 +365,7 @@ func (app *App) CliEnableMaintenance(waitTimeout time.Duration) int {
 	}
 	err = app.dcs.Create(pathMaintenance, maintenance)
 	if err != nil && err != dcs.ErrExists {
-		app.logger.Error("Unable to create maintenance path in dcs", "error", err)
+		app.logger.Error("Unable to create maintenance path in dcs", slog.Any("error", err))
 		return 1
 	}
 	if waitTimeout > 0 {
@@ -377,7 +378,7 @@ func (app *App) CliEnableMaintenance(waitTimeout time.Duration) int {
 			case <-ticker.C:
 				err = app.dcs.Get(pathMaintenance, maintenance)
 				if err != nil {
-					app.logger.Error("Unable to get maintenance status from dcs", "error", err)
+					app.logger.Error("Unable to get maintenance status from dcs", slog.Any("error", err))
 				}
 				if maintenance.RdSyncPaused {
 					break Out
@@ -401,7 +402,7 @@ func (app *App) CliEnableMaintenance(waitTimeout time.Duration) int {
 func (app *App) CliDisableMaintenance(waitTimeout time.Duration) int {
 	err := app.connectDCS()
 	if err != nil {
-		app.logger.Error("Unable to connect to dcs", "error", err)
+		app.logger.Error("Unable to connect to dcs", slog.Any("error", err))
 		return 1
 	}
 	defer app.dcs.Close()
@@ -413,13 +414,13 @@ func (app *App) CliDisableMaintenance(waitTimeout time.Duration) int {
 		fmt.Println("maintenance disabled")
 		return 0
 	} else if err != nil {
-		app.logger.Error("Unable to get maintenance status from dcs", "error", err)
+		app.logger.Error("Unable to get maintenance status from dcs", slog.Any("error", err))
 		return 1
 	}
 	maintenance.ShouldLeave = true
 	err = app.dcs.Set(pathMaintenance, maintenance)
 	if err != nil {
-		app.logger.Error("Unable to update maintenance in dcs", "error", err)
+		app.logger.Error("Unable to update maintenance in dcs", slog.Any("error", err))
 		return 1
 	}
 	if waitTimeout > 0 {
@@ -436,7 +437,7 @@ func (app *App) CliDisableMaintenance(waitTimeout time.Duration) int {
 					break Out
 				}
 				if err != nil {
-					app.logger.Error("Unable to get maintenance status from dcs", "error", err)
+					app.logger.Error("Unable to get maintenance status from dcs", slog.Any("error", err))
 				}
 			case <-waitCtx.Done():
 				break Out
@@ -457,7 +458,7 @@ func (app *App) CliDisableMaintenance(waitTimeout time.Duration) int {
 func (app *App) CliGetMaintenance() int {
 	err := app.connectDCS()
 	if err != nil {
-		app.logger.Error("Unable to connect to dcs", "error", err)
+		app.logger.Error("Unable to connect to dcs", slog.Any("error", err))
 		return 1
 	}
 	defer app.dcs.Close()
@@ -477,7 +478,7 @@ func (app *App) CliGetMaintenance() int {
 		fmt.Println("off")
 		return 0
 	default:
-		app.logger.Error("Unable to get maintenance status", "error", err)
+		app.logger.Error("Unable to get maintenance status", slog.Any("error", err))
 		return 1
 	}
 }
@@ -486,7 +487,7 @@ func (app *App) CliGetMaintenance() int {
 func (app *App) CliAbort() int {
 	err := app.connectDCS()
 	if err != nil {
-		app.logger.Error("Unable to connect to dcs", "error", err)
+		app.logger.Error("Unable to connect to dcs", slog.Any("error", err))
 		return 1
 	}
 	defer app.dcs.Close()
@@ -498,7 +499,7 @@ func (app *App) CliAbort() int {
 		return 0
 	}
 	if err != nil {
-		app.logger.Error("Unable to get switchover status", "error", err)
+		app.logger.Error("Unable to get switchover status", slog.Any("error", err))
 		return 1
 	}
 
@@ -507,7 +508,7 @@ func (app *App) CliAbort() int {
 	reader := bufio.NewReader(os.Stdin)
 	response, err := reader.ReadString('\n')
 	if err != nil {
-		app.logger.Error("Unable to parse response", "error", err)
+		app.logger.Error("Unable to parse response", slog.Any("error", err))
 		return 1
 	}
 	if strings.TrimSpace(response) != phrase {
@@ -517,7 +518,7 @@ func (app *App) CliAbort() int {
 
 	err = app.dcs.Delete(pathCurrentSwitch)
 	if err != nil {
-		app.logger.Error("Unable to remove switchover path from dcs", "error", err)
+		app.logger.Error("Unable to remove switchover path from dcs", slog.Any("error", err))
 		return 1
 	}
 
@@ -529,7 +530,7 @@ func (app *App) CliAbort() int {
 func (app *App) CliHostList() int {
 	err := app.connectDCS()
 	if err != nil {
-		app.logger.Error("Unable to connect to dcs", "error", err)
+		app.logger.Error("Unable to connect to dcs", slog.Any("error", err))
 		return 1
 	}
 	app.dcs.Initialize()
@@ -542,7 +543,7 @@ func (app *App) CliHostList() int {
 
 	hosts, err := app.shard.GetShardHostsFromDcs()
 	if err != nil {
-		app.logger.Error("Failed to get hosts", "error", err)
+		app.logger.Error("Failed to get hosts", slog.Any("error", err))
 		return 1
 	}
 	sort.Strings(hosts)
@@ -550,7 +551,7 @@ func (app *App) CliHostList() int {
 
 	out, err := yaml.Marshal(data)
 	if err != nil {
-		app.logger.Error("Failed to marshal yaml", "error", err)
+		app.logger.Error("Failed to marshal yaml", slog.Any("error", err))
 		return 1
 	}
 	fmt.Print(string(out))
@@ -566,7 +567,7 @@ func (app *App) CliHostAdd(host string, priority *int, dryRun bool, skipValkeyCh
 
 	err := app.connectDCS()
 	if err != nil {
-		app.logger.Error("Unable to connect to dcs", "error", err)
+		app.logger.Error("Unable to connect to dcs", slog.Any("error", err))
 		return 1
 	}
 	defer app.dcs.Close()
@@ -584,13 +585,13 @@ func (app *App) CliHostAdd(host string, priority *int, dryRun bool, skipValkeyCh
 	if !skipValkeyCheck {
 		node, err := valkey.NewNode(app.config, app.logger, host)
 		if err != nil {
-			app.logger.Error(fmt.Sprintf("Failed to check connection to %s, can't tell if it's alive", host), "error", err)
+			app.logger.Error(fmt.Sprintf("Failed to check connection to %s, can't tell if it's alive", host), slog.Any("error", err))
 			return 1
 		}
 		defer node.Close()
 		_, _, _, _, _, err = node.GetState(app.ctx)
 		if err != nil {
-			app.logger.Error(fmt.Sprintf("Node %s is dead", host), "error", err)
+			app.logger.Error(fmt.Sprintf("Node %s is dead", host), slog.Any("error", err))
 			return 1
 		}
 	}
@@ -598,7 +599,7 @@ func (app *App) CliHostAdd(host string, priority *int, dryRun bool, skipValkeyCh
 	if !dryRun && priority == nil {
 		err = app.dcs.Set(dcs.JoinPath(pathHANodes, host), *valkey.DefaultNodeConfiguration())
 		if err != nil && err != dcs.ErrExists {
-			app.logger.Error(fmt.Sprintf("Unable to create dcs path for %s", host), "error", err)
+			app.logger.Error(fmt.Sprintf("Unable to create dcs path for %s", host), slog.Any("error", err))
 			return 1
 		}
 	}
@@ -624,7 +625,7 @@ func (app *App) CliHostAdd(host string, priority *int, dryRun bool, skipValkeyCh
 func (app *App) CliHostRemove(host string) int {
 	err := app.connectDCS()
 	if err != nil {
-		app.logger.Error("Unable to connect to dcs", "error", err)
+		app.logger.Error("Unable to connect to dcs", slog.Any("error", err))
 		return 1
 	}
 	defer app.dcs.Close()
@@ -632,7 +633,7 @@ func (app *App) CliHostRemove(host string) int {
 
 	err = app.dcs.Delete(dcs.JoinPath(pathHANodes, host))
 	if err != nil && err != dcs.ErrNotFound {
-		app.logger.Error(fmt.Sprintf("Unable to delete dcs path for %s", host), "error", err)
+		app.logger.Error(fmt.Sprintf("Unable to delete dcs path for %s", host), slog.Any("error", err))
 		return 1
 	}
 	fmt.Println("host has been removed")

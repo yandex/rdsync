@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/yandex/rdsync/internal/valkey"
@@ -95,7 +96,7 @@ func (app *App) cacheUpdater() {
 				err = app.updateCache(dcsState, app.cache)
 			}
 			if err != nil {
-				app.logger.Error("CacheUpdater: failed to update cache", "error", err)
+				app.logger.Error("CacheUpdater: failed to update cache", slog.Any("error", err))
 			}
 
 		case <-app.ctx.Done():

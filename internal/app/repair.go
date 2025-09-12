@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"log/slog"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -35,10 +36,10 @@ func (app *App) repairShard(shardState map[string]*HostState, activeNodes []stri
 		if !state.IsReadOnly {
 			err, rewriteErr := node.SetReadOnly(app.ctx, false)
 			if err != nil {
-				app.logger.Error("Unable to make replica read-only", "fqdn", node.FQDN(), "error", err)
+				app.logger.Error("Unable to make replica read-only", slog.String("fqdn", node.FQDN()), slog.Any("error", err))
 			}
 			if rewriteErr != nil {
-				app.logger.Error("Unable to rewrite config after making replica read-only", "fqdn", node.FQDN(), "error", rewriteErr)
+				app.logger.Error("Unable to rewrite config after making replica read-only", slog.String("fqdn", node.FQDN()), slog.Any("error", rewriteErr))
 			}
 		}
 		rs := state.ReplicaState
@@ -57,32 +58,32 @@ func (app *App) repairMaster(node *valkey.Node, activeNodes []string, state *Hos
 	if state.IsReadOnly || state.MinReplicasToWrite != 0 {
 		err, rewriteErr := node.SetReadWrite(app.ctx)
 		if err != nil {
-			app.logger.Error("Unable to set master read-write", "fqdn", node.FQDN(), "error", err)
+			app.logger.Error("Unable to set master read-write", slog.String("fqdn", node.FQDN()), slog.Any("error", err))
 		}
 		if rewriteErr != nil {
-			app.logger.Error("Unable to rewrite config on master", "fqdn", node.FQDN(), "error", rewriteErr)
+			app.logger.Error("Unable to rewrite config on master", slog.String("fqdn", node.FQDN()), slog.Any("error", rewriteErr))
 		}
 	}
 	expectedNumReplicas := app.getNumReplicasToWrite(activeNodes)
 	actualNumReplicas, err := node.GetNumQuorumReplicas(app.ctx)
 	if err != nil {
-		app.logger.Error("Unable to get actual num quorum replicas on master", "fqdn", node.FQDN(), "error", err)
+		app.logger.Error("Unable to get actual num quorum replicas on master", slog.String("fqdn", node.FQDN()), slog.Any("error", err))
 		return
 	}
 	if actualNumReplicas != expectedNumReplicas {
-		app.logger.Info(fmt.Sprintf("Changing num quorum replicas from %d to %d on master", actualNumReplicas, expectedNumReplicas), "fqdn", node.FQDN())
+		app.logger.Info(fmt.Sprintf("Changing num quorum replicas from %d to %d on master", actualNumReplicas, expectedNumReplicas), slog.String("fqdn", node.FQDN()))
 		err, rewriteErr := node.SetNumQuorumReplicas(app.ctx, expectedNumReplicas)
 		if err != nil {
-			app.logger.Error("Unable to set num quorum replicas on master", "fqdn", node.FQDN(), "error", err)
+			app.logger.Error("Unable to set num quorum replicas on master", slog.String("fqdn", node.FQDN()), slog.Any("error", err))
 		}
 		if rewriteErr != nil {
-			app.logger.Error("Unable to rewrite config on master", "fqdn", node.FQDN(), "error", rewriteErr)
+			app.logger.Error("Unable to rewrite config on master", slog.String("fqdn", node.FQDN()), slog.Any("error", rewriteErr))
 		}
 	}
 	if state.IsReplPaused {
 		err := node.ResumeReplication(app.ctx)
 		if err != nil {
-			app.logger.Error("Unable to make resume replication on master", "fqdn", node.FQDN(), "error", err)
+			app.logger.Error("Unable to make resume replication on master", slog.String("fqdn", node.FQDN()), slog.Any("error", err))
 		}
 	}
 }
@@ -101,53 +102,53 @@ func (app *App) repairReplica(node *valkey.Node, masterState, state *HostState, 
 			cmd := exec.CommandContext(app.ctx, split[0], split[1:]...)
 			err := cmd.Run()
 			if err != nil {
-				app.logger.Error("Unable to run destructive replication repair on local node", "error", err)
+				app.logger.Error("Unable to run destructive replication repair on local node", slog.Any("error", err))
 			} else {
 				app.replFailTime = time.Now()
 			}
 		}
 	}
 	if !replicates(masterState, rs, replicaFQDN, masterNode, true) {
-		app.logger.Info("Initiating replica repair", "fqdn", replicaFQDN)
+		app.logger.Info("Initiating replica repair", slog.String("fqdn", replicaFQDN))
 		switch app.mode {
 		case modeSentinel:
 			err := node.SentinelMakeReplica(app.ctx, master)
 			if err != nil {
-				app.logger.Error(fmt.Sprintf("Unable to make %s replica of %s", node.FQDN(), master), "error", err)
+				app.logger.Error(fmt.Sprintf("Unable to make %s replica of %s", node.FQDN(), master), slog.Any("error", err))
 			}
 		case modeCluster:
 			alone, err := node.IsClusterNodeAlone(app.ctx)
 			if err != nil {
-				app.logger.Error(fmt.Sprintf("Unable to check if %s is alone", node.FQDN()), "error", err)
+				app.logger.Error(fmt.Sprintf("Unable to check if %s is alone", node.FQDN()), slog.Any("error", err))
 				return
 			}
 			if alone {
 				masterIP, err := masterNode.GetIP()
 				if err != nil {
-					app.logger.Error(fmt.Sprintf("Unable to make %s replica of %s", node.FQDN(), master), "error", err)
+					app.logger.Error(fmt.Sprintf("Unable to make %s replica of %s", node.FQDN(), master), slog.Any("error", err))
 					return
 				}
 				err = node.ClusterMeet(app.ctx, masterIP, app.config.Valkey.Port, app.config.Valkey.ClusterBusPort)
 				if err != nil {
-					app.logger.Error(fmt.Sprintf("Unable to make %s meet with master %s at %s:%d:%d", node.FQDN(), master, masterIP, app.config.Valkey.Port, app.config.Valkey.ClusterBusPort), "error", err)
+					app.logger.Error(fmt.Sprintf("Unable to make %s meet with master %s at %s:%d:%d", node.FQDN(), master, masterIP, app.config.Valkey.Port, app.config.Valkey.ClusterBusPort), slog.Any("error", err))
 					return
 				}
 			}
 			masterID, err := masterNode.ClusterGetID(app.ctx)
 			if err != nil {
-				app.logger.Error(fmt.Sprintf("Unable to get cluster id of %s", master), "error", err.Error())
+				app.logger.Error(fmt.Sprintf("Unable to get cluster id of %s", master), slog.Any("error", err))
 				return
 			}
 			err = node.ClusterMakeReplica(app.ctx, masterID)
 			if err != nil {
-				app.logger.Error(fmt.Sprintf("Unable to make %s replica of %s (%s)", node.FQDN(), master, masterID), "error", err)
+				app.logger.Error(fmt.Sprintf("Unable to make %s replica of %s (%s)", node.FQDN(), master, masterID), slog.Any("error", err))
 			}
 		}
 	}
 	if state.IsReplPaused {
 		err := node.ResumeReplication(app.ctx)
 		if err != nil {
-			app.logger.Error("Unable to resume replication", "fqdn", node.FQDN(), "error", err.Error())
+			app.logger.Error("Unable to resume replication", slog.String("fqdn", node.FQDN()), slog.Any("error", err))
 		}
 	}
 }
@@ -195,7 +196,7 @@ func (app *App) repairLocalNode(master string) bool {
 
 	info, _, _, offline, replPaused, err := local.GetState(app.ctx)
 	if err != nil {
-		app.logger.Error("Unable to get local node offline state", "error", err)
+		app.logger.Error("Unable to get local node offline state", slog.Any("error", err))
 		if app.nodeFailTime[local.FQDN()].IsZero() {
 			app.nodeFailTime[local.FQDN()] = time.Now()
 		}
@@ -203,7 +204,7 @@ func (app *App) repairLocalNode(master string) bool {
 		if failedTime > app.config.Valkey.BusyTimeout && strings.HasPrefix(err.Error(), "BUSY ") {
 			err = local.ScriptKill(app.ctx)
 			if err != nil {
-				app.logger.Error("Local node is busy running a script. But SCRIPT KILL failed", "error", err)
+				app.logger.Error("Local node is busy running a script. But SCRIPT KILL failed", slog.Any("error", err))
 			}
 		}
 		if strings.HasPrefix(err.Error(), "LOADING ") {
@@ -212,7 +213,7 @@ func (app *App) repairLocalNode(master string) bool {
 			app.nodeFailTime[local.FQDN()] = time.Now()
 			err = local.Restart(app.ctx)
 			if err != nil {
-				app.logger.Error("Unable to restart local node", "error", err)
+				app.logger.Error("Unable to restart local node", slog.Any("error", err))
 			}
 		}
 	} else if !offline {
@@ -222,22 +223,22 @@ func (app *App) repairLocalNode(master string) bool {
 	if !offline {
 		err = app.adjustAofMode(master)
 		if err != nil {
-			app.logger.Error("Unable to adjust aof config on local node", "error", err)
+			app.logger.Error("Unable to adjust aof config on local node", slog.Any("error", err))
 		}
 		err = app.closeStaleReplica(master)
 		if err != nil {
-			app.logger.Error("Unable to close local node on staleness", "error", err)
+			app.logger.Error("Unable to close local node on staleness", slog.Any("error", err))
 		}
 		err = app.reservedConnectionsWatchdog(info)
 		if err != nil {
-			app.logger.Error("Unable to run reserved connections watchdog", "error", err)
+			app.logger.Error("Unable to run reserved connections watchdog", slog.Any("error", err))
 		}
 		return true
 	}
 
 	shardState, err := app.getShardStateFromDB()
 	if err != nil {
-		app.logger.Error("Local repair: unable to get actual shard state", "error", err)
+		app.logger.Error("Local repair: unable to get actual shard state", slog.Any("error", err))
 		return false
 	}
 	state, ok := shardState[local.FQDN()]
@@ -248,7 +249,7 @@ func (app *App) repairLocalNode(master string) bool {
 	if master == local.FQDN() && len(shardState) != 1 {
 		activeNodes, err := app.GetActiveNodes()
 		if err != nil {
-			app.logger.Error("Unable to get active nodes for local node repair", "error", err)
+			app.logger.Error("Unable to get active nodes for local node repair", slog.Any("error", err))
 			return true
 		}
 		activeSet := make(map[string]struct{}, len(activeNodes))
@@ -275,7 +276,7 @@ func (app *App) repairLocalNode(master string) bool {
 	} else if app.isReplicaStale(state.ReplicaState, true) {
 		shardState, err := app.getShardStateFromDcs()
 		if err != nil {
-			app.logger.Error("Unable to get shard state from dcs on slate replica open", "error", err)
+			app.logger.Error("Unable to get shard state from dcs on slate replica open", slog.Any("error", err))
 		}
 		syncing := 0
 		for host, hostState := range shardState {
@@ -305,7 +306,7 @@ func (app *App) repairLocalNode(master string) bool {
 	}
 	err = local.SetOnline(app.ctx)
 	if err != nil {
-		app.logger.Error("Unable to set local node online", "error", err)
+		app.logger.Error("Unable to set local node online", slog.Any("error", err))
 		return false
 	}
 	if !app.dcsDivergeTime.IsZero() {

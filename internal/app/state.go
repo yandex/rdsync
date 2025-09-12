@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 	"time"
@@ -10,7 +11,7 @@ import (
 )
 
 func (app *App) setStateError(state *HostState, fqdn, message string) {
-	app.logger.Error("GetHostState error", "fqdn", fqdn, "error", message)
+	app.logger.Error("GetHostState error", slog.String("fqdn", fqdn), slog.String("error", message))
 	state.Error = message
 }
 
@@ -113,7 +114,7 @@ func (app *App) getHostState(fqdn string) *HostState {
 			replicaID := fmt.Sprintf("slave%d", i)
 			replicaValue, ok := info[replicaID]
 			if !ok {
-				app.logger.Warn(fmt.Sprintf("Master has no %s in info but connected_slaves is %d", replicaID, numReplicas), "fqdn", fqdn)
+				app.logger.Warn(fmt.Sprintf("Master has no %s in info but connected_slaves is %d", replicaID, numReplicas), slog.String("fqdn", fqdn))
 				i++
 				continue
 			}

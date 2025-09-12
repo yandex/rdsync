@@ -62,11 +62,11 @@ func NewNode(config *config.Config, logger *slog.Logger, fqdn string) (*Node, er
 	} else {
 		host = fqdn
 	}
-	nodeLogger := logger.With("module", "node", "fqdn", host)
+	nodeLogger := logger.With(slog.String("module", "node"), slog.String("fqdn", host))
 	now := time.Now()
 	ips, err := uniqLookup(fqdn)
 	if err != nil {
-		nodeLogger.Warn("Dns lookup failed", "error", err)
+		nodeLogger.Warn("Dns lookup failed", slog.Any("error", err))
 		ips = []net.IP{}
 		now = time.Time{}
 	}
@@ -92,7 +92,7 @@ func NewNode(config *config.Config, logger *slog.Logger, fqdn string) (*Node, er
 	}
 	conn, err := client.NewClient(opts)
 	if err != nil {
-		logger.Warn("Unable to establish initial connection", "fqdn", host, "error", err)
+		logger.Warn("Unable to establish initial connection", slog.String("fqdn", host), slog.Any("error", err))
 		conn = nil
 	}
 	node := Node{
@@ -162,7 +162,7 @@ func (n *Node) RefreshAddrs() error {
 	now := time.Now()
 	ips, err := uniqLookup(n.fqdn)
 	if err != nil {
-		n.logger.Error("Updating ips cache failed", "error", err)
+		n.logger.Error("Updating ips cache failed", slog.Any("error", err))
 		return err
 	}
 	n.ips = ips
@@ -280,7 +280,7 @@ func (n *Node) SetOffline(ctx context.Context) error {
 		return err
 	}
 	if rewriteErr != nil {
-		n.logger.Error("Config rewrite after setting node offline failed", "error", rewriteErr)
+		n.logger.Error("Config rewrite after setting node offline failed", slog.Any("error", rewriteErr))
 	}
 	return nil
 }
@@ -358,7 +358,7 @@ func (n *Node) EmptyQuorumReplicas(ctx context.Context) error {
 			return err
 		}
 		if rewriteErr != nil {
-			n.logger.Error("Rewrite config failed", "error", rewriteErr)
+			n.logger.Error("Rewrite config failed", slog.Any("error", rewriteErr))
 		}
 	}
 	return nil

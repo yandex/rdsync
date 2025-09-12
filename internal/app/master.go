@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/yandex/rdsync/internal/dcs"
@@ -20,7 +21,7 @@ func (app *App) getCurrentMaster(shardState map[string]*HostState) (string, erro
 	if master != "" {
 		stateMaster, err := app.getMasterHost(shardState)
 		if err != nil {
-			app.logger.Warn("Have master in DCS but unable to validate", "error", err)
+			app.logger.Warn("Have master in DCS but unable to validate", slog.Any("error", err))
 			return master, nil
 		}
 		if stateMaster != "" && stateMaster != master {
@@ -192,7 +193,7 @@ func (app *App) promote(master, oldMaster string, shardState map[string]*HostSta
 		}
 		majorityAlive, err := node.IsClusterMajorityAlive(app.ctx)
 		if err != nil {
-			app.logger.Error("New master is not able to check cluster majority state. Assuming that majority is alive.", "error", err)
+			app.logger.Error("New master is not able to check cluster majority state. Assuming that majority is alive.", slog.Any("error", err))
 			majorityAlive = true
 		}
 		if majorityAlive {
