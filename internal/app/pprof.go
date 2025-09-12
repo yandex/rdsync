@@ -1,6 +1,7 @@
 package app
 
 import (
+	"log/slog"
 	"net/http"
 	"net/http/pprof"
 	"os"
@@ -21,7 +22,7 @@ func (app *App) pprofHandler() {
 
 	err := http.ListenAndServe(app.config.PprofAddr, serverMux)
 	if err != nil {
-		app.logger.Error("Unable to init pprof handler", "error", err)
+		app.logger.Error("Unable to init pprof handler", slog.Any("error", err))
 		os.Exit(1)
 	}
 }

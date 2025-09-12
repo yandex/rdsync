@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"log/slog"
 	"slices"
 	"time"
 
@@ -28,11 +29,11 @@ func (app *App) getLastSwitchover() Switchover {
 	var lastSwitch, lastRejectedSwitch Switchover
 	err := app.dcs.Get(pathLastSwitch, &lastSwitch)
 	if err != nil && err != dcs.ErrNotFound {
-		app.logger.Error(pathLastSwitch, "error", err)
+		app.logger.Error(pathLastSwitch, slog.Any("error", err))
 	}
 	errRejected := app.dcs.Get(pathLastRejectedSwitch, &lastRejectedSwitch)
 	if errRejected != nil && errRejected != dcs.ErrNotFound {
-		app.logger.Error(pathLastRejectedSwitch, "error", errRejected)
+		app.logger.Error(pathLastRejectedSwitch, slog.Any("error", errRejected))
 	}
 
 	if lastRejectedSwitch.InitiatedAt.After(lastSwitch.InitiatedAt) {
@@ -62,7 +63,7 @@ func (app *App) startSwitchover(switchover *Switchover) error {
 }
 
 func (app *App) failSwitchover(switchover *Switchover, err error) error {
-	app.logger.Error(fmt.Sprintf("Switchover: %s => %s failed", switchover.From, switchover.To), "error", err)
+	app.logger.Error(fmt.Sprintf("Switchover: %s => %s failed", switchover.From, switchover.To), slog.Any("error", err))
 	switchover.RunCount++
 	switchover.Progress = nil
 	switchover.Result = new(SwitchoverResult)
@@ -149,17 +150,17 @@ func (app *App) performSwitchover(shardState map[string]*HostState, activeNodes 
 	errsRO := runParallel(func(host string) error {
 		if !shardState[host].PingOk {
 			err := fmt.Errorf("host %s is not healthy", host)
-			app.logger.Error("Setting read-only", "error", err)
+			app.logger.Error("Setting read-only", slog.Any("error", err))
 			return err
 		}
 		node := app.shard.Get(host)
 		err, rewriteErr := node.SetReadOnly(app.ctx, host == oldMaster)
 		if err != nil {
-			app.logger.Error(fmt.Sprintf("Setting %s read-only", host), "error", err)
+			app.logger.Error(fmt.Sprintf("Setting %s read-only", host), slog.Any("error", err))
 			return err
 		}
 		if rewriteErr != nil {
-			app.logger.Warn(fmt.Sprintf("Unable to rewrite config after making %s read-only", host), "error", rewriteErr)
+			app.logger.Warn(fmt.Sprintf("Unable to rewrite config after making %s read-only", host), slog.Any("error", rewriteErr))
 		}
 		app.logger.Info(fmt.Sprintf("Switchover: host %s is read-only", host))
 		return nil
@@ -167,7 +168,7 @@ func (app *App) performSwitchover(shardState map[string]*HostState, activeNodes 
 
 	if err, ok := errsRO[oldMaster]; ok && err != nil && shardState[oldMaster].PingOk {
 		err = fmt.Errorf("failed to set old master %s read-only: %s", oldMaster, err.Error())
-		app.logger.Error("Switchover", "error", err)
+		app.logger.Error("Switchover", slog.Any("error", err))
 	}
 
 	poisonPill, err := app.getPoisonPill()
@@ -203,7 +204,7 @@ func (app *App) performSwitchover(shardState map[string]*HostState, activeNodes 
 	errsPause := runParallel(func(host string) error {
 		if !shardState[host].PingOk {
 			err := fmt.Errorf("host %s is not healthy", host)
-			app.logger.Error("Pausing replication", "error", err)
+			app.logger.Error("Pausing replication", slog.Any("error", err))
 			return err
 		}
 		rs := shardState[host].ReplicaState
@@ -214,7 +215,7 @@ func (app *App) performSwitchover(shardState map[string]*HostState, activeNodes 
 		node := app.shard.Get(host)
 		err := node.PauseReplication(app.ctx)
 		if err != nil {
-			app.logger.Error(fmt.Sprintf("Pausing replication on %s", host), "error", err)
+			app.logger.Error(fmt.Sprintf("Pausing replication on %s", host), slog.Any("error", err))
 			return err
 		}
 		app.logger.Info(fmt.Sprintf("Switchover: replication on %s is now paused", host))
@@ -255,13 +256,13 @@ func (app *App) performSwitchover(shardState map[string]*HostState, activeNodes 
 				errsResume := runParallel(func(host string) error {
 					if !shardState[host].PingOk {
 						err := fmt.Errorf("host %s is not healthy", host)
-						app.logger.Error("Resume replication", "error", err)
+						app.logger.Error("Resume replication", slog.Any("error", err))
 						return err
 					}
 					node := app.shard.Get(host)
 					err := node.ResumeReplication(app.ctx)
 					if err != nil {
-						app.logger.Error(fmt.Sprintf("Resume replication on %s", host), "error", err.Error())
+						app.logger.Error(fmt.Sprintf("Resume replication on %s", host), slog.Any("error", err))
 						return err
 					}
 					app.logger.Info(fmt.Sprintf("Switchover: replication on %s is now resumed", host))
@@ -269,7 +270,7 @@ func (app *App) performSwitchover(shardState map[string]*HostState, activeNodes 
 				}, activeNodes)
 				combined := combineErrors(errsResume)
 				if combined != nil {
-					app.logger.Error("Resuming replication on desirable host get fail", "error", combined)
+					app.logger.Error("Resuming replication on desirable host get fail", slog.Any("error", combined))
 				}
 				return fmt.Errorf("get desirable node for switchover: %s", err.Error())
 			}
@@ -401,7 +402,7 @@ func (app *App) performSwitchover(shardState map[string]*HostState, activeNodes 
 
 			err := combineErrors(errs)
 			if err != nil {
-				app.logger.Warn("Unable to psync some replicas before promote", "error", err)
+				app.logger.Warn("Unable to psync some replicas before promote", slog.Any("error", err))
 			}
 		}
 		deadline := time.Now().Add(app.config.Valkey.WaitPromoteTimeout)
@@ -471,10 +472,10 @@ func (app *App) performSwitchover(shardState map[string]*HostState, activeNodes 
 			}, activeNodes)
 			combined := combineErrors(sentiCacheUpdateErrs)
 			if combined != nil {
-				app.logger.Warn("Unable to notify all senticache nodes on new master", "error", combined)
+				app.logger.Warn("Unable to notify all senticache nodes on new master", slog.Any("error", combined))
 			}
 		} else {
-			app.logger.Warn("Unable to get state for senticache nodes notify on new master", "error", err)
+			app.logger.Warn("Unable to get state for senticache nodes notify on new master", slog.Any("error", err))
 		}
 	}
 

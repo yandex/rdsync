@@ -48,7 +48,7 @@ func (rhp *RandomHostProvider) Init(servers []string) error {
 	for _, host := range servers {
 		resolved, err := rhp.resolveHost(host)
 		if err != nil {
-			rhp.logger.Error(fmt.Sprintf("host definition %s is invalid", host), "error", err)
+			rhp.logger.Error(fmt.Sprintf("host definition %s is invalid", host), slog.Any("error", err))
 			continue
 		}
 		numResolved += len(resolved)
@@ -80,7 +80,7 @@ func (rhp *RandomHostProvider) resolveHosts() {
 				if len(zhost.resolved) == 0 || time.Since(zhost.lastLookup) > rhp.lookupTTL {
 					resolved, err := rhp.resolveHost(pair)
 					if err != nil || len(resolved) == 0 {
-						rhp.logger.Error(fmt.Sprintf("background resolve for %s failed", pair), "error", err)
+						rhp.logger.Error(fmt.Sprintf("background resolve for %s failed", pair), slog.Any("error", err))
 						continue
 					}
 					rhp.hosts.Store(pair, zkhost{
@@ -105,7 +105,7 @@ func (rhp *RandomHostProvider) resolveHost(pair string) ([]string, error) {
 	defer cancel()
 	addrs, err := rhp.resolver.LookupHost(ctx, host)
 	if err != nil {
-		rhp.logger.Error(fmt.Sprintf("unable to resolve %s", host), "error", err)
+		rhp.logger.Error(fmt.Sprintf("unable to resolve %s", host), slog.Any("error", err))
 	}
 	for _, addr := range addrs {
 		res = append(res, net.JoinHostPort(addr, port))

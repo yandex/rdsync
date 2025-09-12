@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"log/slog"
 	"slices"
 	"sort"
 	"strings"
@@ -53,7 +54,7 @@ func (app *App) actualizeQuorumReplicas(master string, activeNodes []string) err
 			return err
 		}
 		if rewriteErr != nil {
-			app.logger.Error("Unable to rewrite config", "fqdn", master, "error", rewriteErr)
+			app.logger.Error("Unable to rewrite config", slog.String("fqdn", master), slog.Any("error", rewriteErr))
 		}
 	}
 
@@ -75,20 +76,20 @@ func (app *App) updateActiveNodes(state, stateDcs map[string]*HostState, oldActi
 		addNodes = append(addNodes, oldActiveNodes...)
 		err := app.dcs.Set(pathActiveNodes, addNodes)
 		if err != nil {
-			app.logger.Error("Update active nodes: failed to update active nodes in dcs", "error", err)
+			app.logger.Error("Update active nodes: failed to update active nodes in dcs", slog.Any("error", err))
 			return err
 		}
 	}
 
 	err := app.actualizeQuorumReplicas(master, activeNodes)
 	if err != nil {
-		app.logger.Error("Update active nodes: failed to actualize quorum replicas", "error", err)
+		app.logger.Error("Update active nodes: failed to actualize quorum replicas", slog.Any("error", err))
 		return err
 	}
 
 	err = app.dcs.Set(pathActiveNodes, activeNodes)
 	if err != nil {
-		app.logger.Error("Update active nodes: failed to update active nodes in dcs", "error", err)
+		app.logger.Error("Update active nodes: failed to update active nodes in dcs", slog.Any("error", err))
 		return err
 	}
 	return nil

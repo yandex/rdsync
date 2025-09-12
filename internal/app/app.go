@@ -114,7 +114,7 @@ func (app *App) lockDaemonFile() {
 		if err != nil {
 			msg = err.Error()
 		}
-		app.logger.Error(fmt.Sprintf("Unable to acquire daemon lock on %s", app.config.DaemonLockFile), "error", msg)
+		app.logger.Error(fmt.Sprintf("Unable to acquire daemon lock on %s", app.config.DaemonLockFile), slog.Any("error", msg))
 		os.Exit(1)
 	}
 }
@@ -122,7 +122,7 @@ func (app *App) lockDaemonFile() {
 func (app *App) unlockDaemonFile() {
 	err := app.daemonLock.Unlock()
 	if err != nil {
-		app.logger.Error(fmt.Sprintf("Unable to unlock daemon lock %s", app.config.DaemonLockFile), "error", err)
+		app.logger.Error(fmt.Sprintf("Unable to unlock daemon lock %s", app.config.DaemonLockFile), slog.Any("error", err))
 	}
 }
 
@@ -132,7 +132,7 @@ func (app *App) Run() int {
 	defer app.unlockDaemonFile()
 	err := app.connectDCS()
 	if err != nil {
-		app.logger.Error("Unable to connect to dcs", "error", err)
+		app.logger.Error("Unable to connect to dcs", slog.Any("error", err))
 		return 1
 	}
 	defer app.dcs.Close()
@@ -143,7 +143,7 @@ func (app *App) Run() int {
 	if app.mode == modeSentinel {
 		app.cache, err = valkey.NewSentiCacheNode(app.config, app.logger)
 		if err != nil {
-			app.logger.Error("Unable to init senticache node", "error", err)
+			app.logger.Error("Unable to init senticache node", slog.Any("error", err))
 			return 1
 		}
 		defer app.cache.Close()

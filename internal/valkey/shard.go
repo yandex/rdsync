@@ -30,7 +30,7 @@ type NodeConfiguration struct {
 func NewShard(config *config.Config, logger *slog.Logger, dcs dcs.DCS) *Shard {
 	s := &Shard{
 		config: config,
-		logger: logger.With("module", "shard"),
+		logger: logger.With(slog.String("module", "shard")),
 		nodes:  make(map[string]*Node),
 		local:  nil,
 		dcs:    dcs,

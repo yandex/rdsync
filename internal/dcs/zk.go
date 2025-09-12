@@ -70,7 +70,7 @@ func NewZookeeper(ctx context.Context, config *ZookeeperConfig, logger *slog.Log
 	var ec <-chan zk.Event
 	var err error
 
-	proxyLogger := logger.With("module", "dcs")
+	proxyLogger := logger.With(slog.String("module", "dcs"))
 
 	var operation func() error
 
@@ -193,7 +193,7 @@ func (z *zkDCS) makePath(path string) error {
 
 func (z *zkDCS) handleEvents() {
 	for ev := range z.eventsChan {
-		z.logger.Debug("Got ZK event", "event", ev)
+		z.logger.Debug("Got ZK event", slog.Any("event", ev))
 		if ev.Type == zk.EventSession {
 			z.handleSessionEvent(ev)
 		}
@@ -225,7 +225,7 @@ func (z *zkDCS) handleSessionEvent(ev zk.Event) {
 					z.isConnected = false
 					err := z.disconnectCallback()
 					if err != nil {
-						z.logger.Error("Disconnect callback failure", "error", err.Error())
+						z.logger.Error("Disconnect callback failure", slog.Any("error", err))
 					}
 				}
 				z.connectedLock.Unlock()
@@ -268,7 +268,7 @@ func (z *zkDCS) WaitConnected(timeout time.Duration) bool {
 func (z *zkDCS) Initialize() {
 	err := z.makePath(z.config.Namespace)
 	if err != nil {
-		z.logger.Error(fmt.Sprintf("Failed create root path %s", z.config.Namespace), "error", err)
+		z.logger.Error(fmt.Sprintf("Failed create root path %s", z.config.Namespace), slog.Any("error", err))
 	}
 }
 
@@ -291,7 +291,7 @@ func (z *zkDCS) retryRequest(code func() error) {
 	err := retry(z.config, operation)
 
 	if err != nil {
-		z.logger.Error("Request retry failed", "error", err)
+		z.logger.Error("Request retry failed", slog.Any("error", err))
 	}
 }
 
@@ -344,7 +344,7 @@ func (z *zkDCS) AcquireLock(path string) bool {
 	self := z.getSelfLockOwner()
 	data, _, err := z.retryGet(fullPath)
 	if err != nil && err != zk.ErrNoNode {
-		z.logger.Error(fmt.Sprintf("Failed to get lock info %s", fullPath), "error", err)
+		z.logger.Error(fmt.Sprintf("Failed to get lock info %s", fullPath), slog.Any("error", err))
 		return false
 	}
 	if err == zk.ErrNoNode {
@@ -355,7 +355,7 @@ func (z *zkDCS) AcquireLock(path string) bool {
 		_, err = z.retryCreate(fullPath, data, zk.FlagEphemeral, z.acl)
 		if err != nil {
 			if err != zk.ErrNodeExists {
-				z.logger.Error(fmt.Sprintf("Failed to acquire lock %s", fullPath), "error", err)
+				z.logger.Error(fmt.Sprintf("Failed to acquire lock %s", fullPath), slog.Any("error", err))
 			}
 			return false
 		}
@@ -363,7 +363,7 @@ func (z *zkDCS) AcquireLock(path string) bool {
 	}
 	owner := LockOwner{}
 	if err = json.Unmarshal(data, &owner); err != nil {
-		z.logger.Error(fmt.Sprintf("Malformed lock data %s (%s)", fullPath, data), "error", err)
+		z.logger.Error(fmt.Sprintf("Malformed lock data %s (%s)", fullPath, data), slog.Any("error", err))
 		return false
 	}
 	return owner == self
@@ -372,7 +372,7 @@ func (z *zkDCS) AcquireLock(path string) bool {
 func (z *zkDCS) ReleaseLock(path string) {
 	err := z.ReleaseLockOrError(path)
 	if err != nil {
-		z.logger.Error(fmt.Sprintf("Release lock %s failed", path), "error", err)
+		z.logger.Error(fmt.Sprintf("Release lock %s failed", path), slog.Any("error", err))
 	}
 }
 
@@ -407,7 +407,7 @@ func (z *zkDCS) create(path string, val any, flags int32) error {
 		if err == zk.ErrNodeExists {
 			return ErrExists
 		}
-		z.logger.Error(fmt.Sprintf("Failed to create node %s with %+v", fullPath, val), "error", err)
+		z.logger.Error(fmt.Sprintf("Failed to create node %s with %+v", fullPath, val), slog.Any("error", err))
 	}
 	return err
 }
@@ -428,7 +428,7 @@ func (z *zkDCS) set(path string, val any, flags int32) error {
 	}
 	_, stat, err := z.retryGet(fullPath)
 	if err != nil && err != zk.ErrNoNode {
-		z.logger.Error(fmt.Sprintf("Failed to get node %s", fullPath), "error", err)
+		z.logger.Error(fmt.Sprintf("Failed to get node %s", fullPath), slog.Any("error", err))
 		return err
 	}
 	if err == zk.ErrNoNode {
@@ -439,7 +439,7 @@ func (z *zkDCS) set(path string, val any, flags int32) error {
 		}
 		_, err = z.retryCreate(fullPath, data, flags, z.acl)
 		if err != nil {
-			z.logger.Error(fmt.Sprintf("Failed to create node %s with %v", fullPath, val), "error", err)
+			z.logger.Error(fmt.Sprintf("Failed to create node %s with %v", fullPath, val), slog.Any("error", err))
 		}
 		return err
 	}
@@ -448,7 +448,7 @@ func (z *zkDCS) set(path string, val any, flags int32) error {
 	}
 	_, err = z.retrySet(fullPath, data, stat.Version)
 	if err != nil {
-		z.logger.Error(fmt.Sprintf("Failed to set node %s to %+v", fullPath, val), "error", err)
+		z.logger.Error(fmt.Sprintf("Failed to set node %s to %+v", fullPath, val), slog.Any("error", err))
 	}
 	return err
 }
@@ -468,12 +468,12 @@ func (z *zkDCS) Delete(path string) error {
 		return nil
 	}
 	if err != nil {
-		z.logger.Error(fmt.Sprintf("Failed to get node %s", fullPath), "error", err)
+		z.logger.Error(fmt.Sprintf("Failed to get node %s", fullPath), slog.Any("error", err))
 		return err
 	}
 	err = z.retryDelete(fullPath, stat.Version)
 	if err != nil {
-		z.logger.Error(fmt.Sprintf("Failed to delete node %s", fullPath), "error", err)
+		z.logger.Error(fmt.Sprintf("Failed to delete node %s", fullPath), slog.Any("error", err))
 	}
 	return err
 }
@@ -485,11 +485,11 @@ func (z *zkDCS) Get(path string, dest any) error {
 		return ErrNotFound
 	}
 	if err != nil {
-		z.logger.Error(fmt.Sprintf("Failed to get node %s", fullPath), "error", err)
+		z.logger.Error(fmt.Sprintf("Failed to get node %s", fullPath), slog.Any("error", err))
 		return err
 	}
 	if err = json.Unmarshal(data, dest); err != nil {
-		z.logger.Error(fmt.Sprintf("Malformed node data %s (%s)", fullPath, data), "error", err)
+		z.logger.Error(fmt.Sprintf("Malformed node data %s (%s)", fullPath, data), slog.Any("error", err))
 		return ErrMalformed
 	}
 	return nil
@@ -499,14 +499,14 @@ func (z *zkDCS) GetTree(path string) (any, error) {
 	fullPath := z.buildFullPath(path)
 	children, err := z.retryChildren(fullPath)
 	if err != nil {
-		z.logger.Error(fmt.Sprintf("Failed to get children of %s", fullPath), "error", err)
+		z.logger.Error(fmt.Sprintf("Failed to get children of %s", fullPath), slog.Any("error", err))
 		return nil, err
 	}
 	if len(children) == 0 {
 		var data []byte
 		data, _, err = z.retryGet(fullPath)
 		if err != nil {
-			z.logger.Error(fmt.Sprintf("Failed to get data of %s", fullPath), "error", err)
+			z.logger.Error(fmt.Sprintf("Failed to get data of %s", fullPath), slog.Any("error", err))
 			return nil, err
 		}
 		if len(data) == 0 {
@@ -515,7 +515,7 @@ func (z *zkDCS) GetTree(path string) (any, error) {
 		var ret any
 		err = json.Unmarshal(data, &ret)
 		if err != nil {
-			z.logger.Error(fmt.Sprintf("Malformed node data %s (%s)", fullPath, data), "error", err)
+			z.logger.Error(fmt.Sprintf("Malformed node data %s (%s)", fullPath, data), slog.Any("error", err))
 			return nil, err
 		}
 		return ret, nil
@@ -537,7 +537,7 @@ func (z *zkDCS) GetChildren(path string) ([]string, error) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
-		z.logger.Error(fmt.Sprintf("Failed to get children of %s", fullPath), "error", err)
+		z.logger.Error(fmt.Sprintf("Failed to get children of %s", fullPath), slog.Any("error", err))
 		return nil, err
 	}
 	return children, nil

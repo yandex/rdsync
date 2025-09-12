@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"log/slog"
 )
 
 func (app *App) checkHAReplicasRunning() bool {
@@ -12,14 +13,14 @@ func (app *App) checkHAReplicasRunning() bool {
 	}
 	state, err := app.getShardStateFromDB()
 	if err != nil {
-		app.logger.Error("Check HA replicas failed", "error", err)
+		app.logger.Error("Check HA replicas failed", slog.Any("error", err))
 		return false
 	}
 
 	local := app.shard.Local()
 	localState, ok := state[local.FQDN()]
 	if !ok {
-		app.logger.Error("Unable to find local node in state", "fqdn", local.FQDN())
+		app.logger.Error("Unable to find local node in state", slog.String("fqdn", local.FQDN()))
 		return false
 	}
 
@@ -29,7 +30,7 @@ func (app *App) checkHAReplicasRunning() bool {
 	availableReplicas := 0
 	for host, hostState := range state {
 		if getOffset(hostState) > baseOffset {
-			app.logger.Warn("Host is ahead in replication history", "fqdn", host)
+			app.logger.Warn("Host is ahead in replication history", slog.String("fqdn", host))
 			aheadHosts++
 		}
 		if hostState.PingOk && !hostState.IsMaster {

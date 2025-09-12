@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/yandex/rdsync/internal/dcs"
@@ -28,7 +29,7 @@ func (app *App) healthChecker() {
 				hcCheckTime = hc.CheckAt
 				err := app.dcs.SetEphemeral(path, hc)
 				if err != nil {
-					app.logger.Error("Failed to set healthcheck status to dcs", "error", err)
+					app.logger.Error("Failed to set healthcheck status to dcs", slog.Any("error", err))
 				}
 			} else if !hcCheckTime.IsZero() {
 				if time.Since(hcCheckTime) < 5*app.config.HealthCheckInterval {
@@ -37,7 +38,7 @@ func (app *App) healthChecker() {
 					app.logger.Warn("Unable to get local node state, dropping health node from dcs")
 					err := app.dcs.Delete(path)
 					if err != nil {
-						app.logger.Error("Failed to drop healthcheck status from dcs on dead local node", "error", err)
+						app.logger.Error("Failed to drop healthcheck status from dcs on dead local node", slog.Any("error", err))
 					}
 					hcCheckTime = time.Time{}
 				}

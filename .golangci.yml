@@ -16,6 +16,7 @@ linters:
     - misspell
     - nakedret
     - revive
+    - sloglint
     - staticcheck
     - unconvert
     - unparam
@@ -40,6 +41,8 @@ linters:
         - fieldalignment
     misspell:
       locale: US
+    sloglint:
+      attr-only: true
     revive:
       rules:
         - name: blank-imports

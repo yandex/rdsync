@@ -88,14 +88,14 @@ func NewRemoteSentiCacheNode(config *config.Config, host string, logger *slog.Lo
 	}
 	conn, err := client.NewClient(opts)
 	if err != nil {
-		logger.Warn("Unable to establish initial connection", "fqdn", host, "error", err)
+		logger.Warn("Unable to establish initial connection", slog.String("fqdn", host), slog.Any("error", err))
 		conn = nil
 	}
 	node := SentiCacheNode{
 		config: config,
 		conn:   conn,
 		opts:   opts,
-		logger: logger.With("module", "senticache"),
+		logger: logger.With(slog.String("module", "senticache")),
 		broken: false,
 	}
 	return &node, nil
