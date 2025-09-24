@@ -273,6 +273,14 @@ func (app *App) repairLocalNode(master string) bool {
 				return false
 			}
 		}
+	} else if master == local.FQDN() {
+		if !state.IsMaster {
+			app.logger.Error("Local node is alone in shard and is replica. Promoting")
+			if err := app.promote(master, master, shardState, time.Now().Add(app.config.Valkey.WaitPromoteForceTimeout)); err != nil {
+				app.logger.Error("Unable to promote lone node in shard", slog.Any("error", err))
+				return false
+			}
+		}
 	} else if app.isReplicaStale(state.ReplicaState, true) {
 		shardState, err := app.getShardStateFromDcs()
 		if err != nil {

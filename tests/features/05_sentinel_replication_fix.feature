@@ -231,3 +231,38 @@ Feature: Sentinel mode broken replication fix
             supervisorctl start rdsync
         """
         Then replication on valkey host "valkey2" should run fine within "600" seconds
+
+    Scenario: Sentinel mode single replica is promoted
+        Given sentinel shard is up and running
+        Then valkey host "valkey1" should be master
+        When host "valkey3" is deleted
+        Then valkey host "valkey3" should become unavailable within "10" seconds
+        When host "valkey2" is deleted
+        Then valkey host "valkey2" should become unavailable within "10" seconds
+        And zookeeper node "/test/active_nodes" should match json_exactly within "30" seconds
+        """
+            ["valkey1"]
+        """
+        And valkey host "valkey1" should be master
+        When I run command on host "valkey1" with timeout "20" seconds
+        """
+            supervisorctl stop rdsync
+        """
+        And I run command on host "valkey1" with timeout "20" seconds
+        """
+            supervisorctl stop valkey
+        """
+        And I run command on host "valkey1" with timeout "20" seconds
+        """
+            echo 'replicaof 192.168.234.13 6379' >> /etc/valkey/valkey.conf
+        """
+        And I run command on host "valkey1" with timeout "20" seconds
+        """
+            supervisorctl start valkey
+        """
+        And I run command on host "valkey1" with timeout "20" seconds
+        """
+            supervisorctl start rdsync
+        """
+        Then valkey host "valkey1" should become available within "60" seconds
+        And valkey host "valkey1" should be master
