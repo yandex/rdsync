@@ -200,7 +200,7 @@ Feature: Sentinel mode maintenance tests
         When host "zoo3" is detached from the network
         And host "zoo2" is detached from the network
         And host "zoo1" is detached from the network
-        When I run command on host "valkey1"
+        When I run command on host "valkey1" with timeout "300" seconds
         """
             rdsync info
         """
