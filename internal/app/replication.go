@@ -101,6 +101,13 @@ func (app *App) closeStaleReplica(master string) error {
 				}
 			}
 			if okReplicas >= staleReplicas {
+				offline, err := local.IsOffline(app.ctx)
+				if err != nil {
+					return err
+				}
+				if offline {
+					return nil
+				}
 				app.logger.Error(fmt.Sprintf("Local node is stale. Alive replicas: %d, stale replicas: %d. Making local node offline.", okReplicas, staleReplicas))
 				return local.SetOffline(app.ctx)
 			}
