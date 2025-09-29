@@ -248,8 +248,8 @@ github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD
 github.com/tmc/grpc-websocket-proxy v0.0.0-20190109142713-0ad062ec5ee5/go.mod h1:ncp9v5uamzpCO7NfCPTXjqaC+bZgJeR0sMTm6dMHP7U=
 github.com/tv42/httpunix v0.0.0-20150427012821-b75d8614f926/go.mod h1:9ESjWnEqriFuLhtthL60Sar/7RFoluCcXsuvEwTV5KM=
 github.com/ugorji/go v1.1.4/go.mod h1:uQMGLiO92mf5W77hV/PUCpI3pbzQx3CRekS0kk+RGrc=
-github.com/valkey-io/valkey-go v1.0.65 h1:oOyMrlmea/RidpcYLojrfimm72C4iPfRFWHkj839REU=
-github.com/valkey-io/valkey-go v1.0.65/go.mod h1:bHmwjIEOrGq/ubOJfh5uMRs7Xj6mV3mQ/ZXUbmqpjqY=
+github.com/valkey-io/valkey-go v1.0.66 h1:DIEF1XpwbO78xK2sMTghYE3Bz6pePWJTNxKtgoAuA3A=
+github.com/valkey-io/valkey-go v1.0.66/go.mod h1:bHmwjIEOrGq/ubOJfh5uMRs7Xj6mV3mQ/ZXUbmqpjqY=
 github.com/xiang90/probing v0.0.0-20190116061207-43a291ad63a2/go.mod h1:UETIi67q53MR2AWcXfiuqkDkRtnGDLqkBTpCHuJHxtU=
 go.etcd.io/bbolt v1.3.2/go.mod h1:IbVyRI1SCnLcuJnV2u8VeU0CEYM7e686BmAb1XKL+uU=
 go.opentelemetry.io/auto/sdk v1.2.1 h1:jXsnJ4Lmnqd11kwkBV2LgLoFMZKizbCi5fNZ/ipaZ64=
