@@ -24,7 +24,6 @@ const (
 
 // Node represents API to query/manipulate a single valkey node
 type Node struct {
-	opts        client.ClientOption
 	ipsTime     time.Time
 	conn        client.Client
 	config      *config.Config
@@ -34,6 +33,7 @@ type Node struct {
 	clusterID   string
 	ips         []net.IP
 	infoResults []bool
+	opts        client.ClientOption
 }
 
 func uniqLookup(host string) ([]net.IP, error) {
