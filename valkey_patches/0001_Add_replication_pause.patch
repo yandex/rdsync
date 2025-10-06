@@ -1,8 +1,8 @@
 diff --git a/src/config.c b/src/config.c
-index 312d47b94..5c28738a0 100644
+index 1566a799e..d2808a78d 100644
 --- a/src/config.c
 +++ b/src/config.c
-@@ -2551,6 +2551,25 @@ static int updateExtendedRedisCompat(const char **err) {
+@@ -2553,6 +2553,25 @@ static int updateExtendedRedisCompat(const char **err) {
      return 1;
  }
  
@@ -28,16 +28,16 @@ index 312d47b94..5c28738a0 100644
  static int updateSighandlerEnabled(const char **err) {
      UNUSED(err);
      if (server.crashlog_enabled)
-@@ -3193,6 +3212,7 @@ standardConfig static_configs[] = {
-     createBoolConfig("cluster-slot-stats-enabled", NULL, MODIFIABLE_CONFIG, server.cluster_slot_stats_enabled, 0, NULL, NULL),
+@@ -3205,6 +3224,7 @@ standardConfig static_configs[] = {
      createBoolConfig("hide-user-data-from-log", NULL, MODIFIABLE_CONFIG, server.hide_user_data_from_log, 1, NULL, NULL),
+     createBoolConfig("lua-enable-insecure-api", "lua-enable-deprecated-api", MODIFIABLE_CONFIG | HIDDEN_CONFIG | PROTECTED_CONFIG, server.lua_enable_insecure_api, 0, NULL, updateLuaEnableInsecureApi),
      createBoolConfig("import-mode", NULL, DEBUG_CONFIG | MODIFIABLE_CONFIG, server.import_mode, 0, NULL, NULL),
 +    createBoolConfig("repl-paused", NULL, MODIFIABLE_CONFIG, server.repl_paused, 0, NULL, updateReplPaused),
  
      /* String Configs */
      createStringConfig("aclfile", NULL, IMMUTABLE_CONFIG, ALLOW_EMPTY_STRING, server.acl_filename, "", NULL, NULL),
 diff --git a/src/replication.c b/src/replication.c
-index 981e1f410..db67c7953 100644
+index 7116b2b5f..2f5ac06bb 100644
 --- a/src/replication.c
 +++ b/src/replication.c
 @@ -58,7 +58,6 @@ void replicationResurrectProvisionalPrimary(void);
@@ -67,10 +67,10 @@ index 981e1f410..db67c7953 100644
          connectWithPrimary();
      }
 diff --git a/src/server.h b/src/server.h
-index 42856e4e5..10241b2e4 100644
+index f5ecd6340..65a12cf2e 100644
 --- a/src/server.h
 +++ b/src/server.h
-@@ -1988,6 +1988,7 @@ struct valkeyServer {
+@@ -1997,6 +1997,7 @@ struct valkeyServer {
      /* Synchronous replication. */
      list *clients_waiting_acks; /* Clients waiting in WAIT or WAITAOF. */
      int get_ack_from_replicas;  /* If true we send REPLCONF GETACK. */
@@ -78,7 +78,7 @@ index 42856e4e5..10241b2e4 100644
      /* Limits */
      unsigned int maxclients;                    /* Max number of simultaneous clients */
      unsigned long long maxmemory;               /* Max number of memory bytes to use */
-@@ -2949,6 +2950,8 @@ void clearFailoverState(void);
+@@ -2964,6 +2965,8 @@ void clearFailoverState(void);
  void updateFailoverStatus(void);
  void abortFailover(const char *err);
  const char *getFailoverStateString(void);
