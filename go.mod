@@ -2,7 +2,7 @@ module github.com/yandex/rdsync
 
 go 1.25.0
 
-toolchain go1.25.1
+toolchain go1.25.2
 
 require (
 	github.com/cenkalti/backoff/v4 v4.3.0
