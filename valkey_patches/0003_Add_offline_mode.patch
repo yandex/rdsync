@@ -1,8 +1,8 @@
 diff --git a/src/config.c b/src/config.c
-index 5c28738a0..861a2a345 100644
+index f788aef6f..aafa0616a 100644
 --- a/src/config.c
 +++ b/src/config.c
-@@ -619,6 +619,8 @@ void loadServerConfigFromString(char *config) {
+@@ -623,6 +623,8 @@ void loadServerConfigFromString(sds config) {
      if (server.hz < CONFIG_MIN_HZ) server.hz = CONFIG_MIN_HZ;
      if (server.hz > CONFIG_MAX_HZ) server.hz = CONFIG_MAX_HZ;
  
@@ -11,7 +11,7 @@ index 5c28738a0..861a2a345 100644
      sdsfreesplitres(lines, totlines);
      reading_config_file = 0;
      return;
-@@ -3160,6 +3162,31 @@ static int applyClientMaxMemoryUsage(const char **err) {
+@@ -3206,6 +3208,31 @@ static int applyClientMaxMemoryUsage(const char **err) {
      return 1;
  }
  
@@ -43,7 +43,7 @@ index 5c28738a0..861a2a345 100644
  standardConfig static_configs[] = {
      /* Bool configs */
      createBoolConfig("rdbchecksum", NULL, IMMUTABLE_CONFIG, server.rdb_checksum, 1, NULL, NULL),
-@@ -3403,6 +3430,7 @@ standardConfig static_configs[] = {
+@@ -3461,6 +3488,7 @@ standardConfig static_configs[] = {
      createSpecialConfig("rdma-bind", NULL, MODIFIABLE_CONFIG | MULTI_ARG_CONFIG, setConfigRdmaBindOption, getConfigRdmaBindOption, rewriteConfigRdmaBindOption, applyRdmaBind),
      createSpecialConfig("replicaof", "slaveof", IMMUTABLE_CONFIG | MULTI_ARG_CONFIG, setConfigReplicaOfOption, getConfigReplicaOfOption, rewriteConfigReplicaOfOption, NULL),
      createSpecialConfig("latency-tracking-info-percentiles", NULL, MODIFIABLE_CONFIG | MULTI_ARG_CONFIG, setConfigLatencyTrackingInfoPercentilesOutputOption, getConfigLatencyTrackingInfoPercentilesOutputOption, rewriteConfigLatencyTrackingInfoPercentilesOutputOption, NULL),
@@ -52,10 +52,10 @@ index 5c28738a0..861a2a345 100644
      /* NULL Terminator, this is dropped when we convert to the runtime array. */
      {NULL},
 diff --git a/src/server.c b/src/server.c
-index 5affc8d8a..a4985c6af 100644
+index 46a20d1ae..860a3cb41 100644
 --- a/src/server.c
 +++ b/src/server.c
-@@ -2641,9 +2641,15 @@ int listenToPort(connListener *sfd) {
+@@ -2664,9 +2664,15 @@ int listenToPort(connListener *sfd) {
      int j;
      int port = sfd->port;
      char **bindaddr = sfd->bindaddr;
@@ -72,7 +72,7 @@ index 5affc8d8a..a4985c6af 100644
  
      for (j = 0; j < sfd->bindaddr_count; j++) {
          char *addr = bindaddr[j];
-@@ -6650,8 +6656,8 @@ void dismissMemoryInChild(void) {
+@@ -6865,8 +6871,8 @@ void dismissMemoryInChild(void) {
      /* madvise(MADV_DONTNEED) may not work if Transparent Huge Pages is enabled. */
      if (server.thp_enabled) return;
  
@@ -83,7 +83,7 @@ index 5affc8d8a..a4985c6af 100644
  #if defined(USE_JEMALLOC) && defined(__linux__)
      listIter li;
      listNode *ln;
-@@ -7096,7 +7102,7 @@ __attribute__((weak)) int main(int argc, char **argv) {
+@@ -7311,7 +7317,7 @@ __attribute__((weak)) int main(int argc, char **argv) {
      }
      if (server.sentinel_mode) sentinelCheckConfigFile();
  
@@ -93,10 +93,10 @@ index 5affc8d8a..a4985c6af 100644
      linuxMemoryWarnings();
      sds err_msg = NULL;
 diff --git a/src/server.h b/src/server.h
-index 10241b2e4..b77c82328 100644
+index 95d31758e..a82eabd26 100644
 --- a/src/server.h
 +++ b/src/server.h
-@@ -1989,6 +1989,9 @@ struct valkeyServer {
+@@ -2118,6 +2118,9 @@ struct valkeyServer {
      list *clients_waiting_acks; /* Clients waiting in WAIT or WAITAOF. */
      int get_ack_from_replicas;  /* If true we send REPLCONF GETACK. */
      int repl_paused;            /* If true we don't try to connect to master */
@@ -136,5 +136,5 @@ index 000000000..b8c3ba453
 +    }
 +}
 -- 
-2.49.0
+2.51.1
 

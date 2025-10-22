@@ -1,8 +1,8 @@
 diff --git a/src/commands.def b/src/commands.def
-index 613eb16c9..e365f2c63 100644
+index fa63d4c74..0688e0e29 100644
 --- a/src/commands.def
 +++ b/src/commands.def
-@@ -2834,6 +2834,26 @@ struct COMMAND_ARG WAITAOF_Args[] = {
+@@ -3031,6 +3031,26 @@ struct COMMAND_ARG WAITAOF_Args[] = {
  {MAKE_ARG("timeout",ARG_TYPE_INTEGER,-1,NULL,NULL,NULL,CMD_ARG_NONE,0,NULL)},
  };
  
@@ -29,7 +29,7 @@ index 613eb16c9..e365f2c63 100644
  /********** GEOADD ********************/
  
  #ifndef SKIP_CMD_HISTORY_TABLE
-@@ -11101,6 +11121,7 @@ struct COMMAND_STRUCT serverCommandTable[] = {
+@@ -11771,6 +11791,7 @@ struct COMMAND_STRUCT serverCommandTable[] = {
  {MAKE_CMD("unlink","Asynchronously deletes one or more keys.","O(1) for each key removed regardless of its size. Then the command does O(N) work in a different thread in order to reclaim memory, where N is the number of allocations the deleted objects where composed of.","4.0.0",CMD_DOC_NONE,NULL,NULL,"generic",COMMAND_GROUP_GENERIC,UNLINK_History,0,UNLINK_Tips,2,unlinkCommand,-2,CMD_WRITE|CMD_FAST,ACL_CATEGORY_KEYSPACE,UNLINK_Keyspecs,1,NULL,1),.args=UNLINK_Args},
  {MAKE_CMD("wait","Blocks until the asynchronous replication of all preceding write commands sent by the connection is completed.","O(1)","3.0.0",CMD_DOC_NONE,NULL,NULL,"generic",COMMAND_GROUP_GENERIC,WAIT_History,0,WAIT_Tips,2,waitCommand,3,CMD_BLOCKING,ACL_CATEGORY_CONNECTION,WAIT_Keyspecs,0,NULL,2),.args=WAIT_Args},
  {MAKE_CMD("waitaof","Blocks until all of the preceding write commands sent by the connection are written to the append-only file of the primary and/or replicas.","O(1)","7.2.0",CMD_DOC_NONE,NULL,NULL,"generic",COMMAND_GROUP_GENERIC,WAITAOF_History,0,WAITAOF_Tips,2,waitaofCommand,4,CMD_BLOCKING,ACL_CATEGORY_CONNECTION,WAITAOF_Keyspecs,0,NULL,3),.args=WAITAOF_Args},
@@ -68,10 +68,10 @@ index 000000000..18b21012d
 +    }
 +}
 diff --git a/src/config.c b/src/config.c
-index 861a2a345..d7771ead5 100644
+index aafa0616a..19ba2ba84 100644
 --- a/src/config.c
 +++ b/src/config.c
-@@ -3187,6 +3187,79 @@ static void rewriteConfigOfflineMode(standardConfig *config, const char *name, s
+@@ -3233,6 +3233,79 @@ static void rewriteConfigOfflineMode(standardConfig *config, const char *name, s
      rewriteConfigYesNoOption(state, name, server.offline_initial, 0);
  }
  
@@ -151,7 +151,7 @@ index 861a2a345..d7771ead5 100644
  standardConfig static_configs[] = {
      /* Bool configs */
      createBoolConfig("rdbchecksum", NULL, IMMUTABLE_CONFIG, server.rdb_checksum, 1, NULL, NULL),
-@@ -3342,6 +3415,7 @@ standardConfig static_configs[] = {
+@@ -3397,6 +3470,7 @@ standardConfig static_configs[] = {
      createIntConfig("rdma-port", NULL, MODIFIABLE_CONFIG, 0, 65535, server.rdma_ctx_config.port, 0, INTEGER_CONFIG, NULL, updateRdmaPort),
      createIntConfig("rdma-rx-size", NULL, IMMUTABLE_CONFIG, 64 * 1024, 16 * 1024 * 1024, server.rdma_ctx_config.rx_size, 1024 * 1024, INTEGER_CONFIG, NULL, NULL),
      createIntConfig("rdma-completion-vector", NULL, IMMUTABLE_CONFIG, -1, 1024, server.rdma_ctx_config.completion_vector, -1, INTEGER_CONFIG, NULL, NULL),
@@ -159,7 +159,7 @@ index 861a2a345..d7771ead5 100644
  
      /* Unsigned int configs */
      createUIntConfig("maxclients", NULL, MODIFIABLE_CONFIG, 1, UINT_MAX, server.maxclients, 10000, INTEGER_CONFIG, NULL, updateMaxclients),
-@@ -3431,6 +3505,7 @@ standardConfig static_configs[] = {
+@@ -3489,6 +3563,7 @@ standardConfig static_configs[] = {
      createSpecialConfig("replicaof", "slaveof", IMMUTABLE_CONFIG | MULTI_ARG_CONFIG, setConfigReplicaOfOption, getConfigReplicaOfOption, rewriteConfigReplicaOfOption, NULL),
      createSpecialConfig("latency-tracking-info-percentiles", NULL, MODIFIABLE_CONFIG | MULTI_ARG_CONFIG, setConfigLatencyTrackingInfoPercentilesOutputOption, getConfigLatencyTrackingInfoPercentilesOutputOption, rewriteConfigLatencyTrackingInfoPercentilesOutputOption, NULL),
      createSpecialConfig("offline", NULL, MODIFIABLE_CONFIG, setOfflineMode, getOfflineMode, rewriteConfigOfflineMode, applyBind),
@@ -168,10 +168,10 @@ index 861a2a345..d7771ead5 100644
      /* NULL Terminator, this is dropped when we convert to the runtime array. */
      {NULL},
 diff --git a/src/replication.c b/src/replication.c
-index db67c7953..448d136fa 100644
+index 25726c542..56124321e 100644
 --- a/src/replication.c
 +++ b/src/replication.c
-@@ -1513,7 +1513,8 @@ void replconfCommand(client *c) {
+@@ -1525,7 +1525,8 @@ void replconfCommand(client *c) {
   * It does a few things:
   * 1) Put the replica in ONLINE state.
   * 2) Update the count of "good replicas".
@@ -181,7 +181,7 @@ index db67c7953..448d136fa 100644
   *
   * the return value indicates that the replica should be disconnected.
   * */
-@@ -1529,6 +1530,7 @@ int replicaPutOnline(client *replica) {
+@@ -1541,6 +1542,7 @@ int replicaPutOnline(client *replica) {
      replica->repl_data->repl_ack_time = server.unixtime; /* Prevent false timeout. */
  
      refreshGoodReplicasCount();
@@ -189,7 +189,7 @@ index db67c7953..448d136fa 100644
      /* Fire the replica change modules event. */
      moduleFireServerEvent(VALKEYMODULE_EVENT_REPLICA_CHANGE, VALKEYMODULE_SUBEVENT_REPLICA_CHANGE_ONLINE, NULL);
      serverLog(LL_NOTICE, "Synchronization with replica %s succeeded", replicationGetReplicaName(replica));
-@@ -4509,6 +4511,23 @@ int replicationCountAOFAcksByOffset(long long offset) {
+@@ -4886,6 +4888,23 @@ int replicationCountAOFAcksByOffset(long long offset) {
      return count;
  }
  
@@ -213,7 +213,7 @@ index db67c7953..448d136fa 100644
  /* WAIT for N replicas to acknowledge the processing of our latest
   * write command (and all the previous commands). */
  void waitCommand(client *c) {
-@@ -4543,6 +4562,64 @@ void waitCommand(client *c) {
+@@ -4920,6 +4939,64 @@ void waitCommand(client *c) {
      replicationRequestAckFromReplicas();
  }
  
@@ -278,7 +278,7 @@ index db67c7953..448d136fa 100644
  /* WAIT for N replicas and / or local primary to acknowledge our latest
   * write command got synced to the disk. */
  void waitaofCommand(client *c) {
-@@ -4601,8 +4678,10 @@ void unblockClientWaitingReplicas(client *c) {
+@@ -4978,8 +5055,10 @@ void unblockClientWaitingReplicas(client *c) {
  void processClientsWaitingReplicas(void) {
      long long last_offset = 0;
      long long last_aof_offset = 0;
@@ -289,7 +289,7 @@ index db67c7953..448d136fa 100644
  
      listIter li;
      listNode *ln;
-@@ -4625,16 +4704,25 @@ void processClientsWaitingReplicas(void) {
+@@ -5002,16 +5081,25 @@ void processClientsWaitingReplicas(void) {
           * offset and number of replicas, we remember it so the next client
           * may be unblocked without calling replicationCountAcksByOffset()
           * or calling replicationCountAOFAcksByOffset()
@@ -319,7 +319,7 @@ index db67c7953..448d136fa 100644
  
              /* Check if the number of replicas is satisfied. */
              if (numreplicas < c->bstate->numreplicas) continue;
-@@ -4642,6 +4730,9 @@ void processClientsWaitingReplicas(void) {
+@@ -5019,6 +5107,9 @@ void processClientsWaitingReplicas(void) {
              if (is_wait_aof) {
                  last_aof_offset = c->bstate->reploffset;
                  last_aof_numreplicas = numreplicas;
@@ -330,10 +330,10 @@ index db67c7953..448d136fa 100644
                  last_offset = c->bstate->reploffset;
                  last_numreplicas = numreplicas;
 diff --git a/src/server.c b/src/server.c
-index a4985c6af..83ae716d7 100644
+index 860a3cb41..c22e7a7dc 100644
 --- a/src/server.c
 +++ b/src/server.c
-@@ -2288,6 +2288,8 @@ void initServerConfig(void) {
+@@ -2311,6 +2311,8 @@ void initServerConfig(void) {
      server.loading_process_events_interval_ms = LOADING_PROCESS_EVENTS_INTERVAL_DEFAULT;
      server.loading_rio = NULL;
  
@@ -342,7 +342,7 @@ index a4985c6af..83ae716d7 100644
      /* Replication partial resync backlog */
      server.repl_backlog = NULL;
      server.repl_no_replicas_since = time(NULL);
-@@ -6115,12 +6117,13 @@ sds genValkeyInfoString(dict *section_dict, int all_sections, int everything) {
+@@ -6314,12 +6316,13 @@ sds genValkeyInfoString(dict *section_dict, int all_sections, int everything) {
  
                  info = sdscatprintf(info,
                                      "slave%d:ip=%s,port=%d,state=%s,"
@@ -359,18 +359,18 @@ index a4985c6af..83ae716d7 100644
              }
          }
 diff --git a/src/server.h b/src/server.h
-index b77c82328..e60ab0947 100644
+index a82eabd26..2b501f5bf 100644
 --- a/src/server.h
 +++ b/src/server.h
-@@ -896,6 +896,7 @@ typedef struct blockingState {
+@@ -949,6 +949,7 @@ typedef struct blockingState {
  
-     /* BLOCKED_WAIT and BLOCKED_WAITAOF */
+     /* BLOCKED_WAIT */
      int numreplicas;      /* Number of replicas we are waiting for ACK. */
 +    int quorum;           /* Indication if WAITQUORUM is waiting for quorum. */
      int numlocal;         /* Indication if WAITAOF is waiting for local fsync. */
      long long reploffset; /* Replication offset to reach. */
  
-@@ -1127,6 +1128,7 @@ typedef struct ClientPubSubData {
+@@ -1185,6 +1186,7 @@ typedef struct ClientPubSubData {
  typedef struct ClientReplicationData {
      int repl_state;                      /* Replication state if this is a replica. */
      int repl_start_cmd_stream_on_ack;    /* Install replica write handler on first ACK. */
@@ -378,7 +378,7 @@ index b77c82328..e60ab0947 100644
      int repldbfd;                        /* Replication DB file descriptor. */
      off_t repldboff;                     /* Replication DB file offset. */
      off_t repldbsize;                    /* Replication DB file size. */
-@@ -1632,6 +1634,8 @@ struct valkeyServer {
+@@ -1739,6 +1741,8 @@ struct valkeyServer {
                                              * RDB transfer until their main channel establishes partial synchronization. */
      client *current_client;                /* The client that triggered the command execution (External or AOF). */
      client *executing_client;              /* The client executing the current command (possibly script or module). */
@@ -387,8 +387,8 @@ index b77c82328..e60ab0947 100644
  
  #ifdef LOG_REQ_RES
      char *req_res_logfile; /* Path of log file for logging all requests and their replies. If NULL, no logging will be
-@@ -2926,11 +2930,13 @@ void resizeReplicationBacklog(void);
- void replicationSetPrimary(char *ip, int port, int full_sync_required);
+@@ -3091,11 +3095,13 @@ void resizeReplicationBacklog(void);
+ void replicationSetPrimary(char *ip, int port, int full_sync_required, bool disconnect_blocked);
  void replicationUnsetPrimary(void);
  void refreshGoodReplicasCount(void);
 +void updateQuorumReplicas(void);
@@ -401,7 +401,7 @@ index b77c82328..e60ab0947 100644
  void replicationSendNewlineToPrimary(void);
  long long replicationGetReplicaOffset(void);
  char *replicationGetReplicaName(client *c);
-@@ -3836,6 +3842,7 @@ void bitposCommand(client *c);
+@@ -4032,6 +4038,7 @@ void bitposCommand(client *c);
  void replconfCommand(client *c);
  void waitCommand(client *c);
  void waitaofCommand(client *c);
@@ -482,5 +482,5 @@ index b8c3ba453..2cb4cdca5 100644
 +}
 +}
 -- 
-2.49.0
+2.51.1
 
