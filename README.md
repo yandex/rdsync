@@ -9,7 +9,7 @@ It uses a patched valkey version to make a cluster or sentinel-like setup less p
 
 ## Limitations and requirements
 
-* Patched valkey (patches for valkey 8.1 are included in this repo)
+* Patched valkey (patches for valkey 9.0 are included in this repo)
 * ZooKeeper as DCS
 * Single valkey instance per host
 * In clustered setup each shard must have it's own DCS prefix

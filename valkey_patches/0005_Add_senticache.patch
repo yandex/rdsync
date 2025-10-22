@@ -1,12 +1,13 @@
 diff --git a/.gitignore b/.gitignore
-index d85087c45..39a257625 100644
+index d85087c45..b0eabf988 100644
 --- a/.gitignore
 +++ b/.gitignore
-@@ -12,6 +12,7 @@ dump*.rdb
+@@ -12,6 +12,8 @@ dump*.rdb
  *-check-dump
  *-cli
  *-sentinel
 +*-senticache
++!/runtest-senticache
  *-server
  *-unit-tests
  doc-tools
@@ -46,20 +47,21 @@ index 000000000..5e922cd9f
 +sentinel resolve-hostnames no
 +sentinel announce-hostnames no
 diff --git a/src/Makefile b/src/Makefile
-index 1437f41bd..4b736b340 100644
+index 1ce928167..e6bbde88a 100644
 --- a/src/Makefile
 +++ b/src/Makefile
-@@ -416,7 +416,9 @@ endif
+@@ -422,8 +422,10 @@ endif
  ENGINE_NAME=valkey
  SERVER_NAME=$(ENGINE_NAME)-server$(PROG_SUFFIX)
  ENGINE_SENTINEL_NAME=$(ENGINE_NAME)-sentinel$(PROG_SUFFIX)
 +ENGINE_SENTICACHE_NAME=$(ENGINE_NAME)-senticache$(PROG_SUFFIX)
- ENGINE_SERVER_OBJ=threads_mngr.o adlist.o quicklist.o ae.o anet.o dict.o hashtable.o kvstore.o server.o sds.o zmalloc.o lzf_c.o lzf_d.o pqsort.o zipmap.o sha1.o ziplist.o release.o memory_prefetch.o io_threads.o networking.o util.o object.o db.o replication.o rdb.o t_string.o t_list.o t_set.o t_zset.o t_hash.o config.o aof.o pubsub.o multi.o debug.o sort.o intset.o syncio.o cluster.o cluster_legacy.o cluster_slot_stats.o crc16.o endianconv.o commandlog.o eval.o bio.o rio.o rand.o memtest.o syscheck.o crcspeed.o crccombine.o crc64.o bitops.o sentinel.o notify.o setproctitle.o blocked.o hyperloglog.o latency.o sparkline.o valkey-check-rdb.o valkey-check-aof.o geo.o lazyfree.o module.o evict.o expire.o geohash.o geohash_helper.o childinfo.o allocator_defrag.o defrag.o siphash.o rax.o t_stream.o listpack.o localtime.o lolwut.o lolwut5.o lolwut6.o acl.o tracking.o socket.o tls.o sha256.o timeout.o setcpuaffinity.o monotonic.o mt19937-64.o resp_parser.o call_reply.o script.o functions.o commands.o strl.o connection.o unix.o logreqres.o rdma.o scripting_engine.o lua/script_lua.o lua/function_lua.o lua/engine_lua.o lua/debug_lua.o
-+ENGINE_SENTICACHE_OBJ=threads_mngr.o adlist.o quicklist.o ae.o anet.o dict.o hashtable.o kvstore.o server.o sds.o zmalloc.o lzf_c.o lzf_d.o pqsort.o zipmap.o sha1.o ziplist.o release.o memory_prefetch.o io_threads.o networking.o util.o object.o db.o replication.o rdb.o t_string.o t_list.o t_set.o t_zset.o t_hash.o config.o aof.o pubsub.o multi.o debug.o sort.o intset.o syncio.o cluster.o cluster_legacy.o cluster_slot_stats.o crc16.o endianconv.o commandlog.o eval.o bio.o rio.o rand.o memtest.o syscheck.o crcspeed.o crccombine.o crc64.o bitops.o senticache.o notify.o setproctitle.o blocked.o hyperloglog.o latency.o sparkline.o valkey-check-rdb.o valkey-check-aof.o geo.o lazyfree.o module.o evict.o expire.o geohash.o geohash_helper.o childinfo.o allocator_defrag.o defrag.o siphash.o rax.o t_stream.o listpack.o localtime.o lolwut.o lolwut5.o lolwut6.o acl.o tracking.o socket.o tls.o sha256.o timeout.o setcpuaffinity.o monotonic.o mt19937-64.o resp_parser.o call_reply.o script.o functions.o commands.o strl.o connection.o unix.o logreqres.o rdma.o scripting_engine.o lua/script_lua.o lua/function_lua.o lua/engine_lua.o lua/debug_lua.o
+ ENGINE_TRACE_OBJ=trace/trace.o trace/trace_commands.o trace/trace_db.o trace/trace_cluster.o trace/trace_server.o trace/trace_rdb.o trace/trace_aof.o
+ ENGINE_SERVER_OBJ=threads_mngr.o adlist.o vector.o quicklist.o ae.o anet.o dict.o hashtable.o kvstore.o server.o sds.o zmalloc.o lzf_c.o lzf_d.o pqsort.o zipmap.o sha1.o ziplist.o release.o memory_prefetch.o io_threads.o networking.o util.o object.o db.o replication.o rdb.o t_string.o t_list.o t_set.o t_zset.o t_hash.o config.o aof.o pubsub.o multi.o debug.o sort.o intset.o syncio.o cluster.o cluster_legacy.o cluster_slot_stats.o crc16.o cluster_migrateslots.o endianconv.o commandlog.o eval.o bio.o rio.o rand.o memtest.o syscheck.o crcspeed.o crccombine.o crc64.o bitops.o sentinel.o notify.o setproctitle.o blocked.o hyperloglog.o latency.o sparkline.o valkey-check-rdb.o valkey-check-aof.o geo.o lazyfree.o module.o evict.o expire.o geohash.o geohash_helper.o childinfo.o allocator_defrag.o defrag.o siphash.o rax.o t_stream.o listpack.o localtime.o lolwut.o lolwut5.o lolwut6.o lolwut9.o acl.o tracking.o socket.o tls.o sha256.o timeout.o setcpuaffinity.o monotonic.o mt19937-64.o resp_parser.o call_reply.o script.o functions.o commands.o strl.o connection.o unix.o logreqres.o rdma.o scripting_engine.o entry.o vset.o lua/script_lua.o lua/function_lua.o lua/engine_lua.o lua/debug_lua.o
++ENGINE_SENTICACHE_OBJ=threads_mngr.o adlist.o vector.o quicklist.o ae.o anet.o dict.o hashtable.o kvstore.o server.o sds.o zmalloc.o lzf_c.o lzf_d.o pqsort.o zipmap.o sha1.o ziplist.o release.o memory_prefetch.o io_threads.o networking.o util.o object.o db.o replication.o rdb.o t_string.o t_list.o t_set.o t_zset.o t_hash.o config.o aof.o pubsub.o multi.o debug.o sort.o intset.o syncio.o cluster.o cluster_legacy.o cluster_slot_stats.o crc16.o cluster_migrateslots.o endianconv.o commandlog.o eval.o bio.o rio.o rand.o memtest.o syscheck.o crcspeed.o crccombine.o crc64.o bitops.o senticache.o notify.o setproctitle.o blocked.o hyperloglog.o latency.o sparkline.o valkey-check-rdb.o valkey-check-aof.o geo.o lazyfree.o module.o evict.o expire.o geohash.o geohash_helper.o childinfo.o allocator_defrag.o defrag.o siphash.o rax.o t_stream.o listpack.o localtime.o lolwut.o lolwut5.o lolwut6.o lolwut9.o acl.o tracking.o socket.o tls.o sha256.o timeout.o setcpuaffinity.o monotonic.o mt19937-64.o resp_parser.o call_reply.o script.o functions.o commands.o strl.o connection.o unix.o logreqres.o rdma.o scripting_engine.o entry.o vset.o lua/script_lua.o lua/function_lua.o lua/engine_lua.o lua/debug_lua.o
+ ENGINE_SERVER_OBJ+=$(ENGINE_TRACE_OBJ)
  ENGINE_CLI_NAME=$(ENGINE_NAME)-cli$(PROG_SUFFIX)
- ENGINE_CLI_OBJ=anet.o adlist.o dict.o valkey-cli.o zmalloc.o release.o ae.o serverassert.o crcspeed.o crccombine.o crc64.o siphash.o crc16.o monotonic.o cli_common.o mt19937-64.o strl.o cli_commands.o
- ENGINE_BENCHMARK_NAME=$(ENGINE_NAME)-benchmark$(PROG_SUFFIX)
-@@ -440,7 +442,7 @@ ifeq ($(USE_FAST_FLOAT),yes)
+ ENGINE_CLI_OBJ=anet.o adlist.o dict.o valkey-cli.o zmalloc.o release.o ae.o serverassert.o crcspeed.o crccombine.o crc64.o siphash.o crc16.o monotonic.o cli_common.o mt19937-64.o strl.o cli_commands.o sds.o util.o sha256.o
+@@ -448,7 +450,7 @@ ifeq ($(USE_FAST_FLOAT),yes)
  	FINAL_LIBS += $(FAST_FLOAT_STRTOD_OBJECT)
  endif
  
@@ -68,27 +70,27 @@ index 1437f41bd..4b736b340 100644
  	@echo ""
  	@echo "Hint: It's a good idea to run 'make test' ;)"
  	@echo ""
-@@ -504,6 +506,10 @@ $(ENGINE_UNIT_TESTS): $(ENGINE_TEST_OBJ) $(ENGINE_LIB_NAME)
+@@ -512,6 +514,10 @@ $(ENGINE_UNIT_TESTS): $(ENGINE_TEST_OBJ) $(ENGINE_LIB_NAME)
  $(ENGINE_SENTINEL_NAME): $(SERVER_NAME)
  	$(ENGINE_INSTALL) $(SERVER_NAME) $(ENGINE_SENTINEL_NAME)
  
 +# valkey-senticache
 +$(ENGINE_SENTICACHE_NAME): $(ENGINE_SENTICACHE_OBJ)
-+	$(SERVER_LD) -o $@ $^ ../deps/hiredis/libhiredis.a ../deps/lua/src/liblua.a ../deps/hdr_histogram/libhdrhistogram.a ../deps/fpconv/libfpconv.a $(FINAL_LIBS)
++	$(SERVER_LD) -o $@ $^ ../deps/libvalkey/lib/libvalkey.a ../deps/lua/src/liblua.a ../deps/hdr_histogram/libhdrhistogram.a ../deps/fpconv/libfpconv.a $(FINAL_LIBS)
 +
  # valkey-check-rdb
  $(ENGINE_CHECK_RDB_NAME): $(SERVER_NAME)
  	$(ENGINE_INSTALL) $(SERVER_NAME) $(ENGINE_CHECK_RDB_NAME)
-@@ -563,7 +569,7 @@ endif
+@@ -574,7 +580,7 @@ endif
  commands.c: $(COMMANDS_DEF_FILENAME).def
  
  clean:
--	rm -rf $(SERVER_NAME) $(ENGINE_SENTINEL_NAME) $(ENGINE_CLI_NAME) $(ENGINE_BENCHMARK_NAME) $(ENGINE_CHECK_RDB_NAME) $(ENGINE_CHECK_AOF_NAME) $(ENGINE_UNIT_TESTS) $(ENGINE_LIB_NAME) unit/*.o unit/*.d lua/*.o lua/*.d *.o *.gcda *.gcno *.gcov valkey.info lcov-html Makefile.dep *.so
-+	rm -rf $(SERVER_NAME) $(ENGINE_SENTINEL_NAME) $(ENGINE_SENTICACHE_NAME) $(ENGINE_CLI_NAME) $(ENGINE_BENCHMARK_NAME) $(ENGINE_CHECK_RDB_NAME) $(ENGINE_CHECK_AOF_NAME) $(ENGINE_UNIT_TESTS) $(ENGINE_LIB_NAME) unit/*.o unit/*.d lua/*.o lua/*.d *.o *.gcda *.gcno *.gcov valkey.info lcov-html Makefile.dep *.so
+-	rm -rf $(SERVER_NAME) $(ENGINE_SENTINEL_NAME) $(ENGINE_CLI_NAME) $(ENGINE_BENCHMARK_NAME) $(ENGINE_CHECK_RDB_NAME) $(ENGINE_CHECK_AOF_NAME) $(ENGINE_UNIT_TESTS) $(ENGINE_LIB_NAME) unit/*.o unit/*.d lua/*.o lua/*.d trace/*.o trace/*.d *.o *.gcda *.gcno *.gcov valkey.info lcov-html Makefile.dep *.so
++	rm -rf $(SERVER_NAME) $(ENGINE_SENTINEL_NAME) $(ENGINE_SENTICACHE_NAME) $(ENGINE_CLI_NAME) $(ENGINE_BENCHMARK_NAME) $(ENGINE_CHECK_RDB_NAME) $(ENGINE_CHECK_AOF_NAME) $(ENGINE_UNIT_TESTS) $(ENGINE_LIB_NAME) unit/*.o unit/*.d lua/*.o lua/*.d trace/*.o trace/*.d *.o *.gcda *.gcno *.gcov valkey.info lcov-html Makefile.dep *.so
  	rm -f $(DEP)
  
  .PHONY: clean
-@@ -588,6 +594,9 @@ test-modules: $(SERVER_NAME)
+@@ -599,6 +605,9 @@ test-modules: $(SERVER_NAME)
  test-sentinel: $(ENGINE_SENTINEL_NAME) $(ENGINE_CLI_NAME)
  	@(cd ..; ./runtest-sentinel)
  
@@ -98,7 +100,7 @@ index 1437f41bd..4b736b340 100644
  test-cluster: $(SERVER_NAME) $(ENGINE_CLI_NAME)
  	@(cd ..; ./runtest-cluster)
  
-@@ -626,6 +635,7 @@ helgrind:
+@@ -637,6 +646,7 @@ helgrind:
  install: all
  	@mkdir -p $(INSTALL_BIN)
  	$(call MAKE_INSTALL,$(SERVER_NAME),$(INSTALL_BIN))
@@ -107,10 +109,10 @@ index 1437f41bd..4b736b340 100644
  	$(call MAKE_INSTALL,$(ENGINE_CLI_NAME),$(INSTALL_BIN))
  	@ln -sf $(SERVER_NAME) $(INSTALL_BIN)/$(ENGINE_CHECK_RDB_NAME)
 diff --git a/src/commands.def b/src/commands.def
-index e365f2c63..7909c0a68 100644
+index 0688e0e29..c3168d2f5 100644
 --- a/src/commands.def
 +++ b/src/commands.def
-@@ -5521,6 +5521,23 @@ struct COMMAND_STRUCT SCRIPT_Subcommands[] = {
+@@ -6160,6 +6160,23 @@ struct COMMAND_STRUCT SCRIPT_Subcommands[] = {
  #define SCRIPT_Keyspecs NULL
  #endif
  
@@ -134,7 +136,7 @@ index e365f2c63..7909c0a68 100644
  /********** SENTINEL CKQUORUM ********************/
  
  #ifndef SKIP_CMD_HISTORY_TABLE
-@@ -6086,6 +6103,7 @@ struct COMMAND_ARG SENTINEL_SLAVES_Args[] = {
+@@ -6728,6 +6745,7 @@ struct COMMAND_ARG SENTINEL_SLAVES_Args[] = {
  
  /* SENTINEL command table */
  struct COMMAND_STRUCT SENTINEL_Subcommands[] = {
@@ -167,19 +169,19 @@ index 000000000..acea39255
 +}
 diff --git a/src/senticache.c b/src/senticache.c
 new file mode 100644
-index 000000000..671b8d2b0
+index 000000000..076bd60e3
 --- /dev/null
 +++ b/src/senticache.c
 @@ -0,0 +1,1750 @@
 +/* Valkey SentiCache implementation */
 +
 +#include "server.h"
-+#include "hiredis.h"
++#include <valkey/valkey.h>
 +#ifdef USE_OPENSSL
 +#include "openssl/ssl.h"
-+#include "hiredis_ssl.h"
++#include <valkey/tls.h>
 +#endif
-+#include "async.h"
++#include <valkey/async.h>
 +
 +#include <ctype.h>
 +#include <arpa/inet.h>
@@ -693,7 +695,7 @@ index 000000000..671b8d2b0
 +    return ri;
 +}
 +
-+/* Release this instance and all its replicas, sentinels, hiredis connections.
++/* Release this instance and all its replicas, sentinels, libvalkey connections.
 + * This function does not take care of unlinking the instance from the main
 + * primaries table (if it is a primary) or from its primary sentinels/replicas table
 + * if it is a replica or sentinel. */
@@ -1922,10 +1924,10 @@ index 000000000..671b8d2b0
 +    /* just do nothing */
 +}
 diff --git a/src/server.c b/src/server.c
-index 83ae716d7..864592ba0 100644
+index c22e7a7dc..7012e6f10 100644
 --- a/src/server.c
 +++ b/src/server.c
-@@ -6693,6 +6693,8 @@ int checkForSentinelMode(int argc, char **argv, char *exec_name) {
+@@ -6908,6 +6908,8 @@ int checkForSentinelMode(int argc, char **argv, char *exec_name) {
      /* valkey may install symlinks like redis-sentinel -> valkey-sentinel. */
      if (strstr(exec_name, "redis-sentinel") != NULL) return 1;
  
@@ -1935,7 +1937,7 @@ index 83ae716d7..864592ba0 100644
          if (!strcmp(argv[j], "--sentinel")) return 1;
      return 0;
 diff --git a/tests/instances.tcl b/tests/instances.tcl
-index 5cc96b0ed..4ff12cfb5 100644
+index 76d9e14bc..04b1397a2 100644
 --- a/tests/instances.tcl
 +++ b/tests/instances.tcl
 @@ -26,10 +26,12 @@ set ::dont_clean 0
@@ -1960,7 +1962,7 @@ index 5cc96b0ed..4ff12cfb5 100644
      } else {
          error "Unknown instance type."
      }
-@@ -546,6 +550,21 @@ proc S {n args} {
+@@ -544,6 +548,21 @@ proc S {n args} {
      [dict get $s link] {*}$args
  }
  
@@ -2206,5 +2208,5 @@ index 33e590ab5..4f766459e 100644
              [lindex [S $id SENTINEL GET-PRIMARY-ADDR-BY-NAME mymaster] 1] != $old_port
          } else {
 -- 
-2.49.0
+2.51.1
 
