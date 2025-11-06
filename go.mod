@@ -7,7 +7,7 @@ toolchain go1.25.3
 require (
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cucumber/godog v0.15.1
-	github.com/docker/docker v28.5.1+incompatible
+	github.com/docker/docker v28.5.2+incompatible
 	github.com/go-zookeeper/zk v1.0.4
 	github.com/gofrs/flock v0.13.0
 	github.com/heetch/confita v0.10.0
