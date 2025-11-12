@@ -62,7 +62,7 @@ func (app *App) leaveMaintenance() error {
 }
 
 func (app *App) createMaintenanceFile() {
-	err := os.WriteFile(app.config.MaintenanceFile, []byte(""), 0644)
+	err := os.WriteFile(app.config.MaintenanceFile, []byte(""), 0o640)
 	if err != nil {
 		app.logger.Error("Failed to write maintenance file", slog.Any("error", err))
 	}

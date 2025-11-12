@@ -24,7 +24,7 @@ func (app *App) stateFileHandler() {
 				_ = os.Remove(app.config.InfoFile)
 				continue
 			}
-			err = os.WriteFile(app.config.InfoFile, data, 0666)
+			err = os.WriteFile(app.config.InfoFile, data, 0o640)
 			if err != nil {
 				app.logger.Error("StateFileHandler: failed to write info file", slog.Any("error", err))
 				_ = os.Remove(app.config.InfoFile)
