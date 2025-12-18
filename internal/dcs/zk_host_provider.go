@@ -26,7 +26,9 @@ type RandomHostProvider struct {
 	lookupTimeout            time.Duration
 	lookupTickInterval       time.Duration
 	connectivityCheckTimeout time.Duration
+	retryJitter              time.Duration
 	useAddrs                 bool
+	isRetry                  bool
 }
 
 func NewRandomHostProvider(ctx context.Context, config *RandomHostProviderConfig, useAddrs bool, logger *slog.Logger) *RandomHostProvider {
@@ -36,6 +38,7 @@ func NewRandomHostProvider(ctx context.Context, config *RandomHostProviderConfig
 		lookupTimeout:            config.LookupTimeout,
 		lookupTickInterval:       config.LookupTickInterval,
 		connectivityCheckTimeout: config.ConnectivityCheckTimeout,
+		retryJitter:              config.RetryJitter,
 		logger:                   logger,
 		tried:                    make(map[string]struct{}),
 		hosts:                    sync.Map{},
@@ -143,6 +146,13 @@ func (rhp *RandomHostProvider) Len() int {
 }
 
 func (rhp *RandomHostProvider) Next() (server string, retryStart bool) {
+	if rhp.isRetry {
+		v := time.Duration(rand.Float64() * float64(rhp.retryJitter))
+		rhp.logger.Info("Triggering connection retry jitter", slog.Duration("duration", v))
+		time.Sleep(v)
+		rhp.isRetry = false
+	}
+
 	needRetry := false
 
 	var ret string
@@ -178,6 +188,10 @@ func (rhp *RandomHostProvider) Next() (server string, retryStart bool) {
 				ret = selected
 			}
 		}
+	}
+
+	if needRetry {
+		rhp.isRetry = true
 	}
 
 	return ret, needRetry
