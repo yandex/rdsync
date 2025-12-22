@@ -240,7 +240,7 @@ Feature: Sentinel mode maintenance tests
             "initiated_by": "valkey1"
         }
         """
-        When I run command on host "valkey1"
+        When I run command on host "valkey1" with timeout "60" seconds
         """
             rdsync maint off
         """
