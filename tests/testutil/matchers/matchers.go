@@ -1,7 +1,7 @@
 package matchers
 
 import (
-	"encoding/json"
+	json "encoding/json/v2"
 	"fmt"
 	"reflect"
 	"regexp"

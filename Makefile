@@ -3,7 +3,7 @@ PROJECT=rdsync
 ZK_VERSION=3.9.4
 
 cmd/rdsync/rdsync:
-	GOOS=linux go build -tags netgo,osusergo -o ./cmd/rdsync/rdsync ./cmd/rdsync/...
+	GOEXPERIMENT=jsonv2 GOOS=linux go build -tags netgo,osusergo -o ./cmd/rdsync/rdsync ./cmd/rdsync/...
 
 format:
 	gofmt -s -w `find . -name '*.go'`
@@ -24,8 +24,8 @@ test: base_image valkey/src/valkey-server cmd/rdsync/rdsync recreate_logs
 	rm -rf ./tests/images/valkey/valkey-server && cp valkey/src/valkey-server ./tests/images/valkey/valkey-server
 	rm -rf ./tests/images/valkey/valkey-senticache && cp valkey/src/valkey-senticache ./tests/images/valkey/valkey-senticache
 	rm -rf ./tests/images/valkey/valkey-cli && cp valkey/src/valkey-cli ./tests/images/valkey/valkey-cli
-	go build ./tests/...
-	(cd tests; go test -timeout 180m)
+	GOEXPERIMENT=jsonv2 go build ./tests/...
+	(cd tests; GOEXPERIMENT=jsonv2 go test -timeout 180m)
 
 recreate_logs:
 	@if [ "$(shell ls tests/logs 2>/dev/null | wc -l)" != "0" ]; then\

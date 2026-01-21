@@ -2,7 +2,7 @@ package dcs
 
 import (
 	"context"
-	"encoding/json"
+	json "encoding/json/v2"
 	"fmt"
 	"log/slog"
 	"net"

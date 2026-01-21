@@ -1,7 +1,7 @@
 package app
 
 import (
-	"encoding/json"
+	json "encoding/json/v2"
 	"log/slog"
 	"os"
 	"time"
