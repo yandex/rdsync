@@ -2,7 +2,7 @@ package tests
 
 import (
 	"context"
-	"encoding/json"
+	json "encoding/json/v2"
 	"fmt"
 	"html/template"
 	"io"
@@ -806,9 +806,6 @@ func (tctx *testContext) createZookeeperNode(node string) error {
 
 func (tctx *testContext) stepISetZookeeperNode(node string, body *godog.DocString) error {
 	data := []byte(strings.TrimSpace(body.Content))
-	if !json.Valid(data) {
-		return fmt.Errorf("node value is not valid json")
-	}
 	_, stat, err := tctx.zk.Get(node)
 	if err != nil && err != zk.ErrNoNode {
 		return err
