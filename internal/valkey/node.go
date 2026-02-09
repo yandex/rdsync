@@ -499,7 +499,9 @@ func (n *Node) GetState(ctx context.Context) (map[string]string, int64, bool, bo
 		if sepIndex == -1 {
 			continue
 		}
-		res[pair[:sepIndex]] = pair[sepIndex+1:]
+		key := strings.Clone(pair[:sepIndex])
+		value := strings.Clone(pair[sepIndex+1:])
+		res[key] = value
 	}
 	n.infoResults = append(n.infoResults, true)
 	if len(n.infoResults) > n.config.PingStable {
