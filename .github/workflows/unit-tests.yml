@@ -8,7 +8,7 @@ on:
     branches: [ master ]
 
 env:
-  GO_VERSION: 1.25.7
+  GO_VERSION: 1.26.0
   GOEXPERIMENT: jsonv2
 
 jobs:

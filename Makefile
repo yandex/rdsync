@@ -10,7 +10,7 @@ format:
 	goimports -w `find . -name '*.go'`
 
 lint:
-	docker run --rm -v ${CURDIR}:/app -w /app golangci/golangci-lint:v2.6-alpine golangci-lint run -v
+	docker run --rm --env GOEXPERIMENT=jsonv2 -v ${CURDIR}:/app -w /app golangci/golangci-lint:v2.9-alpine golangci-lint run -v
 
 unittests:
 	go test ./cmd/... ./internal/...
