@@ -62,23 +62,25 @@ type SentinelModeConfig struct {
 
 // Config contains rdsync application configuration
 type Config struct {
-	Mode                    string              `yaml:"mode"`
-	InfoFile                string              `yaml:"info_file"`
-	Hostname                string              `yaml:"hostname"`
-	LogLevel                string              `yaml:"loglevel"`
-	AofMode                 string              `yaml:"aof_mode"`
-	MaintenanceFile         string              `yaml:"maintenance_file"`
-	DaemonLockFile          string              `yaml:"daemon_lock_file"`
-	PprofAddr               string              `yaml:"pprof_addr"`
-	SentinelMode            SentinelModeConfig  `yaml:"sentinel_mode"`
-	Zookeeper               dcs.ZookeeperConfig `yaml:"zookeeper"`
-	Valkey                  ValkeyConfig        `yaml:"valkey"`
-	HealthCheckInterval     time.Duration       `yaml:"healthcheck_interval"`
-	InfoFileHandlerInterval time.Duration       `yaml:"info_file_handler_interval"`
-	InactivationDelay       time.Duration       `yaml:"inactivation_delay"`
-	DcsWaitTimeout          time.Duration       `yaml:"dcs_wait_timeout"`
-	TickInterval            time.Duration       `yaml:"tick_interval"`
-	PingStable              int                 `yaml:"ping_stable"`
+	Mode                     string              `yaml:"mode"`
+	InfoFile                 string              `yaml:"info_file"`
+	Hostname                 string              `yaml:"hostname"`
+	LogLevel                 string              `yaml:"loglevel"`
+	AofMode                  string              `yaml:"aof_mode"`
+	MaintenanceFile          string              `yaml:"maintenance_file"`
+	DaemonLockFile           string              `yaml:"daemon_lock_file"`
+	PprofAddr                string              `yaml:"pprof_addr"`
+	EventTimingNotifyCommand string              `config:"event_timing_notify_command" yaml:"event_timing_notify_command"`
+	EventTimingNotifyArgs    []string            `config:"event_timing_notify_args"    yaml:"event_timing_notify_args"`
+	SentinelMode             SentinelModeConfig  `yaml:"sentinel_mode"`
+	Zookeeper                dcs.ZookeeperConfig `yaml:"zookeeper"`
+	Valkey                   ValkeyConfig        `yaml:"valkey"`
+	HealthCheckInterval      time.Duration       `yaml:"healthcheck_interval"`
+	InfoFileHandlerInterval  time.Duration       `yaml:"info_file_handler_interval"`
+	InactivationDelay        time.Duration       `yaml:"inactivation_delay"`
+	DcsWaitTimeout           time.Duration       `yaml:"dcs_wait_timeout"`
+	TickInterval             time.Duration       `yaml:"tick_interval"`
+	PingStable               int                 `yaml:"ping_stable"`
 }
 
 // DefaultValkeyConfig returns default configuration for valkey connection info and params
@@ -159,23 +161,25 @@ func DefaultConfig() (Config, error) {
 		return Config{}, err
 	}
 	config := Config{
-		AofMode:                 "Unspecified",
-		LogLevel:                "Info",
-		Hostname:                hostname,
-		Mode:                    "Sentinel",
-		InfoFile:                "/var/run/rdsync/rdsync.info",
-		DaemonLockFile:          "/var/run/rdsync/rdsync.lock",
-		MaintenanceFile:         "/var/run/rdsync/rdsync.maintenance",
-		PingStable:              3,
-		TickInterval:            5 * time.Second,
-		InactivationDelay:       30 * time.Second,
-		HealthCheckInterval:     5 * time.Second,
-		InfoFileHandlerInterval: 30 * time.Second,
-		PprofAddr:               "",
-		Zookeeper:               zkConfig,
-		DcsWaitTimeout:          10 * time.Second,
-		Valkey:                  DefaultValkeyConfig(),
-		SentinelMode:            sentinelConf,
+		AofMode:                  "Unspecified",
+		LogLevel:                 "Info",
+		Hostname:                 hostname,
+		Mode:                     "Sentinel",
+		InfoFile:                 "/var/run/rdsync/rdsync.info",
+		DaemonLockFile:           "/var/run/rdsync/rdsync.lock",
+		MaintenanceFile:          "/var/run/rdsync/rdsync.maintenance",
+		EventTimingNotifyCommand: "",
+		EventTimingNotifyArgs:    []string{"{event}", "{duration_ms}"},
+		PingStable:               3,
+		TickInterval:             5 * time.Second,
+		InactivationDelay:        30 * time.Second,
+		HealthCheckInterval:      5 * time.Second,
+		InfoFileHandlerInterval:  30 * time.Second,
+		PprofAddr:                "",
+		Zookeeper:                zkConfig,
+		DcsWaitTimeout:           10 * time.Second,
+		Valkey:                   DefaultValkeyConfig(),
+		SentinelMode:             sentinelConf,
 	}
 	return config, nil
 }
