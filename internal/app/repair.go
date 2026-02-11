@@ -217,6 +217,11 @@ func (app *App) repairLocalNode(master string) bool {
 			}
 		}
 	} else if !offline {
+		// Report node_offline duration when node comes back online naturally
+		if failTime, ok := app.nodeFailTime[local.FQDN()]; ok {
+			dur := time.Since(failTime)
+			app.timings.reportTiming("node_offline", dur)
+		}
 		delete(app.nodeFailTime, local.FQDN())
 	}
 
@@ -311,6 +316,11 @@ func (app *App) repairLocalNode(master string) bool {
 			app.logger.Error("Not making local node online: considered stale")
 			return false
 		}
+	}
+	// Report node_offline duration when node is brought back online after repair
+	if failTime, ok := app.nodeFailTime[local.FQDN()]; ok {
+		dur := time.Since(failTime)
+		app.timings.reportTiming("node_offline", dur)
 	}
 	err = local.SetOnline(app.ctx)
 	if err != nil {
