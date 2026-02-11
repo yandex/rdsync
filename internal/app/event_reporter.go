@@ -13,9 +13,9 @@ import (
 
 // timingReporter handles reporting event durations to an external program
 type timingReporter struct {
+	logger  *slog.Logger
 	command string
 	argsFmt []string
-	logger  *slog.Logger
 }
 
 func newTimingReporter(conf *config.Config, logger *slog.Logger) *timingReporter {
