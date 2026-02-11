@@ -5,7 +5,7 @@ on:
     - cron: '30 06 * * *'
 
 env:
-  GO_VERSION: 1.25.7
+  GO_VERSION: 1.26.0
   GOEXPERIMENT: jsonv2
 
 jobs:
