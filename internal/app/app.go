@@ -34,6 +34,7 @@ type App struct {
 	mode           appMode
 	aofMode        aofMode
 	state          appState
+	timings        *timingReporter
 }
 
 func baseContext() context.Context {
@@ -95,6 +96,7 @@ func NewApp(configFile, logLevel string) (*App, error) {
 		config:       conf,
 	}
 	app.critical.Store(false)
+	app.timings = newTimingReporter(conf, logger)
 	return app, nil
 }
 
