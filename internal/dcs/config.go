@@ -10,13 +10,13 @@ import (
 // ZookeeperConfig contains Zookeeper connection info
 type ZookeeperConfig struct {
 	CACert                string                   `config:"ca_cert" yaml:"ca_cert"`
-	Namespace             string                   `config:"namespace,required"`
+	Namespace             string                   `config:"namespace,required" yaml:"namespace"`
 	Hostname              string                   `config:"hostname" yaml:"hostname"`
 	CertFile              string                   `config:"certfile" yaml:"certfile"`
 	KeyFile               string                   `config:"keyfile" yaml:"keyfile"`
 	Password              string                   `config:"password" yaml:"password"`
 	Username              string                   `config:"username" yaml:"username"`
-	Hosts                 []string                 `config:"hosts,required"`
+	Hosts                 []string                 `config:"hosts,required" yaml:"hosts"`
 	RandomHostProvider    RandomHostProviderConfig `config:"random_host_provider" yaml:"random_host_provider"`
 	BackoffInterval       time.Duration            `config:"backoff_interval" yaml:"backoff_interval"`
 	BackoffMaxRetries     uint64                   `config:"backoff_max_retries" yaml:"backoff_max_retries"`
