@@ -11,35 +11,93 @@ import (
 	"github.com/yandex/rdsync/internal/config"
 )
 
-// timingReporter handles reporting event durations to an external program
-type timingReporter struct {
+// timingEvent represents a single timing event to be reported
+type timingEvent struct {
+	eventType string
+	duration  time.Duration
+}
+
+// TimingReporter handles reporting event durations to an external program
+type TimingReporter struct {
 	logger  *slog.Logger
 	command string
 	argsFmt []string
+	events  chan timingEvent
+	ctx     context.Context
+	cancel  context.CancelFunc
 }
 
-func newTimingReporter(conf *config.Config, logger *slog.Logger) *timingReporter {
+func newTimingReporter(conf *config.Config, logger *slog.Logger) *TimingReporter {
 	if conf.EventTimingNotifyCommand == "" {
 		return nil
 	}
-	return &timingReporter{
+
+	ctx, cancel := context.WithCancel(context.Background())
+	r := &TimingReporter{
 		command: conf.EventTimingNotifyCommand,
 		argsFmt: conf.EventTimingNotifyArgs,
 		logger:  logger,
+		events:  make(chan timingEvent, 100), // buffered channel to prevent blocking
+		ctx:     ctx,
+		cancel:  cancel,
 	}
+
+	// Start worker goroutine to process events
+	go r.worker()
+
+	return r
 }
 
 // reportTiming sends an event duration to the external program asynchronously.
 // If the reporter is nil (not configured), this is a no-op.
-// Never blocks the caller — runs in a separate goroutine.
-func (r *timingReporter) reportTiming(eventType string, duration time.Duration) {
+// Never blocks the caller — uses a buffered channel.
+func (r *TimingReporter) reportTiming(eventType string, duration time.Duration) {
 	if r == nil {
 		return
 	}
-	go r.send(eventType, duration)
+
+	// Non-blocking send - drop event if channel is full
+	select {
+	case r.events <- timingEvent{eventType: eventType, duration: duration}:
+	default:
+		r.logger.Warn("Timing reporter: event channel full, dropping event",
+			slog.String("event", eventType))
+	}
 }
 
-func (r *timingReporter) send(eventType string, duration time.Duration) {
+// Close shuts down the reporter and waits for pending events to be processed
+func (r *TimingReporter) Close() {
+	if r == nil {
+		return
+	}
+
+	// Signal worker to stop accepting new events
+	r.cancel()
+
+	// Close the channel to signal worker to finish processing
+	close(r.events)
+}
+
+// worker processes events from the channel
+func (r *TimingReporter) worker() {
+	for {
+		select {
+		case <-r.ctx.Done():
+			// Drain remaining events before exiting
+			for event := range r.events {
+				r.send(event.eventType, event.duration)
+			}
+			return
+		case event, ok := <-r.events:
+			if !ok {
+				return
+			}
+			r.send(event.eventType, event.duration)
+		}
+	}
+}
+
+func (r *TimingReporter) send(eventType string, duration time.Duration) {
 	// Build placeholder map
 	replacements := map[string]string{
 		"{event}":       eventType,

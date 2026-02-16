@@ -31,7 +31,7 @@ type App struct {
 	shard          *valkey.Shard
 	cache          *valkey.SentiCacheNode
 	daemonLock     *flock.Flock
-	timings        *timingReporter
+	timings        *TimingReporter
 	mode           appMode
 	aofMode        aofMode
 	state          appState
@@ -132,6 +132,9 @@ func (app *App) unlockDaemonFile() {
 func (app *App) Run() int {
 	app.lockDaemonFile()
 	defer app.unlockDaemonFile()
+
+	defer app.timings.Close()
+
 	err := app.connectDCS()
 	if err != nil {
 		app.logger.Error("Unable to connect to dcs", slog.Any("error", err))
