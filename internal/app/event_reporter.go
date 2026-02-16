@@ -19,12 +19,12 @@ type timingEvent struct {
 
 // TimingReporter handles reporting event durations to an external program
 type TimingReporter struct {
+	ctx     context.Context
 	logger  *slog.Logger
+	events  chan timingEvent
+	cancel  context.CancelFunc
 	command string
 	argsFmt []string
-	events  chan timingEvent
-	ctx     context.Context
-	cancel  context.CancelFunc
 }
 
 func newTimingReporter(conf *config.Config, logger *slog.Logger) *TimingReporter {
