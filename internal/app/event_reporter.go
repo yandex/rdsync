@@ -37,7 +37,7 @@ func newTimingReporter(conf *config.Config, logger *slog.Logger) *TimingReporter
 		command: conf.EventTimingNotifyCommand,
 		argsFmt: conf.EventTimingNotifyArgs,
 		logger:  logger,
-		events:  make(chan timingEvent, 100), // buffered channel to prevent blocking
+		events:  make(chan timingEvent, 64), // buffered channel to prevent blocking
 		ctx:     ctx,
 		cancel:  cancel,
 	}
