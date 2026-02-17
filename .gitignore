@@ -1,3 +1,4 @@
 cmd/rdsync/rdsync
 tests/logs/
 .idea
+.DS_Store

@@ -5,6 +5,8 @@ pprof_addr: ":8081"
 info_file: /var/run/rdsync.info
 maintenance_file: /var/run/rdsync.maintenance
 daemon_lock_file: /var/run/rdsync.lock
+event_timing_notify_command: "sh"
+event_timing_notify_args: ["-c", "echo {event} {duration_ms} >> /var/log/rdsync_events.log"]
 valkey:
   auth_password: functestpassword
   restart_command: supervisorctl restart valkey

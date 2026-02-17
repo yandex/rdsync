@@ -24,6 +24,10 @@ Feature: Sentinel mode switchover from old master
             "is_master": false
         }
         """
+        And I run command on hosts "valkey1,valkey2,valkey3"
+        """
+        rm -f /var/log/rdsync_events.log
+        """
         When I run command on host "valkey1"
         """
             rdsync switch --from valkey1
@@ -51,6 +55,10 @@ Feature: Sentinel mode switchover from old master
         When I wait for "30" seconds
         Then path "/var/lib/valkey/appendonlydir" exists on "valkey1"
         Then path "/var/lib/valkey/appendonlydir" does not exist on "{{.new_master}}"
+        And file "/var/log/rdsync_events.log" on any of hosts "valkey1,valkey2,valkey3" should match regexp within "30" seconds
+        """
+        switchover_complete \d+
+        """
 
     Scenario: Sentinel mode switchover with unhealthy replicas is rejected
         Given sentinel shard is up and running

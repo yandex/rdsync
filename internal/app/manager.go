@@ -143,6 +143,11 @@ func (app *App) stateManager() appState {
 		if app.nodeFailTime[master].IsZero() {
 			app.nodeFailTime[master] = time.Now()
 		}
+		// Report master unavailability duration when failover is approved
+		if failTime, ok := app.nodeFailTime[master]; ok {
+			dur := time.Since(failTime)
+			app.timings.reportTiming("master_unavailable", dur)
+		}
 		err = app.approveFailover(shardState, activeNodes, master)
 		if err == nil {
 			app.logger.Info("Failover approved")
@@ -217,6 +222,11 @@ func (app *App) stateManager() appState {
 			}
 		}
 		return stateCandidate
+	}
+	// Report master unavailability duration when master recovers
+	if failTime, ok := app.nodeFailTime[master]; ok {
+		dur := time.Since(failTime)
+		app.timings.reportTiming("master_unavailable", dur)
 	}
 	delete(app.nodeFailTime, master)
 	delete(app.splitTime, master)
