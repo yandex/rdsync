@@ -495,11 +495,11 @@ func (n *Node) GetState(ctx context.Context) (map[string]string, int64, bool, bo
 		}
 		pair := inp[pos : pos+endIndex]
 		pos += endIndex + 2
-		sepIndex := strings.Index(pair, ":")
-		if sepIndex == -1 {
+		before, after, ok := strings.Cut(pair, ":")
+		if !ok {
 			continue
 		}
-		res[pair[:sepIndex]] = pair[sepIndex+1:]
+		res[before] = after
 	}
 	n.infoResults = append(n.infoResults, true)
 	if len(n.infoResults) > n.config.PingStable {
