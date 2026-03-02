@@ -23,6 +23,7 @@ type zkDCS struct {
 	eventsChan         <-chan zk.Event
 	disconnectCallback func() error
 	closeTimer         *time.Timer
+	lockHeld           sync.Map
 	connectedChans     []chan struct{}
 	acl                []zk.ACL
 	connectedLock      sync.Mutex
@@ -222,6 +223,7 @@ func (z *zkDCS) handleSessionEvent(ev zk.Event) {
 				z.connectedLock.Lock()
 				if z.isConnected && z.closeTimer != nil {
 					defer z.logger.Info("Session lost")
+					z.lockHeld.Clear()
 					z.isConnected = false
 					err := z.disconnectCallback()
 					if err != nil {
@@ -341,6 +343,10 @@ func (z *zkDCS) retryDelete(path string, version int32) (err error) {
 
 func (z *zkDCS) AcquireLock(path string) bool {
 	fullPath := z.buildFullPath(path)
+	_, hasLock := z.lockHeld.Load(fullPath)
+	if hasLock {
+		return true
+	}
 	self := z.getSelfLockOwner()
 	data, _, err := z.retryGet(fullPath)
 	if err != nil && err != zk.ErrNoNode {
@@ -359,6 +365,7 @@ func (z *zkDCS) AcquireLock(path string) bool {
 			}
 			return false
 		}
+		z.lockHeld.Store(fullPath, struct{}{})
 		return true
 	}
 	owner := LockOwner{}
@@ -366,7 +373,11 @@ func (z *zkDCS) AcquireLock(path string) bool {
 		z.logger.Error(fmt.Sprintf("Malformed lock data %s (%s)", fullPath, data), slog.Any("error", err))
 		return false
 	}
-	return owner == self
+	if owner == self {
+		z.lockHeld.Store(fullPath, struct{}{})
+		return true
+	}
+	return false
 }
 
 func (z *zkDCS) ReleaseLock(path string) {
@@ -378,6 +389,7 @@ func (z *zkDCS) ReleaseLock(path string) {
 
 func (z *zkDCS) ReleaseLockOrError(path string) error {
 	fullPath := z.buildFullPath(path)
+	z.lockHeld.Delete(fullPath)
 	data, stat, err := z.retryGet(fullPath)
 	if err != nil && err != zk.ErrNoNode {
 		return fmt.Errorf("failed to get lock info %s: %v", fullPath, err)
