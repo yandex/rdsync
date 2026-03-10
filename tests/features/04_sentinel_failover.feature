@@ -43,6 +43,10 @@ Feature: Sentinel mode failover from dead master
         When I get zookeeper node "/test/master"
         And I save zookeeper query result as "new_master"
         Then valkey host "{{.new_master}}" should be master
+        And file "/var/log/rdsync_events.log" on any of hosts "valkey1,valkey2,valkey3" should match regexp within "30" seconds
+        """
+        event=failover_complete duration_ms=\d+
+        """
         When host "valkey1" is started
         Then valkey host "valkey1" should become available within "20" seconds
         And valkey host "valkey1" should become replica of "{{.new_master}}" within "30" seconds

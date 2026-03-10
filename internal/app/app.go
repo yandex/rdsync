@@ -19,18 +19,19 @@ import (
 
 // App is main application structure
 type App struct {
-	dcs            dcs.DCS
-	critical       atomic.Value
-	ctx            context.Context
-	nodeFailTime   map[string]time.Time
-	splitTime      map[string]time.Time
 	dcsDivergeTime time.Time
 	replFailTime   time.Time
-	logger         *slog.Logger
+	critical       atomic.Value
+	ctx            context.Context
+	dcs            dcs.DCS
 	config         *config.Config
+	splitTime      map[string]time.Time
+	logger         *slog.Logger
+	nodeFailTime   map[string]time.Time
 	shard          *valkey.Shard
 	cache          *valkey.SentiCacheNode
 	daemonLock     *flock.Flock
+	timings        *TimingReporter
 	mode           appMode
 	aofMode        aofMode
 	state          appState
@@ -95,6 +96,7 @@ func NewApp(configFile, logLevel string) (*App, error) {
 		config:       conf,
 	}
 	app.critical.Store(false)
+	app.timings = newTimingReporter(conf, logger)
 	return app, nil
 }
 
@@ -130,6 +132,9 @@ func (app *App) unlockDaemonFile() {
 func (app *App) Run() int {
 	app.lockDaemonFile()
 	defer app.unlockDaemonFile()
+
+	defer app.timings.Close()
+
 	err := app.connectDCS()
 	if err != nil {
 		app.logger.Error("Unable to connect to dcs", slog.Any("error", err))
@@ -154,9 +159,14 @@ func (app *App) Run() int {
 	go app.healthChecker()
 	go app.stateFileHandler()
 
+	sighup := make(chan os.Signal, 1)
+	signal.Notify(sighup, syscall.SIGHUP)
+
 	ticker := time.NewTicker(app.config.TickInterval)
 	for {
 		select {
+		case <-sighup:
+			app.timings.Reopen()
 		case <-ticker.C:
 			for {
 				app.logger.Info(fmt.Sprintf("Rdsync state: %s", app.state))

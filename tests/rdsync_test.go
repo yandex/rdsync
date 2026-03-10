@@ -1052,6 +1052,60 @@ func (tctx *testContext) stepInfoFileOnHostMatch(filepath, host, matcher string,
 	return err
 }
 
+func (tctx *testContext) stepFileOnHostsShouldMatchRegexpWithin(filepath, hostsStr string, timeout int, body *godog.DocString) error {
+	pattern := strings.TrimSpace(body.Content)
+	matcher, err := matchers.GetMatcher("regexp")
+	if err != nil {
+		return err
+	}
+
+	hosts := strings.Split(hostsStr, ",")
+	for i := range hosts {
+		hosts[i] = strings.TrimSpace(hosts[i])
+	}
+
+	var lastError error
+	var outputs map[string]string
+	found := false
+
+	testutil.Retry(func() bool {
+		outputs = make(map[string]string)
+
+		for _, host := range hosts {
+			cmd := fmt.Sprintf("cat '%s'", filepath)
+			_, output, cmdErr := tctx.composer.RunCommand(host, cmd, 10*time.Second)
+			if cmdErr != nil {
+				outputs[host] = fmt.Sprintf("error: %s", cmdErr)
+				continue
+			}
+			outputs[host] = output
+
+			// Check if this host's output matches
+			if matchErr := matcher(output, pattern); matchErr == nil {
+				found = true
+				return true // Success! Found a match
+			}
+		}
+		return false // No match yet, keep retrying
+	}, time.Duration(timeout)*time.Second, time.Second)
+
+	if found {
+		return nil
+	}
+
+	// If we get here, no host matched within the timeout
+	var details strings.Builder
+	details.WriteString(fmt.Sprintf("file %s did not match pattern on any host after %d seconds.\n", filepath, timeout))
+	details.WriteString("Pattern:\n")
+	details.WriteString(fmt.Sprintf("  %s\n", pattern))
+	details.WriteString("Outputs from each host:\n")
+	for host, output := range outputs {
+		details.WriteString(fmt.Sprintf("  %s: %s\n", host, output))
+	}
+	lastError = fmt.Errorf("%s", details.String())
+	return lastError
+}
+
 func InitializeScenario(s *godog.ScenarioContext) {
 	tctx, err := newTestContext()
 	if err != nil {
@@ -1168,6 +1222,7 @@ func InitializeScenario(s *godog.ScenarioContext) {
 	// misc
 	s.Step(`^I wait for "(\d+)" seconds$`, tctx.stepIWaitFor)
 	s.Step(`^info file "([^"]*)" on "([^"]*)" match (\w+)$`, tctx.stepInfoFileOnHostMatch)
+	s.Step(`^file "([^"]*)" on any of hosts "([^"]*)" should match regexp within "(\d+)" seconds$`, tctx.stepFileOnHostsShouldMatchRegexpWithin)
 }
 
 func TestRdsync(t *testing.T) {
