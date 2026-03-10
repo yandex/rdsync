@@ -71,6 +71,7 @@ type Config struct {
 	MaintenanceFile         string              `yaml:"maintenance_file"`
 	DaemonLockFile          string              `yaml:"daemon_lock_file"`
 	PprofAddr               string              `yaml:"pprof_addr"`
+	EventTimingLogFile      string              `yaml:"event_timing_log_file"`
 	SentinelMode            SentinelModeConfig  `yaml:"sentinel_mode"`
 	Zookeeper               dcs.ZookeeperConfig `yaml:"zookeeper"`
 	Valkey                  ValkeyConfig        `yaml:"valkey"`
@@ -168,6 +169,7 @@ func DefaultConfig() (Config, error) {
 		InfoFile:                "/var/run/rdsync/rdsync.info",
 		DaemonLockFile:          "/var/run/rdsync/rdsync.lock",
 		MaintenanceFile:         "/var/run/rdsync/rdsync.maintenance",
+		EventTimingLogFile:      "",
 		PingStable:              3,
 		TickInterval:            5 * time.Second,
 		InactivationDelay:       30 * time.Second,

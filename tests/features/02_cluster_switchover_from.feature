@@ -48,6 +48,10 @@ Feature: Cluster mode switchover from old master
         When I wait for "30" seconds
         Then path "/var/lib/valkey/appendonlydir" exists on "valkey1"
         Then path "/var/lib/valkey/appendonlydir" does not exist on "{{.new_master}}"
+        And file "/var/log/rdsync_events.log" on any of hosts "valkey1,valkey2,valkey3" should match regexp within "30" seconds
+        """
+        event=switchover_complete duration_ms=\d+
+        """
 
     Scenario: Cluster mode switchover (from) with unhealthy replicas is rejected
         Given clustered shard is up and running
