@@ -25,6 +25,7 @@ type ZookeeperConfig struct {
 	BackoffMultiplier     float64                  `config:"backoff_multiplier" yaml:"backoff_multiplier"`
 	BackoffRandFactor     float64                  `config:"backoff_rand_factor" yaml:"backoff_rand_factor"`
 	SessionTimeout        time.Duration            `config:"session_timeout" yaml:"session_timeout"`
+	LockHeldTTL           time.Duration            `config:"lock_held_ttl" yaml:"lock_held_ttl"`
 	Auth                  bool                     `config:"auth" yaml:"auth"`
 	UseSSL                bool                     `config:"use_ssl" yaml:"use_ssl"`
 	VerifyCerts           bool                     `config:"verify_certs" yaml:"verify_certs"`
@@ -57,6 +58,7 @@ func DefaultZookeeperConfig() (ZookeeperConfig, error) {
 	config := ZookeeperConfig{
 		Hostname:              hostname,
 		SessionTimeout:        2 * time.Second,
+		LockHeldTTL:           30 * time.Second,
 		BackoffInterval:       backoff.DefaultInitialInterval,
 		BackoffRandFactor:     backoff.DefaultRandomizationFactor,
 		BackoffMultiplier:     backoff.DefaultMultiplier,
