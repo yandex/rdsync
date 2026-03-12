@@ -37,6 +37,7 @@ type ValkeyConfig struct {
 	StaleReplicaLagOpen                 time.Duration `yaml:"stale_replica_lag_open"`
 	DestructiveReplicationRepairTimeout time.Duration `yaml:"destructive_replication_repair_timeout"`
 	FailoverCooldown                    time.Duration `yaml:"failover_cooldown"`
+	SwitchoverTimeout                   time.Duration `yaml:"switchover_timeout"`
 	MaxParallelSyncs                    int           `yaml:"max_parallel_syncs"`
 	ClusterBusPort                      int           `yaml:"cluster_bus_port"`
 	ReservedConnections                 int           `yaml:"reserved_connections"`
@@ -105,6 +106,7 @@ func DefaultValkeyConfig() ValkeyConfig {
 		StaleReplicaLagOpen:                 10 * time.Second,
 		BusyTimeout:                         5 * time.Second,
 		DestructiveReplicationRepairTimeout: 30 * time.Minute,
+		SwitchoverTimeout:                   10 * time.Minute,
 		MaxParallelSyncs:                    1,
 		ReservedConnections:                 10,
 		AllowDataLoss:                       false,

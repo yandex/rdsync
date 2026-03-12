@@ -71,6 +71,14 @@ func (app *App) stateManager() appState {
 
 	var switchover Switchover
 	if err := app.dcs.Get(pathCurrentSwitch, &switchover); err == nil {
+		if !switchover.InitiatedAt.IsZero() && time.Since(switchover.InitiatedAt) > app.config.Valkey.SwitchoverTimeout {
+			app.logger.Error(fmt.Sprintf("Switchover: %s => %s timed out after %s", switchover.From, switchover.To, time.Since(switchover.InitiatedAt)))
+			err = app.failSwitchover(&switchover, fmt.Errorf("switchover timed out after %s", time.Since(switchover.InitiatedAt)))
+			if err != nil {
+				app.logger.Error("Failed to report switchover timeout", slog.Any("error", err))
+			}
+			return stateManager
+		}
 		err = app.approveSwitchover(&switchover, activeNodes, shardState)
 		if err != nil {
 			app.logger.Error("Unable to perform switchover", slog.Any("error", err))
