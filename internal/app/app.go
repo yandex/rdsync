@@ -96,7 +96,6 @@ func NewApp(configFile, logLevel string) (*App, error) {
 		config:       conf,
 	}
 	app.critical.Store(false)
-	app.timings = newTimingReporter(conf, logger)
 	return app, nil
 }
 
@@ -133,6 +132,7 @@ func (app *App) Run() int {
 	app.lockDaemonFile()
 	defer app.unlockDaemonFile()
 
+	app.timings = newTimingReporter(app.config, app.logger)
 	defer app.timings.Close()
 
 	err := app.connectDCS()
