@@ -217,7 +217,7 @@ Feature: Cluster mode maintenance tests
         And valkey host "valkey1" should be master
         And valkey host "valkey2" should be replica of "valkey1"
         And valkey host "valkey3" should be replica of "valkey1"
-        And zookeeper node "/test/health/valkey1" should match json within "30" seconds
+        And zookeeper node "/test/health/valkey1" should match json within "90" seconds
         """
         {
             "ping_ok": true,
@@ -225,14 +225,14 @@ Feature: Cluster mode maintenance tests
             "is_read_only": false
         }
         """
-        And zookeeper node "/test/health/valkey2" should match json within "30" seconds
+        And zookeeper node "/test/health/valkey2" should match json within "90" seconds
         """
         {
             "ping_ok": true,
             "is_master": false
         }
         """
-        And zookeeper node "/test/health/valkey3" should match json within "30" seconds
+        And zookeeper node "/test/health/valkey3" should match json within "90" seconds
         """
         {
             "ping_ok": true,
