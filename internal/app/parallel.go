@@ -2,6 +2,7 @@ package app
 
 import (
 	"errors"
+	"strings"
 )
 
 func getHostStatesInParallel(hosts []string, getter func(string) (*HostState, error)) (map[string]*HostState, error) {
@@ -53,14 +54,14 @@ func runParallel(f func(string) error, arguments []string) map[string]error {
 }
 
 func combineErrors(allErrors map[string]error) error {
-	var errStr string
+	var errStr strings.Builder
 	for _, err := range allErrors {
 		if err != nil {
-			errStr += err.Error() + ";"
+			errStr.WriteString(err.Error() + ";")
 		}
 	}
-	if errStr != "" {
-		return errors.New(errStr)
+	if errStr.String() != "" {
+		return errors.New(errStr.String())
 	}
 	return nil
 }
