@@ -3,11 +3,21 @@ package app
 import (
 	"fmt"
 	"log/slog"
+	"time"
 )
 
 func (app *App) stateLost() appState {
 	if app.dcs.IsConnected() {
 		return stateCandidate
+	}
+	if !app.lostSince.IsZero() && time.Since(app.lostSince) >= app.config.DcsReconnectTimeout {
+		app.logger.Warn(fmt.Sprintf("Lost state persisted for %s, attempting DCS reconnection", time.Since(app.lostSince).Truncate(time.Second)))
+		err := app.reconnectDCS()
+		app.lostSince = time.Now()
+		if err != nil {
+			app.logger.Error("DCS reconnection attempt failed, will retry later", slog.Any("error", err))
+		}
+		return stateLost
 	}
 	if len(app.shard.Hosts()) == 1 {
 		return stateLost

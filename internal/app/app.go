@@ -21,6 +21,7 @@ import (
 type App struct {
 	dcsDivergeTime time.Time
 	replFailTime   time.Time
+	lostSince      time.Time
 	critical       atomic.Value
 	ctx            context.Context
 	dcs            dcs.DCS
@@ -108,6 +109,22 @@ func (app *App) connectDCS() error {
 	return nil
 }
 
+func (app *App) reconnectDCS() error {
+	app.logger.Info("Attempting DCS reconnection after prolonged Lost state")
+	oldDCS := app.dcs
+	err := app.connectDCS()
+	if err != nil {
+		app.logger.Error("DCS reconnection failed", slog.Any("error", err))
+		app.dcs = oldDCS
+		return err
+	}
+	app.dcs.SetDisconnectCallback(func() error { return app.handleCritical() })
+	app.shard.SetDCS(app.dcs)
+	oldDCS.Close()
+	app.logger.Info("DCS reconnection successful")
+	return nil
+}
+
 func (app *App) lockDaemonFile() {
 	app.daemonLock = flock.New(app.config.DaemonLockFile)
 	if locked, err := app.daemonLock.TryLock(); !locked {
@@ -183,6 +200,11 @@ func (app *App) Run() int {
 				nextState := stateHandler()
 				if nextState == app.state {
 					break
+				}
+				if nextState == stateLost && app.state != stateLost {
+					app.lostSince = time.Now()
+				} else if nextState != stateLost && app.state == stateLost {
+					app.lostSince = time.Time{}
 				}
 				app.state = nextState
 			}
