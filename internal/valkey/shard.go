@@ -38,6 +38,13 @@ func NewShard(config *config.Config, logger *slog.Logger, dcs dcs.DCS) *Shard {
 	return s
 }
 
+// SetDCS updates the DCS reference used by the shard
+func (s *Shard) SetDCS(newDCS dcs.DCS) {
+	s.Lock()
+	defer s.Unlock()
+	s.dcs = newDCS
+}
+
 // GetShardHostsFromDcs returns current shard hosts from dcs state
 func (s *Shard) GetShardHostsFromDcs() ([]string, error) {
 	fqdns, err := s.dcs.GetChildren(dcs.PathHANodesPrefix)

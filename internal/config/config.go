@@ -79,6 +79,7 @@ type Config struct {
 	InfoFileHandlerInterval time.Duration       `yaml:"info_file_handler_interval"`
 	InactivationDelay       time.Duration       `yaml:"inactivation_delay"`
 	DcsWaitTimeout          time.Duration       `yaml:"dcs_wait_timeout"`
+	DcsReconnectTimeout     time.Duration       `yaml:"dcs_reconnect_timeout"`
 	TickInterval            time.Duration       `yaml:"tick_interval"`
 	PingStable              int                 `yaml:"ping_stable"`
 }
@@ -178,6 +179,7 @@ func DefaultConfig() (Config, error) {
 		PprofAddr:               "",
 		Zookeeper:               zkConfig,
 		DcsWaitTimeout:          10 * time.Second,
+		DcsReconnectTimeout:     2 * time.Minute,
 		Valkey:                  DefaultValkeyConfig(),
 		SentinelMode:            sentinelConf,
 	}
