@@ -11,6 +11,9 @@ func (app *App) stateCandidate() appState {
 	if !app.dcs.IsConnected() {
 		return stateLost
 	}
+	if app.handleDcsReconnect() {
+		return stateCandidate
+	}
 	err := app.shard.UpdateHostsInfo()
 	if err != nil {
 		app.logger.Error("Candidate: failed to update host info from DCS", slog.Any("error", err))

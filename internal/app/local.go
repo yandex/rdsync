@@ -30,6 +30,13 @@ func (app *App) healthChecker() {
 				err := app.dcs.SetEphemeral(path, hc)
 				if err != nil {
 					app.logger.Error("Failed to set healthcheck status to dcs", slog.Any("error", err))
+				} else {
+					var readBack HostState
+					err = app.dcs.Get(path, &readBack)
+					if err != nil {
+						app.logger.Warn("Failed to read back health node from DCS", slog.Any("error", err))
+						app.dcsReconnect.Store(true)
+					}
 				}
 			} else if !hcCheckTime.IsZero() {
 				if time.Since(hcCheckTime) < 5*app.config.HealthCheckInterval {
