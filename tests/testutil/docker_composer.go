@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/client"
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/client"
 )
 
 const defaultDockerTimeout = 30 * time.Second
@@ -88,7 +88,7 @@ func NewDockerComposer(project, config string) (*DockerComposer, error) {
 		project = filepath.Base(filepath.Dir(config))
 	}
 	dc := new(DockerComposer)
-	api, err := client.NewClientWithOpts(client.FromEnv)
+	api, err := client.New(client.FromEnv)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to docker: %s", err)
 	}
@@ -114,11 +114,11 @@ func (dc *DockerComposer) runCompose(args []string, env []string) error {
 }
 
 func (dc *DockerComposer) fillContainers() error {
-	containers, err := dc.api.ContainerList(context.Background(), container.ListOptions{All: true})
+	listResult, err := dc.api.ContainerList(context.Background(), client.ContainerListOptions{All: true})
 	if err != nil {
 		return err
 	}
-	for _, c := range containers { // nolint: gocritic
+	for _, c := range listResult.Items { // nolint: gocritic
 		prj := c.Labels["com.docker.compose.project"]
 		srv := c.Labels["com.docker.compose.service"]
 		if prj != dc.projectName || srv == "" {
@@ -169,7 +169,7 @@ func (dc *DockerComposer) GetAddr(service string, port int) (string, error) {
 	}
 	for _, p := range cont.Ports {
 		if int(p.PrivatePort) == port {
-			return net.JoinHostPort(p.IP, strconv.Itoa(int(p.PublicPort))), nil
+			return net.JoinHostPort(p.IP.String(), strconv.Itoa(int(p.PublicPort))), nil
 		}
 	}
 	return "", fmt.Errorf("service %s does not expose port %d", service, port)
@@ -182,7 +182,7 @@ func (dc *DockerComposer) GetIP(service string) (string, error) {
 		return "", fmt.Errorf("no such service: %s", service)
 	}
 	for _, network := range cont.NetworkSettings.Networks {
-		return network.IPAddress, nil
+		return network.IPAddress.String(), nil
 	}
 	return "", fmt.Errorf("no network for service: %s", service)
 }
@@ -211,16 +211,16 @@ func (dc *DockerComposer) RunCommand(service string, cmd string, timeout time.Du
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	execCfg := container.ExecOptions{
+	execCfg := client.ExecCreateOptions{
 		AttachStdout: true,
 		AttachStderr: true,
 		Cmd:          []string{shell, "-c", cmd},
 	}
-	execResp, err := dc.api.ContainerExecCreate(ctx, cont.ID, execCfg)
+	execResp, err := dc.api.ExecCreate(ctx, cont.ID, execCfg)
 	if err != nil {
 		return 0, "", err
 	}
-	attachResp, err := dc.api.ContainerExecAttach(ctx, execResp.ID, container.ExecAttachOptions{})
+	attachResp, err := dc.api.ExecAttach(ctx, execResp.ID, client.ExecAttachOptions{})
 	if err != nil {
 		return 0, "", err
 	}
@@ -229,9 +229,9 @@ func (dc *DockerComposer) RunCommand(service string, cmd string, timeout time.Du
 	if err != nil {
 		return 0, "", err
 	}
-	var insp container.ExecInspect
+	var insp client.ExecInspectResult
 	Retry(func() bool {
-		insp, err = dc.api.ContainerExecInspect(ctx, execResp.ID)
+		insp, err = dc.api.ExecInspect(ctx, execResp.ID, client.ExecInspectOptions{})
 		return err != nil || !insp.Running
 	}, timeout, time.Second)
 	if err != nil {
@@ -249,15 +249,15 @@ func (dc *DockerComposer) RunAsyncCommand(service string, cmd string) error {
 	if !ok {
 		return fmt.Errorf("no such service: %s", service)
 	}
-	execCfg := container.ExecOptions{
-		Detach: true,
-		Cmd:    []string{shell, "-c", cmd},
+	execCfg := client.ExecCreateOptions{
+		Cmd: []string{shell, "-c", cmd},
 	}
-	execResp, err := dc.api.ContainerExecCreate(context.Background(), cont.ID, execCfg)
+	execResp, err := dc.api.ExecCreate(context.Background(), cont.ID, execCfg)
 	if err != nil {
 		return err
 	}
-	return dc.api.ContainerExecStart(context.Background(), execResp.ID, container.ExecStartOptions{})
+	_, err = dc.api.ExecStart(context.Background(), execResp.ID, client.ExecStartOptions{Detach: true})
+	return err
 }
 
 // GetFile returns content of the fail from container by path
@@ -266,11 +266,11 @@ func (dc *DockerComposer) GetFile(service, path string) (io.ReadCloser, error) {
 	if !ok {
 		return nil, fmt.Errorf("no such service: %s", service)
 	}
-	reader, _, err := dc.api.CopyFromContainer(context.Background(), cont.ID, path)
+	copyResult, err := dc.api.CopyFromContainer(context.Background(), cont.ID, client.CopyFromContainerOptions{SourcePath: path})
 	if err != nil {
 		return nil, err
 	}
-	return newUntarReaderCloser(reader)
+	return newUntarReaderCloser(copyResult.Content)
 }
 
 // Start starts container by service name
@@ -281,7 +281,7 @@ func (dc *DockerComposer) Start(service string) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), defaultDockerTimeout)
 	defer cancel()
-	err := dc.api.ContainerRestart(ctx, cont.ID, container.StopOptions{})
+	_, err := dc.api.ContainerRestart(ctx, cont.ID, client.ContainerRestartOptions{})
 	if err != nil {
 		return err
 	}
@@ -298,7 +298,7 @@ func (dc *DockerComposer) Stop(service string) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), defaultDockerTimeout)
 	defer cancel()
-	err := dc.api.ContainerStop(ctx, cont.ID, container.StopOptions{})
+	_, err := dc.api.ContainerStop(ctx, cont.ID, client.ContainerStopOptions{})
 	dc.stopped[service] = struct{}{}
 	return err
 }
