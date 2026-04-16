@@ -7,9 +7,6 @@ import (
 )
 
 func (app *App) stateLost() appState {
-	if app.handleDcsReconnect() {
-		return stateCandidate
-	}
 	if app.dcs.IsConnected() {
 		return stateCandidate
 	}

@@ -19,24 +19,23 @@ import (
 
 // App is main application structure
 type App struct {
+	dcsDivergeTime time.Time
 	replFailTime   time.Time
 	lostSince      time.Time
-	dcsDivergeTime time.Time
-	dcs            dcs.DCS
 	critical       atomic.Value
 	ctx            context.Context
-	cache          *valkey.SentiCacheNode
+	dcs            dcs.DCS
 	config         *config.Config
 	splitTime      map[string]time.Time
 	logger         *slog.Logger
 	nodeFailTime   map[string]time.Time
 	shard          *valkey.Shard
+	cache          *valkey.SentiCacheNode
 	daemonLock     *flock.Flock
 	timings        *TimingReporter
 	mode           appMode
 	aofMode        aofMode
 	state          appState
-	dcsReconnect   atomic.Bool
 }
 
 func baseContext() context.Context {
@@ -108,20 +107,6 @@ func (app *App) connectDCS() error {
 		return fmt.Errorf("failed to connect to zkDCS: %s", err.Error())
 	}
 	return nil
-}
-
-func (app *App) handleDcsReconnect() bool {
-	if !app.dcsReconnect.Load() {
-		return false
-	}
-	app.logger.Warn("Performing a scheduled DCS reconnection")
-	err := app.reconnectDCS()
-	if err != nil {
-		app.logger.Error("Scheduled DCS reconnection failed", slog.Any("error", err))
-		return false
-	}
-	app.dcsReconnect.Store(false)
-	return true
 }
 
 func (app *App) reconnectDCS() error {

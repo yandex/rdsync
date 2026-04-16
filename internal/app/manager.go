@@ -13,9 +13,6 @@ func (app *App) stateManager() appState {
 	if !app.dcs.IsConnected() {
 		return stateLost
 	}
-	if app.handleDcsReconnect() {
-		return stateCandidate
-	}
 	if !app.dcs.AcquireLock(pathManagerLock) {
 		return stateCandidate
 	}
