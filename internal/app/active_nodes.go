@@ -64,17 +64,17 @@ func (app *App) actualizeQuorumReplicas(master string, activeNodes []string) err
 func (app *App) updateActiveNodes(state, stateDcs map[string]*HostState, oldActiveNodes []string, master string) error {
 	activeNodes := app.calcActiveNodes(state, stateDcs, oldActiveNodes, master)
 
-	var addNodes []string
+	removingNodes := false
 
-	for _, node := range activeNodes {
-		if !slices.Contains(oldActiveNodes, node) {
-			addNodes = append(addNodes, node)
+	for _, node := range oldActiveNodes {
+		if !slices.Contains(activeNodes, node) {
+			removingNodes = true
+			break
 		}
 	}
 
-	if len(addNodes) > 0 {
-		addNodes = append(addNodes, oldActiveNodes...)
-		err := app.dcs.Set(pathActiveNodes, addNodes)
+	if removingNodes {
+		err := app.dcs.Set(pathActiveNodes, activeNodes)
 		if err != nil {
 			app.logger.Error("Update active nodes: failed to update active nodes in dcs", slog.Any("error", err))
 			return err
@@ -87,10 +87,12 @@ func (app *App) updateActiveNodes(state, stateDcs map[string]*HostState, oldActi
 		return err
 	}
 
-	err = app.dcs.Set(pathActiveNodes, activeNodes)
-	if err != nil {
-		app.logger.Error("Update active nodes: failed to update active nodes in dcs", slog.Any("error", err))
-		return err
+	if !removingNodes {
+		err := app.dcs.Set(pathActiveNodes, activeNodes)
+		if err != nil {
+			app.logger.Error("Update active nodes: failed to update active nodes in dcs", slog.Any("error", err))
+			return err
+		}
 	}
 	return nil
 }

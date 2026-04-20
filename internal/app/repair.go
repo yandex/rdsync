@@ -70,7 +70,7 @@ func (app *App) repairMaster(node *valkey.Node, activeNodes []string, state *Hos
 		app.logger.Error("Unable to get actual num quorum replicas on master", slog.String("fqdn", node.FQDN()), slog.Any("error", err))
 		return
 	}
-	if actualNumReplicas != expectedNumReplicas {
+	if expectedNumReplicas > actualNumReplicas {
 		app.logger.Info(fmt.Sprintf("Changing num quorum replicas from %d to %d on master", actualNumReplicas, expectedNumReplicas), slog.String("fqdn", node.FQDN()))
 		err, rewriteErr := node.SetNumQuorumReplicas(app.ctx, expectedNumReplicas)
 		if err != nil {
