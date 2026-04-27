@@ -2,9 +2,6 @@
   :description "rdsync tests"
   :url "https://github.com/yandex/rdsync"
   :java-source-paths ["java"]
-  :dependencies [[org.clojure/clojure "1.10.3"]
-                 [org.clojure/tools.nrepl "0.2.13"]
-                 [clojure-complete "0.2.5"]
-                 [jepsen "0.2.6"]
-                 [zookeeper-clj "0.9.4"]
-                 [redis.clients/jedis "5.0.0"]])
+  :dependencies [[org.clojure/clojure "1.12.4"]
+                 [jepsen "0.3.11"]
+                 [redis.clients/jedis "5.2.0" :exclusions [org.slf4j/slf4j-api]]])
