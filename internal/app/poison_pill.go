@@ -2,8 +2,6 @@ package app
 
 import (
 	"context"
-	"fmt"
-	"log/slog"
 	"time"
 )
 
@@ -28,17 +26,17 @@ func (app *App) issuePoisonPill(targetHost string) error {
 
 func (app *App) applyPoisonPill(poisonPill *PoisonPill) error {
 	if poisonPill.TargetHost != app.config.Hostname {
-		app.logger.Info(fmt.Sprintf("Poison pill issued for %s: not local host", poisonPill.TargetHost))
+		app.logger.Info().Msgf("Poison pill issued for %s: not local host", poisonPill.TargetHost)
 		return nil
 	}
 	local := app.shard.Local()
 	isOffline, err := local.IsOffline(app.ctx)
 	if err != nil {
-		app.logger.Error("Unable to check offline status for poison pill apply", slog.Any("error", err))
+		app.logger.Error().Err(err).Msg("Unable to check offline status for poison pill apply")
 		return local.Restart(app.ctx)
 	}
 	if !isOffline {
-		app.logger.Info(fmt.Sprintf("Applying poison pill issued by %s: Going offline", poisonPill.InitiatedBy))
+		app.logger.Info().Msgf("Applying poison pill issued by %s: Going offline", poisonPill.InitiatedBy)
 		err = local.SetOffline(app.ctx)
 		if err != nil {
 			return err
@@ -63,11 +61,11 @@ Out:
 		case <-ticker.C:
 			err := app.dcs.Get(pathPoisonPill, &poisonPill)
 			if err != nil {
-				app.logger.Error("Wait for poison pill apply", slog.Any("error", err))
+				app.logger.Error().Err(err).Msg("Wait for poison pill apply")
 			}
 			err = app.applyPoisonPill(&poisonPill)
 			if err != nil {
-				app.logger.Error("Poison pill apply", slog.Any("error", err))
+				app.logger.Error().Err(err).Msg("Poison pill apply")
 			}
 			if poisonPill.Applied {
 				break Out
@@ -77,6 +75,6 @@ Out:
 		}
 	}
 	if !poisonPill.Applied {
-		app.logger.Error(fmt.Sprintf("Poison pill for %s was not applied within timeout", poisonPill.TargetHost))
+		app.logger.Error().Msgf("Poison pill for %s was not applied within timeout", poisonPill.TargetHost)
 	}
 }

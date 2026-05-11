@@ -30,9 +30,9 @@ func (app *App) isReplicaStale(replicaState *ReplicaState, checkOpenLag bool) bo
 		}
 		result := time.Since(app.dcsDivergeTime) > targetLag
 		if !result {
-			app.logger.Info(fmt.Sprintf("Local node is primary and we got a dcs info divergence at %v. Waiting for %v to make decision.", app.dcsDivergeTime, time.Since(app.dcsDivergeTime)-targetLag))
+			app.logger.Info().Msgf("Local node is primary and we got a dcs info divergence at %v. Waiting for %v to make decision.", app.dcsDivergeTime, time.Since(app.dcsDivergeTime)-targetLag)
 		} else {
-			app.logger.Info(fmt.Sprintf("Local node is primary and we got a dcs info divergence at %v. Marking local node as stale.", app.dcsDivergeTime))
+			app.logger.Info().Msgf("Local node is primary and we got a dcs info divergence at %v. Marking local node as stale.", app.dcsDivergeTime)
 		}
 		return result
 	}
@@ -50,7 +50,7 @@ func (app *App) closeStaleReplica(master string) error {
 	local := app.shard.Local()
 	if local.FQDN() == master {
 		if !app.dcsDivergeTime.IsZero() {
-			app.logger.Info("Clearing DCS divergence time state")
+			app.logger.Info().Msg("Clearing DCS divergence time state")
 			app.dcsDivergeTime = time.Time{}
 		}
 		return nil
@@ -73,11 +73,11 @@ func (app *App) closeStaleReplica(master string) error {
 	}
 	localState := app.getHostState(local.FQDN())
 	if app.isReplicaStale(localState.ReplicaState, false) {
-		app.logger.Debug("Local node seems stale. Checking if we could close.")
+		app.logger.Debug().Msg("Local node seems stale. Checking if we could close.")
 		var switchover Switchover
 		err := app.dcs.Get(pathCurrentSwitch, &switchover)
 		if err == nil {
-			app.logger.Debug(fmt.Sprintf("Skipping staleness close due to switchover in progress: %v.", switchover))
+			app.logger.Debug().Msgf("Skipping staleness close due to switchover in progress: %v.", switchover)
 			return nil
 		}
 		if err != dcs.ErrNotFound {
@@ -111,12 +111,12 @@ func (app *App) closeStaleReplica(master string) error {
 				if offline {
 					return nil
 				}
-				app.logger.Error(fmt.Sprintf("Local node is stale. Alive replicas: %d, stale replicas: %d. Making local node offline.", okReplicas, staleReplicas))
+				app.logger.Error().Msgf("Local node is stale. Alive replicas: %d, stale replicas: %d. Making local node offline.", okReplicas, staleReplicas)
 				return local.SetOffline(app.ctx)
 			}
 		}
 	} else if !app.replFailTime.IsZero() {
-		app.logger.Debug("Clearing local node replication fail time")
+		app.logger.Debug().Msg("Clearing local node replication fail time")
 		app.replFailTime = time.Time{}
 	}
 	return nil

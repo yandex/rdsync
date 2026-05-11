@@ -3,7 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
-	"log/slog"
+	"io"
 	"os"
 	"os/signal"
 	"sync/atomic"
@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gofrs/flock"
+	"github.com/rs/zerolog"
 
 	"github.com/yandex/rdsync/internal/config"
 	"github.com/yandex/rdsync/internal/dcs"
@@ -27,7 +28,8 @@ type App struct {
 	dcs            dcs.DCS
 	config         *config.Config
 	splitTime      map[string]time.Time
-	logger         *slog.Logger
+	logger         *zerolog.Logger
+	loggerCloser   io.Closer
 	nodeFailTime   map[string]time.Time
 	shard          *valkey.Shard
 	cache          *valkey.SentiCacheNode
@@ -49,20 +51,6 @@ func baseContext() context.Context {
 	return ctx
 }
 
-func parseLevel(level string) (slog.Level, error) {
-	switch level {
-	case "Debug":
-		return slog.LevelDebug, nil
-	case "Info":
-		return slog.LevelInfo, nil
-	case "Warn":
-		return slog.LevelWarn, nil
-	case "Error":
-		return slog.LevelError, nil
-	}
-	return slog.LevelInfo, fmt.Errorf("unknown error level: %s", level)
-}
-
 // NewApp is an App constructor
 func NewApp(configFile, logLevel string) (*App, error) {
 	conf, err := config.ReadFromFile(configFile)
@@ -77,7 +65,7 @@ func NewApp(configFile, logLevel string) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: logLevelN}))
+	logger, loggerCloser := newMainLogger(logLevelN, conf.LogBufferSize, conf.LogPollInterval)
 	mode, err := parseMode(conf.Mode)
 	if err != nil {
 		return nil, err
@@ -94,6 +82,7 @@ func NewApp(configFile, logLevel string) (*App, error) {
 		splitTime:    make(map[string]time.Time),
 		state:        stateInit,
 		logger:       logger,
+		loggerCloser: loggerCloser,
 		config:       conf,
 	}
 	app.critical.Store(false)
@@ -110,19 +99,24 @@ func (app *App) connectDCS() error {
 }
 
 func (app *App) reconnectDCS() error {
-	app.logger.Info("Attempting DCS reconnection after prolonged Lost state")
+	app.logger.Info().Msg("Attempting DCS reconnection after prolonged Lost state")
 	oldDCS := app.dcs
 	err := app.connectDCS()
 	if err != nil {
-		app.logger.Error("DCS reconnection failed", slog.Any("error", err))
+		app.logger.Error().Err(err).Msg("DCS reconnection failed")
 		app.dcs = oldDCS
 		return err
 	}
 	app.dcs.SetDisconnectCallback(func() error { return app.handleCritical() })
 	app.shard.SetDCS(app.dcs)
 	oldDCS.Close()
-	app.logger.Info("DCS reconnection successful")
+	app.logger.Info().Msg("DCS reconnection successful")
 	return nil
+}
+
+// CloseLogger drains the logger's queue
+func (app *App) CloseLogger() {
+	app.loggerCloser.Close()
 }
 
 func (app *App) lockDaemonFile() {
@@ -132,7 +126,8 @@ func (app *App) lockDaemonFile() {
 		if err != nil {
 			msg = err.Error()
 		}
-		app.logger.Error(fmt.Sprintf("Unable to acquire daemon lock on %s", app.config.DaemonLockFile), slog.Any("error", msg))
+		app.logger.Error().Str("error", msg).Msgf("Unable to acquire daemon lock on %s", app.config.DaemonLockFile)
+		app.CloseLogger()
 		os.Exit(1)
 	}
 }
@@ -140,7 +135,7 @@ func (app *App) lockDaemonFile() {
 func (app *App) unlockDaemonFile() {
 	err := app.daemonLock.Unlock()
 	if err != nil {
-		app.logger.Error(fmt.Sprintf("Unable to unlock daemon lock %s", app.config.DaemonLockFile), slog.Any("error", err))
+		app.logger.Error().Err(err).Msgf("Unable to unlock daemon lock %s", app.config.DaemonLockFile)
 	}
 }
 
@@ -148,13 +143,14 @@ func (app *App) unlockDaemonFile() {
 func (app *App) Run() int {
 	app.lockDaemonFile()
 	defer app.unlockDaemonFile()
+	defer app.loggerCloser.Close()
 
 	app.timings = newTimingReporter(app.config, app.logger)
 	defer app.timings.Close()
 
 	err := app.connectDCS()
 	if err != nil {
-		app.logger.Error("Unable to connect to dcs", slog.Any("error", err))
+		app.logger.Error().Err(err).Msg("Unable to connect to dcs")
 		return 1
 	}
 	defer app.dcs.Close()
@@ -165,7 +161,7 @@ func (app *App) Run() int {
 	if app.mode == modeSentinel {
 		app.cache, err = valkey.NewSentiCacheNode(app.config, app.logger)
 		if err != nil {
-			app.logger.Error("Unable to init senticache node", slog.Any("error", err))
+			app.logger.Error().Err(err).Msg("Unable to init senticache node")
 			return 1
 		}
 		defer app.cache.Close()
@@ -186,7 +182,7 @@ func (app *App) Run() int {
 			app.timings.Reopen()
 		case <-ticker.C:
 			for {
-				app.logger.Info(fmt.Sprintf("Rdsync state: %s", app.state))
+				app.logger.Info().Msgf("Rdsync state: %s", app.state)
 				stateHandler := map[appState](func() appState){
 					stateInit:        app.stateInit,
 					stateManager:     app.stateManager,

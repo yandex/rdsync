@@ -3,11 +3,12 @@ package dcs
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"math/rand"
 	"net"
 	"sync"
 	"time"
+
+	"github.com/rs/zerolog"
 )
 
 type zkhost struct {
@@ -17,7 +18,7 @@ type zkhost struct {
 
 type RandomHostProvider struct {
 	ctx                      context.Context
-	logger                   *slog.Logger
+	logger                   *zerolog.Logger
 	resolver                 *net.Resolver
 	tried                    map[string]struct{}
 	hosts                    sync.Map
@@ -31,7 +32,7 @@ type RandomHostProvider struct {
 	isRetry                  bool
 }
 
-func NewRandomHostProvider(ctx context.Context, config *RandomHostProviderConfig, useAddrs bool, logger *slog.Logger) *RandomHostProvider {
+func NewRandomHostProvider(ctx context.Context, config *RandomHostProviderConfig, useAddrs bool, logger *zerolog.Logger) *RandomHostProvider {
 	return &RandomHostProvider{
 		ctx:                      ctx,
 		lookupTTL:                config.LookupTTL,
@@ -53,7 +54,7 @@ func (rhp *RandomHostProvider) Init(servers []string) error {
 	for _, host := range servers {
 		resolved, err := rhp.resolveHost(host)
 		if err != nil {
-			rhp.logger.Error(fmt.Sprintf("host definition %s is invalid", host), slog.Any("error", err))
+			rhp.logger.Error().Err(err).Msgf("host definition %s is invalid", host)
 			continue
 		}
 		allResolvedServers = append(allResolvedServers, resolved...)
@@ -86,10 +87,10 @@ func (rhp *RandomHostProvider) checkZKConnectivity(servers []string) error {
 		conn, err := net.DialTimeout("tcp", server, rhp.connectivityCheckTimeout)
 		if err == nil {
 			conn.Close()
-			rhp.logger.Info("zk connectivity check succeeded", slog.String("server", server))
+			rhp.logger.Info().Str("server", server).Msg("zk connectivity check succeeded")
 			return nil
 		}
-		rhp.logger.Error("connectivity check failed", slog.String("server", server), slog.Any("error", err))
+		rhp.logger.Error().Str("server", server).Err(err).Msg("connectivity check failed")
 	}
 
 	return fmt.Errorf("failed to connect to any zk server: all attempts timed out or refused")
@@ -107,7 +108,7 @@ func (rhp *RandomHostProvider) resolveHosts() {
 				if len(zhost.resolved) == 0 || time.Since(zhost.lastLookup) > rhp.lookupTTL {
 					resolved, err := rhp.resolveHost(pair)
 					if err != nil || len(resolved) == 0 {
-						rhp.logger.Error(fmt.Sprintf("background resolve for %s failed", pair), slog.Any("error", err))
+						rhp.logger.Error().Err(err).Msgf("background resolve for %s failed", pair)
 						continue
 					}
 					rhp.hosts.Store(pair, zkhost{
@@ -132,7 +133,7 @@ func (rhp *RandomHostProvider) resolveHost(pair string) ([]string, error) {
 	defer cancel()
 	addrs, err := rhp.resolver.LookupHost(ctx, host)
 	if err != nil {
-		rhp.logger.Error(fmt.Sprintf("unable to resolve %s", host), slog.Any("error", err))
+		rhp.logger.Error().Err(err).Msgf("unable to resolve %s", host)
 	}
 	for _, addr := range addrs {
 		res = append(res, net.JoinHostPort(addr, port))
@@ -148,7 +149,7 @@ func (rhp *RandomHostProvider) Len() int {
 func (rhp *RandomHostProvider) Next() (server string, retryStart bool) {
 	if rhp.isRetry {
 		v := time.Duration(rand.Float64() * float64(rhp.retryJitter))
-		rhp.logger.Info("Triggering connection retry jitter", slog.Duration("duration", v))
+		rhp.logger.Info().Dur("duration", v).Msg("Triggering connection retry jitter")
 		time.Sleep(v)
 		rhp.isRetry = false
 	}

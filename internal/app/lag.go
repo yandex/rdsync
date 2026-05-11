@@ -73,7 +73,7 @@ func (app *App) getMostDesirableNode(shardState map[string]*HostState, switchove
 		return "", fmt.Errorf("no hosts with psync possible from most recent one: %s", recent)
 	}
 
-	app.logger.Info(fmt.Sprintf("Selecting most desirable within %s", recentNodes))
+	app.logger.Info().Msgf("Selecting most desirable within %s", recentNodes)
 
 	var priorityHost string
 	var maxPriority int

@@ -2,7 +2,6 @@ package app
 
 import (
 	"fmt"
-	"log/slog"
 	"os"
 
 	"github.com/yandex/rdsync/internal/dcs"
@@ -64,7 +63,7 @@ func (app *App) leaveMaintenance() error {
 func (app *App) createMaintenanceFile() {
 	err := os.WriteFile(app.config.MaintenanceFile, []byte(""), 0o640)
 	if err != nil {
-		app.logger.Error("Failed to write maintenance file", slog.Any("error", err))
+		app.logger.Error().Err(err).Msg("Failed to write maintenance file")
 	}
 }
 
@@ -76,7 +75,7 @@ func (app *App) doesMaintenanceFileExist() bool {
 func (app *App) removeMaintenanceFile() {
 	err := os.Remove(app.config.MaintenanceFile)
 	if err != nil && !os.IsNotExist(err) {
-		app.logger.Error("Failed to remove maintenance file", slog.Any("error", err))
+		app.logger.Error().Err(err).Msg("Failed to remove maintenance file")
 	}
 }
 
@@ -100,10 +99,10 @@ func (app *App) stateMaintenance() appState {
 	}
 	if err == dcs.ErrNotFound || maintenance.ShouldLeave {
 		if app.dcs.AcquireLock(pathManagerLock) {
-			app.logger.Info("Leaving maintenance")
+			app.logger.Info().Msg("Leaving maintenance")
 			err := app.leaveMaintenance()
 			if err != nil {
-				app.logger.Error("Failed to leave maintenance", slog.Any("error", err))
+				app.logger.Error().Err(err).Msg("Failed to leave maintenance")
 				return stateMaintenance
 			}
 			app.removeMaintenanceFile()

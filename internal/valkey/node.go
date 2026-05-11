@@ -3,7 +3,6 @@ package valkey
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"net"
 	"os/exec"
 	"slices"
@@ -12,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rs/zerolog"
 	client "github.com/valkey-io/valkey-go"
 
 	"github.com/yandex/rdsync/internal/config"
@@ -27,7 +27,7 @@ type Node struct {
 	ipsTime     time.Time
 	conn        client.Client
 	config      *config.Config
-	logger      *slog.Logger
+	logger      *zerolog.Logger
 	cachedInfo  map[string]string
 	fqdn        string
 	clusterID   string
@@ -54,7 +54,7 @@ func uniqLookup(host string) ([]net.IP, error) {
 }
 
 // NewNode is a Node constructor
-func NewNode(config *config.Config, logger *slog.Logger, fqdn string) (*Node, error) {
+func NewNode(config *config.Config, logger *zerolog.Logger, fqdn string) (*Node, error) {
 	var host string
 	if fqdn == config.Hostname {
 		// Offline mode forbids connections on non-lo interfaces
@@ -62,11 +62,12 @@ func NewNode(config *config.Config, logger *slog.Logger, fqdn string) (*Node, er
 	} else {
 		host = fqdn
 	}
-	nodeLogger := logger.With(slog.String("module", "node"), slog.String("fqdn", host))
+	nl := logger.With().Str("module", "node").Str("fqdn", host).Logger()
+	nodeLogger := &nl
 	now := time.Now()
 	ips, err := uniqLookup(fqdn)
 	if err != nil {
-		nodeLogger.Warn("Dns lookup failed", slog.Any("error", err))
+		nodeLogger.Warn().Err(err).Msg("Dns lookup failed")
 		ips = []net.IP{}
 		now = time.Time{}
 	}
@@ -92,7 +93,7 @@ func NewNode(config *config.Config, logger *slog.Logger, fqdn string) (*Node, er
 	}
 	conn, err := client.NewClient(opts)
 	if err != nil {
-		logger.Warn("Unable to establish initial connection", slog.String("fqdn", host), slog.Any("error", err))
+		logger.Warn().Str("fqdn", host).Err(err).Msg("Unable to establish initial connection")
 		conn = nil
 	}
 	node := Node{
@@ -155,14 +156,14 @@ func (n *Node) MatchHost(host string) bool {
 // RefreshAddrs updates internal ip address list if ttl exceeded
 func (n *Node) RefreshAddrs() error {
 	if time.Since(n.ipsTime) < n.config.Valkey.DNSTTL {
-		n.logger.Debug("Not updating ips cache due to ttl")
+		n.logger.Debug().Msg("Not updating ips cache due to ttl")
 		return nil
 	}
-	n.logger.Debug("Updating ips cache")
+	n.logger.Debug().Msg("Updating ips cache")
 	now := time.Now()
 	ips, err := uniqLookup(n.fqdn)
 	if err != nil {
-		n.logger.Error("Updating ips cache failed", slog.Any("error", err))
+		n.logger.Error().Err(err).Msg("Updating ips cache failed")
 		return err
 	}
 	n.ips = ips
@@ -280,7 +281,7 @@ func (n *Node) SetOffline(ctx context.Context) error {
 		return err
 	}
 	if rewriteErr != nil {
-		n.logger.Error("Config rewrite after setting node offline failed", slog.Any("error", rewriteErr))
+		n.logger.Error().Err(rewriteErr).Msg("Config rewrite after setting node offline failed")
 	}
 	return nil
 }
@@ -358,7 +359,7 @@ func (n *Node) EmptyQuorumReplicas(ctx context.Context) error {
 			return err
 		}
 		if rewriteErr != nil {
-			n.logger.Error("Rewrite config failed", slog.Any("error", rewriteErr))
+			n.logger.Error().Err(rewriteErr).Msg("Rewrite config failed")
 		}
 	}
 	return nil
@@ -441,7 +442,7 @@ func (n *Node) Restart(ctx context.Context) error {
 	if !n.IsLocal() {
 		return fmt.Errorf("restarting %s is not possible - not local", n.fqdn)
 	}
-	n.logger.Warn(fmt.Sprintf("Restarting with %s", n.config.Valkey.RestartCommand))
+	n.logger.Warn().Msgf("Restarting with %s", n.config.Valkey.RestartCommand)
 	split := strings.Fields(n.config.Valkey.RestartCommand)
 	cmd := exec.CommandContext(ctx, split[0], split[1:]...)
 	return cmd.Run()
@@ -626,7 +627,7 @@ func (n *Node) IsClusterMajorityAlive(ctx context.Context) (bool, error) {
 		}
 	}
 	res := failedMasters < totalMasters/2+1
-	n.logger.Debug(fmt.Sprintf("Cluster majority alive check: %d total, %d failed -> %t", totalMasters, failedMasters, res))
+	n.logger.Debug().Msgf("Cluster majority alive check: %d total, %d failed -> %t", totalMasters, failedMasters, res)
 	return res, nil
 }
 

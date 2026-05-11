@@ -3,13 +3,13 @@ package valkey
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"net"
 	"os/exec"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/rs/zerolog"
 	client "github.com/valkey-io/valkey-go"
 
 	"github.com/yandex/rdsync/internal/config"
@@ -58,14 +58,14 @@ type SentiCacheState struct {
 // SentiCacheNode represents API to query/manipulate a single Valkey SentiCache node
 type SentiCacheNode struct {
 	config *config.Config
-	logger *slog.Logger
+	logger *zerolog.Logger
 	conn   client.Client
 	opts   client.ClientOption
 	broken bool
 }
 
 // NewRemoteSentiCacheNode is a remote SentiCacheNode constructor
-func NewRemoteSentiCacheNode(config *config.Config, host string, logger *slog.Logger) (*SentiCacheNode, error) {
+func NewRemoteSentiCacheNode(config *config.Config, host string, logger *zerolog.Logger) (*SentiCacheNode, error) {
 	addr := net.JoinHostPort(host, strconv.Itoa(config.SentinelMode.CachePort))
 	opts := client.ClientOption{
 		InitAddress:           []string{addr},
@@ -88,21 +88,22 @@ func NewRemoteSentiCacheNode(config *config.Config, host string, logger *slog.Lo
 	}
 	conn, err := client.NewClient(opts)
 	if err != nil {
-		logger.Warn("Unable to establish initial connection", slog.String("fqdn", host), slog.Any("error", err))
+		logger.Warn().Str("fqdn", host).Err(err).Msg("Unable to establish initial connection")
 		conn = nil
 	}
+	sl := logger.With().Str("module", "senticache").Logger()
 	node := SentiCacheNode{
 		config: config,
 		conn:   conn,
 		opts:   opts,
-		logger: logger.With(slog.String("module", "senticache")),
+		logger: &sl,
 		broken: false,
 	}
 	return &node, nil
 }
 
 // NewSentiCacheNode is a local SentiCacheNode constructor
-func NewSentiCacheNode(config *config.Config, logger *slog.Logger) (*SentiCacheNode, error) {
+func NewSentiCacheNode(config *config.Config, logger *zerolog.Logger) (*SentiCacheNode, error) {
 	return NewRemoteSentiCacheNode(config, localhost, logger)
 }
 
@@ -125,7 +126,7 @@ func (s *SentiCacheNode) ensureConn() error {
 }
 
 func (s *SentiCacheNode) restart(ctx context.Context) error {
-	s.logger.Error("Restarting broken senticache")
+	s.logger.Error().Msg("Restarting broken senticache")
 	split := strings.Fields(s.config.SentinelMode.CacheRestartCommand)
 	cmd := exec.CommandContext(ctx, split[0], split[1:]...)
 	return cmd.Run()
@@ -331,7 +332,7 @@ func (s *SentiCacheNode) Update(ctx context.Context, state *SentiCacheState) err
 			return err
 		}
 	}
-	s.logger.Debug(fmt.Sprintf("Previous state: master: %v, replicas: %v, sentinels: %v", master, replicas, sentinels))
+	s.logger.Debug().Msgf("Previous state: master: %v, replicas: %v, sentinels: %v", master, replicas, sentinels)
 	var command = []string{
 		"SENTINEL", "CACHE-UPDATE", s.config.SentinelMode.CacheUpdateSecret,
 		"master-name:", state.Master.Name + ",",
@@ -381,7 +382,7 @@ func (s *SentiCacheNode) Update(ctx context.Context, state *SentiCacheState) err
 			fmt.Sprintf("%d", replica.MasterPort), fmt.Sprintf("%d", replica.SlaveMasterLinkStatus), fmt.Sprintf("%d,", replica.SlaveReplOffset),
 		)
 	}
-	s.logger.Debug(fmt.Sprintf("Updating senticache state with %v", command))
+	s.logger.Debug().Msgf("Updating senticache state with %v", command)
 	err = s.conn.Do(ctx, s.conn.B().Arbitrary(command...).Build()).Error()
 	if err != nil {
 		s.broken = true
