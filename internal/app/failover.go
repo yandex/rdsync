@@ -47,7 +47,7 @@ func (app *App) approveFailover(shardState map[string]*HostState, activeNodes []
 		return fmt.Errorf("all replicas are alive and running replication, seems dcs problems")
 	}
 
-	app.logger.Info(fmt.Sprintf("Approve failover: active nodes are %v", activeNodes))
+	app.logger.Info().Msgf("Approve failover: active nodes are %v", activeNodes)
 	permissibleReplicas := countAliveHAReplicasWithinNodes(activeNodes, shardState)
 	failoverQuorum := app.getFailoverQuorum(activeNodes)
 	if permissibleReplicas < failoverQuorum {

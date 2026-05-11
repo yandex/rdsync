@@ -1,48 +1,56 @@
 package app
 
 import (
-	"log/slog"
+	"io"
 	"os"
 	"sync"
 	"time"
+
+	"github.com/rs/zerolog"
 
 	"github.com/yandex/rdsync/internal/config"
 )
 
 // TimingReporter handles reporting event durations to a separate log file
 type TimingReporter struct {
-	logger    *slog.Logger
-	appLogger *slog.Logger
-	file      *os.File
-	path      string
-	mu        sync.Mutex
+	logger       *zerolog.Logger
+	appLogger    *zerolog.Logger
+	loggerCloser io.Closer
+	file         *os.File
+	path         string
+	bufSize      int
+	pollInterval time.Duration
+	mu           sync.Mutex
 }
 
-func openTimingLog(path string) (*os.File, *slog.Logger, error) {
+func openTimingLog(path string, bufSize int, pollInterval time.Duration) (*os.File, *zerolog.Logger, io.Closer, error) {
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	logger := slog.New(slog.NewTextHandler(f, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	return f, logger, nil
+	logger, closer := newEventLogger(f, bufSize, pollInterval)
+	return f, logger, closer, nil
 }
 
-func newTimingReporter(conf *config.Config, appLogger *slog.Logger) *TimingReporter {
+func newTimingReporter(conf *config.Config, appLogger *zerolog.Logger) *TimingReporter {
 	if conf.EventTimingLogFile == "" {
 		return nil
 	}
 
-	f, logger, err := openTimingLog(conf.EventTimingLogFile)
+	f, logger, closer, err := openTimingLog(conf.EventTimingLogFile, conf.LogBufferSize, conf.LogPollInterval)
 	if err != nil {
-		appLogger.Error("Failed to open event timing log file", slog.String("path", conf.EventTimingLogFile), slog.Any("error", err))
+		appLogger.Error().Err(err).Str("path", conf.EventTimingLogFile).Msg("Failed to open event timing log file")
 		return nil
 	}
 
 	return &TimingReporter{
-		logger:    logger,
-		appLogger: appLogger,
-		file:      f,
-		path:      conf.EventTimingLogFile,
+		logger:       logger,
+		appLogger:    appLogger,
+		loggerCloser: closer,
+		file:         f,
+		path:         conf.EventTimingLogFile,
+		bufSize:      conf.LogBufferSize,
+		pollInterval: conf.LogPollInterval,
 	}
 }
 
@@ -56,7 +64,7 @@ func (r *TimingReporter) reportTiming(eventType string, duration time.Duration) 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	r.logger.Info("event_timing", slog.String("event", eventType), slog.Int64("duration_ms", duration.Milliseconds()))
+	r.logger.Info().Str("event", eventType).Int64("duration_ms", duration.Milliseconds()).Msg("event_timing")
 }
 
 // Reopen closes the current log file and opens it again at the same path.
@@ -68,25 +76,33 @@ func (r *TimingReporter) Reopen() {
 		return
 	}
 
-	r.appLogger.Info("Reopening timing log file")
+	r.appLogger.Info().Msg("Reopening timing log file")
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	// Flush and close the old diode before closing the file.
+	if r.loggerCloser != nil {
+		r.loggerCloser.Close()
+		r.loggerCloser = nil
+	}
 	if r.file != nil {
 		r.file.Close()
+		r.file = nil
 	}
 
-	f, logger, err := openTimingLog(r.path)
+	f, logger, closer, err := openTimingLog(r.path, r.bufSize, r.pollInterval)
 	if err != nil {
-		r.appLogger.Error("Failed to reopen event timing log file", slog.String("path", r.path), slog.Any("error", err))
-		r.file = nil
-		r.logger = slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
+		r.appLogger.Error().Err(err).Str("path", r.path).Msg("Failed to reopen event timing log file")
+		// Fall back to a no-op logger so subsequent reportTiming calls don't panic.
+		nop := zerolog.Nop()
+		r.logger = &nop
 		return
 	}
 
 	r.file = f
 	r.logger = logger
+	r.loggerCloser = closer
 }
 
 // Close shuts down the reporter and closes the log file
@@ -98,6 +114,10 @@ func (r *TimingReporter) Close() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	if r.loggerCloser != nil {
+		r.loggerCloser.Close()
+		r.loggerCloser = nil
+	}
 	if r.file != nil {
 		r.file.Close()
 		r.file = nil

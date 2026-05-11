@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"time"
 
 	"github.com/yandex/rdsync/internal/dcs"
@@ -19,48 +18,48 @@ func (app *App) stateManager() appState {
 
 	err := app.shard.UpdateHostsInfo()
 	if err != nil {
-		app.logger.Error("Updating hosts info failed", slog.Any("error", err))
+		app.logger.Error().Err(err).Msg("Updating hosts info failed")
 	}
 
 	shardState, err := app.getShardStateFromDB()
 	if err != nil {
-		app.logger.Error("Failed to get shard state from DB", slog.Any("error", err))
+		app.logger.Error().Err(err).Msg("Failed to get shard state from DB")
 		return stateManager
 	}
 
 	shardStateDcs, err := app.getShardStateFromDcs()
 	if err != nil {
-		app.logger.Error("Failed to get shard state from DCS", slog.Any("error", err))
+		app.logger.Error().Err(err).Msg("Failed to get shard state from DCS")
 		return stateManager
 	}
 
 	master, err := app.getCurrentMaster(shardState)
 	if err != nil {
-		app.logger.Error("Failed to get or identify master", slog.Any("error", err))
+		app.logger.Error().Err(err).Msg("Failed to get or identify master")
 		return stateManager
 	}
 
 	activeNodes, err := app.GetActiveNodes()
 	if err != nil {
-		app.logger.Error("Failed to get active nodes", slog.Any("error", err))
+		app.logger.Error().Err(err).Msg("Failed to get active nodes")
 		return stateManager
 	}
-	app.logger.Info(fmt.Sprintf("Active nodes: %v", activeNodes))
-	app.logger.Info(fmt.Sprintf("Master: %s", master))
-	app.logger.Info(fmt.Sprintf("Shard state: %v", shardState))
-	app.logger.Info(fmt.Sprintf("DCS shard state: %v", shardStateDcs))
+	app.logger.Info().Msgf("Active nodes: %v", activeNodes)
+	app.logger.Info().Msgf("Master: %s", master)
+	app.logger.Info().Msgf("Shard state: %v", shardState)
+	app.logger.Info().Msgf("DCS shard state: %v", shardStateDcs)
 
 	maintenance, err := app.GetMaintenance()
 	if err != nil && err != dcs.ErrNotFound {
-		app.logger.Error("Failed to get maintenance from dcs", slog.Any("error", err))
+		app.logger.Error().Err(err).Msg("Failed to get maintenance from dcs")
 		return stateManager
 	}
 	if maintenance != nil {
 		if !maintenance.RdSyncPaused {
-			app.logger.Info("Entering maintenance")
+			app.logger.Info().Msg("Entering maintenance")
 			err := app.enterMaintenance(maintenance, master)
 			if err != nil {
-				app.logger.Error("Unable to enter maintenance", slog.Any("error", err))
+				app.logger.Error().Err(err).Msg("Unable to enter maintenance")
 				return stateManager
 			}
 		}
@@ -72,58 +71,58 @@ func (app *App) stateManager() appState {
 	var switchover Switchover
 	if err := app.dcs.Get(pathCurrentSwitch, &switchover); err == nil {
 		if !switchover.InitiatedAt.IsZero() && time.Since(switchover.InitiatedAt) > app.config.Valkey.SwitchoverTimeout {
-			app.logger.Error(fmt.Sprintf("Switchover: %s => %s timed out after %s", switchover.From, switchover.To, time.Since(switchover.InitiatedAt)))
+			app.logger.Error().Msgf("Switchover: %s => %s timed out after %s", switchover.From, switchover.To, time.Since(switchover.InitiatedAt))
 			err = app.failSwitchover(&switchover, fmt.Errorf("switchover timed out after %s", time.Since(switchover.InitiatedAt)))
 			if err != nil {
-				app.logger.Error("Failed to report switchover timeout", slog.Any("error", err))
+				app.logger.Error().Err(err).Msg("Failed to report switchover timeout")
 			}
 			return stateManager
 		}
 		err = app.approveSwitchover(&switchover, activeNodes, shardState)
 		if err != nil {
-			app.logger.Error("Unable to perform switchover", slog.Any("error", err))
+			app.logger.Error().Err(err).Msg("Unable to perform switchover")
 			err = app.finishSwitchover(&switchover, err)
 			if err != nil {
-				app.logger.Error("Failed to reject switchover", slog.Any("error", err))
+				app.logger.Error().Err(err).Msg("Failed to reject switchover")
 			}
 			return stateManager
 		}
 
 		err = app.startSwitchover(&switchover)
 		if err != nil {
-			app.logger.Error("Unable to start switchover", slog.Any("error", err))
+			app.logger.Error().Err(err).Msg("Unable to start switchover")
 			return stateManager
 		}
 		err = app.performSwitchover(shardState, activeNodes, &switchover, master)
 		if app.dcs.Get(pathCurrentSwitch, new(Switchover)) == dcs.ErrNotFound {
-			app.logger.Error("Switchover was aborted")
+			app.logger.Error().Msg("Switchover was aborted")
 		} else {
 			if err != nil {
 				err = app.failSwitchover(&switchover, err)
 				if err != nil {
-					app.logger.Error("Failed to report switchover failure", slog.Any("error", err))
+					app.logger.Error().Err(err).Msg("Failed to report switchover failure")
 				}
 			} else {
 				err = app.finishSwitchover(&switchover, nil)
 				if err != nil {
-					app.logger.Error("Failed to report switchover finish", slog.Any("error", err))
+					app.logger.Error().Err(err).Msg("Failed to report switchover finish")
 				}
 			}
 		}
 		return stateManager
 	} else if err != dcs.ErrNotFound {
-		app.logger.Error("Getting current switchover failed", slog.Any("error", err))
+		app.logger.Error().Err(err).Msg("Getting current switchover failed")
 		return stateManager
 	}
 	poisonPill, err := app.getPoisonPill()
 	if err != nil && err != dcs.ErrNotFound {
-		app.logger.Error("Manager: failed to get poison pill from DCS", slog.Any("error", err))
+		app.logger.Error().Err(err).Msg("Manager: failed to get poison pill from DCS")
 		return stateManager
 	}
 	if poisonPill != nil {
 		err = app.clearPoisonPill()
 		if err != nil {
-			app.logger.Error("Manager: failed to remove poison pill from DCS", slog.Any("error", err))
+			app.logger.Error().Err(err).Msg("Manager: failed to remove poison pill from DCS")
 			return stateManager
 		}
 	}
@@ -135,11 +134,11 @@ func (app *App) stateManager() appState {
 			if state.PingOk {
 				availableReplicas++
 			} else {
-				app.logger.Warn("Host seems down", slog.String("fqdn", host))
+				app.logger.Warn().Str("fqdn", host).Msg("Host seems down")
 			}
 		}
 		if availableReplicas > hosts/2 {
-			app.logger.Error("We see that majority of shard is still alive, but master is not. So it probably failed.")
+			app.logger.Error().Msg("We see that majority of shard is still alive, but master is not. So it probably failed.")
 			masterFailed = true
 		}
 	}
@@ -147,13 +146,13 @@ func (app *App) stateManager() appState {
 		masterFailed = true
 	}
 	if masterFailed {
-		app.logger.Error(fmt.Sprintf("Master %s failure", master))
+		app.logger.Error().Msgf("Master %s failure", master)
 		if app.nodeFailTime[master].IsZero() {
 			app.nodeFailTime[master] = time.Now()
 		}
 		err = app.approveFailover(shardState, activeNodes, master)
 		if err == nil {
-			app.logger.Info("Failover approved")
+			app.logger.Info().Msg("Failover approved")
 			// Report master unavailability duration before performing failover
 			if failTime, ok := app.nodeFailTime[master]; ok {
 				dur := time.Since(failTime)
@@ -161,10 +160,10 @@ func (app *App) stateManager() appState {
 			}
 			err = app.performFailover(master)
 			if err != nil {
-				app.logger.Error("Unable to perform failover", slog.Any("error", err))
+				app.logger.Error().Err(err).Msg("Unable to perform failover")
 			}
 		} else {
-			app.logger.Error("Failover was not approved", slog.Any("error", err))
+			app.logger.Error().Err(err).Msg("Failover was not approved")
 		}
 		return stateManager
 	}
@@ -176,14 +175,14 @@ func (app *App) stateManager() appState {
 			if state.PingOk {
 				availableReplicas++
 			} else {
-				app.logger.Warn("Host seems down", slog.String("fqdn", host))
+				app.logger.Warn().Str("fqdn", host).Msg("Host seems down")
 			}
 		}
 		for host, state := range shardStateDcs {
 			if state.PingOk {
 				availableReplicasDcs++
 			} else {
-				app.logger.Warn("Host seems down in DCS", slog.String("fqdn", host))
+				app.logger.Warn().Str("fqdn", host).Msg("Host seems down in DCS")
 			}
 		}
 		if availableReplicas <= hosts/2 && availableReplicasDcs > hosts/2 {
@@ -193,20 +192,20 @@ func (app *App) stateManager() appState {
 			if app.config.Valkey.FailoverTimeout > 0 {
 				failedTime := time.Since(app.splitTime[master])
 				if failedTime < app.config.Valkey.FailoverTimeout {
-					app.logger.Error(
-						fmt.Sprintf("According to DCS majority of shard is still alive, but we don't see that from here, will wait for %v before giving up on manager role",
-							app.config.Valkey.FailoverTimeout-failedTime))
+					app.logger.Error().Msgf(
+						"According to DCS majority of shard is still alive, but we don't see that from here, will wait for %v before giving up on manager role",
+						app.config.Valkey.FailoverTimeout-failedTime)
 					return stateManager
 				}
 			}
 			needGiveUp = true
 		}
 	} else if master != app.config.Hostname && !shardState[master].PingOk {
-		app.logger.Error(fmt.Sprintf("Master %s probably failed, do not perform any kind of repair", master))
+		app.logger.Error().Msgf("Master %s probably failed, do not perform any kind of repair", master)
 		return stateManager
 	}
 	if needGiveUp {
-		app.logger.Error("According to DCS majority of shard is still alive, but we don't see that from here. Giving up on manager role")
+		app.logger.Error().Msg("According to DCS majority of shard is still alive, but we don't see that from here. Giving up on manager role")
 		delete(app.splitTime, master)
 		app.dcs.ReleaseLock(pathManagerLock)
 		waitCtx, cancel := context.WithTimeout(app.ctx, app.config.Valkey.FailoverTimeout)
@@ -219,13 +218,13 @@ func (app *App) stateManager() appState {
 			case <-ticker.C:
 				err = app.dcs.Get(pathManagerLock, &manager)
 				if err != nil {
-					app.logger.Error(fmt.Sprintf("Failed to get %s", pathManagerLock), slog.Any("error", err))
+					app.logger.Error().Err(err).Msgf("Failed to get %s", pathManagerLock)
 				} else if manager.Hostname != app.config.Hostname {
-					app.logger.Info(fmt.Sprintf("New manager: %s", manager.Hostname))
+					app.logger.Info().Msgf("New manager: %s", manager.Hostname)
 					break Out
 				}
 			case <-waitCtx.Done():
-				app.logger.Error("No node took manager lock for failover timeout")
+				app.logger.Error().Msg("No node took manager lock for failover timeout")
 				break Out
 			}
 		}
@@ -243,7 +242,7 @@ func (app *App) stateManager() appState {
 	if updateActive {
 		err = app.updateActiveNodes(shardState, shardStateDcs, activeNodes, master)
 		if err != nil {
-			app.logger.Error("Failed to update active nodes in dcs", slog.Any("error", err))
+			app.logger.Error().Err(err).Msg("Failed to update active nodes in dcs")
 		}
 	}
 

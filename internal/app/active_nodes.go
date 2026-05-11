@@ -2,7 +2,6 @@ package app
 
 import (
 	"fmt"
-	"log/slog"
 	"slices"
 	"sort"
 	"strings"
@@ -48,13 +47,13 @@ func (app *App) actualizeQuorumReplicas(master string, activeNodes []string) err
 	}
 
 	if currentValue != expectedValue {
-		app.logger.Debug(fmt.Sprintf("Setting quorum replicas to %s on %s", expectedValue, master))
+		app.logger.Debug().Msgf("Setting quorum replicas to %s on %s", expectedValue, master)
 		err, rewriteErr := node.SetQuorumReplicas(app.ctx, expectedValue)
 		if err != nil {
 			return err
 		}
 		if rewriteErr != nil {
-			app.logger.Error("Unable to rewrite config", slog.String("fqdn", master), slog.Any("error", rewriteErr))
+			app.logger.Error().Str("fqdn", master).Err(rewriteErr).Msg("Unable to rewrite config")
 		}
 	}
 
@@ -76,21 +75,21 @@ func (app *App) updateActiveNodes(state, stateDcs map[string]*HostState, oldActi
 	if removingNodes {
 		err := app.dcs.Set(pathActiveNodes, activeNodes)
 		if err != nil {
-			app.logger.Error("Update active nodes: failed to update active nodes in dcs", slog.Any("error", err))
+			app.logger.Error().Err(err).Msg("Update active nodes: failed to update active nodes in dcs")
 			return err
 		}
 	}
 
 	err := app.actualizeQuorumReplicas(master, activeNodes)
 	if err != nil {
-		app.logger.Error("Update active nodes: failed to actualize quorum replicas", slog.Any("error", err))
+		app.logger.Error().Err(err).Msg("Update active nodes: failed to actualize quorum replicas")
 		return err
 	}
 
 	if !removingNodes {
 		err := app.dcs.Set(pathActiveNodes, activeNodes)
 		if err != nil {
-			app.logger.Error("Update active nodes: failed to update active nodes in dcs", slog.Any("error", err))
+			app.logger.Error().Err(err).Msg("Update active nodes: failed to update active nodes in dcs")
 			return err
 		}
 	}
@@ -117,7 +116,7 @@ func (app *App) calcActiveNodes(state, stateDcs map[string]*HostState, oldActive
 		if !node.PingOk {
 			if stateDcs[host].PingOk {
 				if slices.Contains(oldActiveNodes, host) {
-					app.logger.Warn(fmt.Sprintf("Calc active nodes: %s keeps health lock in dcs, keeping active...", host))
+					app.logger.Warn().Msgf("Calc active nodes: %s keeps health lock in dcs, keeping active...", host)
 					activeNodes = append(activeNodes, host)
 				}
 				continue
@@ -128,23 +127,23 @@ func (app *App) calcActiveNodes(state, stateDcs map[string]*HostState, oldActive
 			failTime := time.Since(app.nodeFailTime[host])
 			if failTime < app.config.InactivationDelay {
 				if slices.Contains(oldActiveNodes, host) {
-					app.logger.Warn(fmt.Sprintf("Calc active nodes: %s is failing, remaining %v", host, app.config.InactivationDelay-failTime))
+					app.logger.Warn().Msgf("Calc active nodes: %s is failing, remaining %v", host, app.config.InactivationDelay-failTime)
 					activeNodes = append(activeNodes, host)
 				}
 				continue
 			}
-			app.logger.Error(fmt.Sprintf("Calc active nodes: %s is down, deleting from active...", host))
+			app.logger.Error().Msgf("Calc active nodes: %s is down, deleting from active...", host)
 			continue
 		} else if !stateDcs[host].IsOffline {
 			delete(app.nodeFailTime, host)
 		}
 		replicaState := node.ReplicaState
 		if replicaState == nil {
-			app.logger.Warn(fmt.Sprintf("Calc active nodes: lost master %s", host))
+			app.logger.Warn().Msgf("Calc active nodes: lost master %s", host)
 			continue
 		}
 		if (masterState.PingOk && masterState.PingStable) && !replicates(&masterState, replicaState, host, masterNode, false) {
-			app.logger.Error(fmt.Sprintf("Calc active nodes: %s is not replicating from alive master, deleting from active...", host))
+			app.logger.Error().Msgf("Calc active nodes: %s is not replicating from alive master, deleting from active...", host)
 			continue
 		}
 		activeNodes = append(activeNodes, host)

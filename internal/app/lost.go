@@ -1,8 +1,6 @@
 package app
 
 import (
-	"fmt"
-	"log/slog"
 	"time"
 )
 
@@ -11,11 +9,11 @@ func (app *App) stateLost() appState {
 		return stateCandidate
 	}
 	if !app.lostSince.IsZero() && time.Since(app.lostSince) >= app.config.DcsReconnectTimeout {
-		app.logger.Warn(fmt.Sprintf("Lost state persisted for %s, attempting DCS reconnection", time.Since(app.lostSince).Truncate(time.Second)))
+		app.logger.Warn().Msgf("Lost state persisted for %s, attempting DCS reconnection", time.Since(app.lostSince).Truncate(time.Second))
 		err := app.reconnectDCS()
 		app.lostSince = time.Now()
 		if err != nil {
-			app.logger.Error("DCS reconnection attempt failed, will retry later", slog.Any("error", err))
+			app.logger.Error().Err(err).Msg("DCS reconnection attempt failed, will retry later")
 		}
 		return stateLost
 	}
@@ -29,48 +27,48 @@ func (app *App) stateLost() appState {
 		if app.checkHAReplicasRunning() {
 			offline, err := node.IsOffline(app.ctx)
 			if err != nil {
-				app.logger.Error("Failed to get node offline state", slog.String("fqdn", node.FQDN()), slog.Any("error", err))
+				app.logger.Error().Str("fqdn", node.FQDN()).Err(err).Msg("Failed to get node offline state")
 				return stateLost
 			}
 			if offline {
-				app.logger.Info("Rdsync have lost connection to ZK. However HA cluster is alive. Setting local node online")
+				app.logger.Info().Msg("Rdsync have lost connection to ZK. However HA cluster is alive. Setting local node online")
 				err = node.SetOnline(app.ctx)
 				if err != nil {
-					app.logger.Error("Unable to set local node online", slog.Any("error", err))
+					app.logger.Error().Err(err).Msg("Unable to set local node online")
 				}
 				return stateLost
 			}
-			app.logger.Info("Rdsync have lost connection to ZK. However HA cluster is alive. Do nothing")
+			app.logger.Info().Msg("Rdsync have lost connection to ZK. However HA cluster is alive. Do nothing")
 			return stateLost
 		}
 	} else {
 		shardState, err := app.getShardStateFromDB()
 		if err != nil {
-			app.logger.Error("Failed to get shard state from DB", slog.Any("error", err))
+			app.logger.Error().Err(err).Msg("Failed to get shard state from DB")
 			return stateLost
 		}
 
-		app.logger.Info(fmt.Sprintf("Shard state: %v", shardState))
+		app.logger.Info().Msgf("Shard state: %v", shardState)
 		master, err := app.getMasterHost(shardState)
 		if err != nil || master == "" {
-			app.logger.Error("Failed to get master from shard state", slog.Any("error", err))
+			app.logger.Error().Err(err).Msg("Failed to get master from shard state")
 		} else {
 			local := app.shard.Local()
 			offline, err := local.IsOffline(app.ctx)
 			if err != nil {
-				app.logger.Error("Failed to get node offline state", slog.String("fqdn", local.FQDN()), slog.Any("error", err))
+				app.logger.Error().Str("fqdn", local.FQDN()).Err(err).Msg("Failed to get node offline state")
 				return stateLost
 			}
 			if shardState[master].PingOk && shardState[master].PingStable && replicates(shardState[master], shardState[local.FQDN()].ReplicaState, local.FQDN(), app.shard.Get(master), false) && !app.isReplicaStale(shardState[local.FQDN()].ReplicaState, false) {
 				if offline {
-					app.logger.Info("Rdsync have lost connection to ZK. However our replication connection is alive. Setting local node online")
+					app.logger.Info().Msg("Rdsync have lost connection to ZK. However our replication connection is alive. Setting local node online")
 					err = node.SetOnline(app.ctx)
 					if err != nil {
-						app.logger.Error("Unable to set local node online", slog.Any("error", err))
+						app.logger.Error().Err(err).Msg("Unable to set local node online")
 					}
 					return stateLost
 				}
-				app.logger.Info("Rdsync have lost connection to ZK. However our replication connection is alive. Do nothing")
+				app.logger.Info().Msg("Rdsync have lost connection to ZK. However our replication connection is alive. Do nothing")
 				return stateLost
 			}
 		}
@@ -78,16 +76,16 @@ func (app *App) stateLost() appState {
 
 	offline, err := node.IsOffline(app.ctx)
 	if err != nil {
-		app.logger.Error("Failed to get node offline state", slog.String("fqdn", node.FQDN()), slog.Any("error", err))
+		app.logger.Error().Str("fqdn", node.FQDN()).Err(err).Msg("Failed to get node offline state")
 		return stateLost
 	}
 	if offline {
 		return stateLost
 	}
 	if err := node.SetOffline(app.ctx); err != nil {
-		app.logger.Error("Failed to set node offline", slog.String("fqdn", node.FQDN()), slog.Any("error", err))
+		app.logger.Error().Str("fqdn", node.FQDN()).Err(err).Msg("Failed to set node offline")
 		return stateLost
 	}
-	app.logger.Info("Rdsync have lost connection to ZK. Node is now offline", slog.String("fqdn", node.FQDN()))
+	app.logger.Info().Str("fqdn", node.FQDN()).Msg("Rdsync have lost connection to ZK. Node is now offline")
 	return stateLost
 }

@@ -18,7 +18,9 @@ var infoCmd = &cobra.Command{
 			fmt.Println(err)
 			os.Exit(1)
 		}
-		os.Exit(app.CliInfo(verbose))
+		code := app.CliInfo(verbose)
+		app.CloseLogger()
+		os.Exit(code)
 	},
 }
 

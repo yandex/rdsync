@@ -2,7 +2,6 @@ package app
 
 import (
 	"fmt"
-	"log/slog"
 	"time"
 
 	"github.com/yandex/rdsync/internal/dcs"
@@ -21,16 +20,16 @@ func (app *App) getCurrentMaster(shardState map[string]*HostState) (string, erro
 	if master != "" {
 		stateMaster, err := app.getMasterHost(shardState)
 		if err != nil {
-			app.logger.Warn("Have master in DCS but unable to validate", slog.Any("error", err))
+			app.logger.Warn().Err(err).Msg("Have master in DCS but unable to validate")
 			return master, nil
 		}
 		if stateMaster != "" && stateMaster != master {
-			app.logger.Warn(fmt.Sprintf("DCS and valkey master state diverged: %s and %s", master, stateMaster))
+			app.logger.Warn().Msgf("DCS and valkey master state diverged: %s and %s", master, stateMaster)
 			allStable := true
 			for host, state := range shardState {
 				if !state.PingStable || state.IsOffline {
 					allStable = false
-					app.logger.Warn(fmt.Sprintf("%s is dead skipping divergence fix", host))
+					app.logger.Warn().Msgf("%s is dead skipping divergence fix", host)
 					break
 				}
 			}
@@ -120,13 +119,13 @@ func (app *App) changeMaster(host, master string) error {
 		if !masterState.PingOk {
 			return fmt.Errorf("changeMaster: %s died while waiting to start replication to %s", master, host)
 		}
-		app.logger.Info(fmt.Sprintf("ChangeMaster: waiting for %s to start replication from %s", host, master))
+		app.logger.Info().Msgf("ChangeMaster: waiting for %s to start replication from %s", host, master)
 		app.repairReplica(node, masterState, state, master, host)
 		time.Sleep(time.Second)
 	}
 	rs := state.ReplicaState
 	if rs != nil && replicates(masterState, rs, host, masterNode, false) {
-		app.logger.Info(fmt.Sprintf("ChangeMaster: %s started replication from %s", host, master))
+		app.logger.Info().Msgf("ChangeMaster: %s started replication from %s", host, master)
 	} else {
 		return fmt.Errorf("%s was unable to start replication from %s", host, master)
 	}
@@ -149,7 +148,7 @@ func (app *App) waitForCatchup(host, master string) error {
 			return fmt.Errorf("waitForCatchup: replica %s died while waiting for catchup from %s", host, master)
 		}
 		if state.ReplicaState == nil {
-			app.logger.Warn(fmt.Sprintf("WaitForCatchup: %s has invalid replica state", host))
+			app.logger.Warn().Msgf("WaitForCatchup: %s has invalid replica state", host)
 			time.Sleep(time.Second)
 			continue
 		}
@@ -157,7 +156,7 @@ func (app *App) waitForCatchup(host, master string) error {
 		if masterState.IsMaster {
 			masterOffset = masterState.MasterReplicationOffset
 		} else if masterState.ReplicaState == nil {
-			app.logger.Warn(fmt.Sprintf("WaitForCatchup: %s has invalid replica state", master))
+			app.logger.Warn().Msgf("WaitForCatchup: %s has invalid replica state", master)
 			time.Sleep(time.Second)
 			continue
 		} else {
@@ -166,7 +165,7 @@ func (app *App) waitForCatchup(host, master string) error {
 		if masterOffset <= state.ReplicaState.ReplicationOffset {
 			return nil
 		}
-		app.logger.Info(fmt.Sprintf("WaitForCatchup: waiting for %s (offset=%d) to catchup with %s (offset=%d)", host, state.ReplicaState.ReplicationOffset, master, masterOffset))
+		app.logger.Info().Msgf("WaitForCatchup: waiting for %s (offset=%d) to catchup with %s (offset=%d)", host, state.ReplicaState.ReplicationOffset, master, masterOffset)
 		time.Sleep(time.Second)
 	}
 
@@ -177,7 +176,7 @@ func (app *App) promote(master, oldMaster string, shardState map[string]*HostSta
 	node := app.shard.Get(master)
 
 	if shardState[master].IsMaster {
-		app.logger.Info(fmt.Sprintf("%s is already master", master))
+		app.logger.Info().Msgf("%s is already master", master)
 		return nil
 	}
 
@@ -187,20 +186,20 @@ func (app *App) promote(master, oldMaster string, shardState map[string]*HostSta
 	case modeCluster:
 		if shardState[oldMaster].PingOk {
 			if time.Now().Before(forceDeadline) {
-				app.logger.Info("Old master alive. Using FORCE to promote")
+				app.logger.Info().Msg("Old master alive. Using FORCE to promote")
 				return node.ClusterPromoteForce(app.ctx)
 			}
 		}
 		majorityAlive, err := node.IsClusterMajorityAlive(app.ctx)
 		if err != nil {
-			app.logger.Error("New master is not able to check cluster majority state. Assuming that majority is alive.", slog.Any("error", err))
+			app.logger.Error().Err(err).Msg("New master is not able to check cluster majority state. Assuming that majority is alive.")
 			majorityAlive = true
 		}
 		if majorityAlive {
-			app.logger.Info("Majority of master nodes in cluster alive. Using FORCE to promote")
+			app.logger.Info().Msg("Majority of master nodes in cluster alive. Using FORCE to promote")
 			return node.ClusterPromoteForce(app.ctx)
 		}
-		app.logger.Info("Old master is dead and majority of master nodes in cluster dead. Using TAKEOVER to promote")
+		app.logger.Info().Msg("Old master is dead and majority of master nodes in cluster dead. Using TAKEOVER to promote")
 		return node.ClusterPromoteTakeover(app.ctx)
 	}
 

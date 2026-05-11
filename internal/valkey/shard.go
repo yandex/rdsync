@@ -2,9 +2,10 @@ package valkey
 
 import (
 	"fmt"
-	"log/slog"
 	"sort"
 	"sync"
+
+	"github.com/rs/zerolog"
 
 	"github.com/yandex/rdsync/internal/config"
 	"github.com/yandex/rdsync/internal/dcs"
@@ -14,7 +15,7 @@ import (
 type Shard struct {
 	dcs    dcs.DCS
 	config *config.Config
-	logger *slog.Logger
+	logger *zerolog.Logger
 	nodes  map[string]*Node
 	local  *Node
 	sync.Mutex
@@ -27,10 +28,11 @@ type NodeConfiguration struct {
 }
 
 // NewShard is a Shard constructor
-func NewShard(config *config.Config, logger *slog.Logger, dcs dcs.DCS) *Shard {
+func NewShard(config *config.Config, logger *zerolog.Logger, dcs dcs.DCS) *Shard {
+	sl := logger.With().Str("module", "shard").Logger()
 	s := &Shard{
 		config: config,
-		logger: logger.With(slog.String("module", "shard")),
+		logger: &sl,
 		nodes:  make(map[string]*Node),
 		local:  nil,
 		dcs:    dcs,
@@ -67,7 +69,7 @@ func (s *Shard) UpdateHostsInfo() error {
 	if err != nil {
 		return err
 	}
-	s.logger.Info(fmt.Sprintf("Nodes from DCS: %s", hosts))
+	s.logger.Info().Msgf("Nodes from DCS: %s", hosts)
 	set := make(map[string]int, len(hosts))
 	for _, host := range hosts {
 		set[host]++

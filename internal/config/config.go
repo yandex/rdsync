@@ -63,7 +63,6 @@ type SentinelModeConfig struct {
 
 // Config contains rdsync application configuration
 type Config struct {
-	Mode                    string              `yaml:"mode"`
 	InfoFile                string              `yaml:"info_file"`
 	Hostname                string              `yaml:"hostname"`
 	LogLevel                string              `yaml:"loglevel"`
@@ -72,9 +71,12 @@ type Config struct {
 	DaemonLockFile          string              `yaml:"daemon_lock_file"`
 	PprofAddr               string              `yaml:"pprof_addr"`
 	EventTimingLogFile      string              `yaml:"event_timing_log_file"`
+	Mode                    string              `yaml:"mode"`
 	SentinelMode            SentinelModeConfig  `yaml:"sentinel_mode"`
 	Zookeeper               dcs.ZookeeperConfig `yaml:"zookeeper"`
 	Valkey                  ValkeyConfig        `yaml:"valkey"`
+	LogPollInterval         time.Duration       `yaml:"log_poll_interval"`
+	LogBufferSize           int                 `yaml:"log_buffer_size"`
 	HealthCheckInterval     time.Duration       `yaml:"healthcheck_interval"`
 	InfoFileHandlerInterval time.Duration       `yaml:"info_file_handler_interval"`
 	InactivationDelay       time.Duration       `yaml:"inactivation_delay"`
@@ -171,6 +173,8 @@ func DefaultConfig() (Config, error) {
 		DaemonLockFile:          "/var/run/rdsync/rdsync.lock",
 		MaintenanceFile:         "/var/run/rdsync/rdsync.maintenance",
 		EventTimingLogFile:      "",
+		LogBufferSize:           10000,
+		LogPollInterval:         50 * time.Millisecond,
 		PingStable:              3,
 		TickInterval:            5 * time.Second,
 		InactivationDelay:       30 * time.Second,

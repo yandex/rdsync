@@ -24,7 +24,9 @@ var hostListCmd = &cobra.Command{
 			fmt.Println(err)
 			os.Exit(1)
 		}
-		os.Exit(app.CliHostList())
+		code := app.CliHostList()
+		app.CloseLogger()
+		os.Exit(code)
 	},
 }
 
@@ -47,7 +49,9 @@ var hostAddCmd = &cobra.Command{
 			}
 		})
 
-		os.Exit(app.CliHostAdd(args[0], priorityVal, dryRun, skipValkeyCheck))
+		code := app.CliHostAdd(args[0], priorityVal, dryRun, skipValkeyCheck)
+		app.CloseLogger()
+		os.Exit(code)
 	},
 }
 
@@ -61,7 +65,9 @@ var hostRemoveCmd = &cobra.Command{
 			fmt.Println(err)
 			os.Exit(1)
 		}
-		os.Exit(app.CliHostRemove(args[0]))
+		code := app.CliHostRemove(args[0])
+		app.CloseLogger()
+		os.Exit(code)
 	},
 }
 

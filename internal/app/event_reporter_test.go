@@ -1,20 +1,25 @@
 package app
 
 import (
-	"log/slog"
 	"os"
 	"testing"
 	"time"
 
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
 	"github.com/yandex/rdsync/internal/config"
 )
+
+func testLogger() *zerolog.Logger {
+	l := zerolog.Nop()
+	return &l
+}
 
 func TestNewTimingReporterNil(t *testing.T) {
 	conf := &config.Config{
 		EventTimingLogFile: "", // empty path
 	}
-	logger := slog.Default()
+	logger := testLogger()
 
 	reporter := newTimingReporter(conf, logger)
 	require.Nil(t, reporter, "newTimingReporter should return nil when EventTimingLogFile is empty")
@@ -43,8 +48,10 @@ func TestReportTimingWritesToFile(t *testing.T) {
 
 	conf := &config.Config{
 		EventTimingLogFile: tmpPath,
+		LogBufferSize:      1000,
+		LogPollInterval:    10 * time.Millisecond,
 	}
-	logger := slog.Default()
+	logger := testLogger()
 
 	reporter := newTimingReporter(conf, logger)
 	require.NotNil(t, reporter)
@@ -67,8 +74,10 @@ func TestReportTimingWritesToFile(t *testing.T) {
 func TestNewTimingReporterInvalidPath(t *testing.T) {
 	conf := &config.Config{
 		EventTimingLogFile: "/nonexistent/directory/timing.log",
+		LogBufferSize:      1000,
+		LogPollInterval:    10 * time.Millisecond,
 	}
-	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+	logger := testLogger()
 
 	reporter := newTimingReporter(conf, logger)
 	require.Nil(t, reporter, "newTimingReporter should return nil when log file cannot be opened")
@@ -83,8 +92,10 @@ func TestReportTimingReopen(t *testing.T) {
 
 	conf := &config.Config{
 		EventTimingLogFile: logPath,
+		LogBufferSize:      1000,
+		LogPollInterval:    10 * time.Millisecond,
 	}
-	logger := slog.Default()
+	logger := testLogger()
 
 	reporter := newTimingReporter(conf, logger)
 	require.NotNil(t, reporter)
@@ -103,6 +114,9 @@ func TestReportTimingReopen(t *testing.T) {
 
 	// Write second event
 	reporter.reportTiming("failover_complete", 2000*time.Millisecond)
+
+	// Flush and close to ensure all events are written.
+	reporter.Close()
 
 	// Verify rotated file contains only the first event
 	rotatedContent, err := os.ReadFile(rotatedPath)
