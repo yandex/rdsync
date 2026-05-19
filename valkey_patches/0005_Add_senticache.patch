@@ -1,15 +1,15 @@
 diff --git a/.gitignore b/.gitignore
-index d85087c45..b0eabf988 100644
+index 636e29b86..4d96302d1 100644
 --- a/.gitignore
 +++ b/.gitignore
-@@ -12,6 +12,8 @@ dump*.rdb
+@@ -14,6 +14,8 @@ dump*.rdb
  *-check-dump
  *-cli
  *-sentinel
 +*-senticache
 +!/runtest-senticache
  *-server
- *-unit-tests
+ *-unit-gtests
  doc-tools
 diff --git a/runtest-senticache b/runtest-senticache
 new file mode 100755
@@ -47,50 +47,53 @@ index 000000000..5e922cd9f
 +sentinel resolve-hostnames no
 +sentinel announce-hostnames no
 diff --git a/src/Makefile b/src/Makefile
-index 1ce928167..e6bbde88a 100644
+index 2812c4dba..1f14ad4aa 100644
 --- a/src/Makefile
 +++ b/src/Makefile
-@@ -422,8 +422,10 @@ endif
+@@ -462,6 +462,7 @@ endif
  ENGINE_NAME=valkey
  SERVER_NAME=$(ENGINE_NAME)-server$(PROG_SUFFIX)
  ENGINE_SENTINEL_NAME=$(ENGINE_NAME)-sentinel$(PROG_SUFFIX)
 +ENGINE_SENTICACHE_NAME=$(ENGINE_NAME)-senticache$(PROG_SUFFIX)
- ENGINE_TRACE_OBJ=trace/trace.o trace/trace_commands.o trace/trace_db.o trace/trace_cluster.o trace/trace_server.o trace/trace_rdb.o trace/trace_aof.o
- ENGINE_SERVER_OBJ=threads_mngr.o adlist.o vector.o quicklist.o ae.o anet.o dict.o hashtable.o kvstore.o server.o sds.o zmalloc.o lzf_c.o lzf_d.o pqsort.o zipmap.o sha1.o ziplist.o release.o memory_prefetch.o io_threads.o networking.o util.o object.o db.o replication.o rdb.o t_string.o t_list.o t_set.o t_zset.o t_hash.o config.o aof.o pubsub.o multi.o debug.o sort.o intset.o syncio.o cluster.o cluster_legacy.o cluster_slot_stats.o crc16.o cluster_migrateslots.o endianconv.o commandlog.o eval.o bio.o rio.o rand.o memtest.o syscheck.o crcspeed.o crccombine.o crc64.o bitops.o sentinel.o notify.o setproctitle.o blocked.o hyperloglog.o latency.o sparkline.o valkey-check-rdb.o valkey-check-aof.o geo.o lazyfree.o module.o evict.o expire.o geohash.o geohash_helper.o childinfo.o allocator_defrag.o defrag.o siphash.o rax.o t_stream.o listpack.o localtime.o lolwut.o lolwut5.o lolwut6.o lolwut9.o acl.o tracking.o socket.o tls.o sha256.o timeout.o setcpuaffinity.o monotonic.o mt19937-64.o resp_parser.o call_reply.o script.o functions.o commands.o strl.o connection.o unix.o logreqres.o rdma.o scripting_engine.o entry.o vset.o lua/script_lua.o lua/function_lua.o lua/engine_lua.o lua/debug_lua.o
-+ENGINE_SENTICACHE_OBJ=threads_mngr.o adlist.o vector.o quicklist.o ae.o anet.o dict.o hashtable.o kvstore.o server.o sds.o zmalloc.o lzf_c.o lzf_d.o pqsort.o zipmap.o sha1.o ziplist.o release.o memory_prefetch.o io_threads.o networking.o util.o object.o db.o replication.o rdb.o t_string.o t_list.o t_set.o t_zset.o t_hash.o config.o aof.o pubsub.o multi.o debug.o sort.o intset.o syncio.o cluster.o cluster_legacy.o cluster_slot_stats.o crc16.o cluster_migrateslots.o endianconv.o commandlog.o eval.o bio.o rio.o rand.o memtest.o syscheck.o crcspeed.o crccombine.o crc64.o bitops.o senticache.o notify.o setproctitle.o blocked.o hyperloglog.o latency.o sparkline.o valkey-check-rdb.o valkey-check-aof.o geo.o lazyfree.o module.o evict.o expire.o geohash.o geohash_helper.o childinfo.o allocator_defrag.o defrag.o siphash.o rax.o t_stream.o listpack.o localtime.o lolwut.o lolwut5.o lolwut6.o lolwut9.o acl.o tracking.o socket.o tls.o sha256.o timeout.o setcpuaffinity.o monotonic.o mt19937-64.o resp_parser.o call_reply.o script.o functions.o commands.o strl.o connection.o unix.o logreqres.o rdma.o scripting_engine.o entry.o vset.o lua/script_lua.o lua/function_lua.o lua/engine_lua.o lua/debug_lua.o
+ ENGINE_TRACE_OBJ = \
+     trace/trace.o \
+     trace/trace_aof.o \
+@@ -584,6 +585,7 @@ ENGINE_SERVER_OBJ = \
+     zmalloc.o \
+     queues.o
  ENGINE_SERVER_OBJ+=$(ENGINE_TRACE_OBJ)
++ENGINE_SENTICACHE_OBJ = $(patsubst sentinel.o,senticache.o,$(ENGINE_SERVER_OBJ))
  ENGINE_CLI_NAME=$(ENGINE_NAME)-cli$(PROG_SUFFIX)
- ENGINE_CLI_OBJ=anet.o adlist.o dict.o valkey-cli.o zmalloc.o release.o ae.o serverassert.o crcspeed.o crccombine.o crc64.o siphash.o crc16.o monotonic.o cli_common.o mt19937-64.o strl.o cli_commands.o sds.o util.o sha256.o
-@@ -448,7 +450,7 @@ ifeq ($(USE_FAST_FLOAT),yes)
- 	FINAL_LIBS += $(FAST_FLOAT_STRTOD_OBJECT)
- endif
+ ENGINE_CLI_OBJ = \
+     adlist.o \
+@@ -653,6 +655,7 @@ endif
+ DEPENDENCY_TARGETS+= gtest-parallel
  
--all: $(SERVER_NAME) $(ENGINE_SENTINEL_NAME) $(ENGINE_CLI_NAME) $(ENGINE_BENCHMARK_NAME) $(ENGINE_CHECK_RDB_NAME) $(ENGINE_CHECK_AOF_NAME) $(TLS_MODULE) $(RDMA_MODULE)
-+all: $(SERVER_NAME) $(ENGINE_SENTINEL_NAME) $(ENGINE_SENTICACHE_NAME) $(ENGINE_CLI_NAME) $(ENGINE_BENCHMARK_NAME) $(ENGINE_CHECK_RDB_NAME) $(ENGINE_CHECK_AOF_NAME) $(TLS_MODULE) $(RDMA_MODULE)
+ ALL_BUILD_PREREQUISITES=$(SERVER_NAME) $(ENGINE_SENTINEL_NAME) $(ENGINE_CLI_NAME) $(ENGINE_BENCHMARK_NAME) $(ENGINE_CHECK_RDB_NAME) $(ENGINE_CHECK_AOF_NAME) $(TLS_MODULE) $(RDMA_MODULE)
++ALL_BUILD_PREREQUISITES+=  $(ENGINE_SENTICACHE_NAME)
+ 
+ all: $(ALL_BUILD_PREREQUISITES)
  	@echo ""
- 	@echo "Hint: It's a good idea to run 'make test' ;)"
- 	@echo ""
-@@ -512,6 +514,10 @@ $(ENGINE_UNIT_TESTS): $(ENGINE_TEST_OBJ) $(ENGINE_LIB_NAME)
+@@ -719,6 +722,10 @@ $(ENGINE_LIB_NAME): $(ENGINE_SERVER_OBJ)
  $(ENGINE_SENTINEL_NAME): $(SERVER_NAME)
  	$(ENGINE_INSTALL) $(SERVER_NAME) $(ENGINE_SENTINEL_NAME)
  
 +# valkey-senticache
 +$(ENGINE_SENTICACHE_NAME): $(ENGINE_SENTICACHE_OBJ)
-+	$(SERVER_LD) -o $@ $^ ../deps/libvalkey/lib/libvalkey.a ../deps/lua/src/liblua.a ../deps/hdr_histogram/libhdrhistogram.a ../deps/fpconv/libfpconv.a $(FINAL_LIBS)
++	$(SERVER_LD) -o $@ $^ ../deps/libvalkey/lib/libvalkey.a ../deps/hdr_histogram/libhdrhistogram.a ../deps/fpconv/libfpconv.a $(FINAL_LIBS) $(LUA_LDFLAGS)
 +
  # valkey-check-rdb
  $(ENGINE_CHECK_RDB_NAME): $(SERVER_NAME)
  	$(ENGINE_INSTALL) $(SERVER_NAME) $(ENGINE_CHECK_RDB_NAME)
-@@ -574,7 +580,7 @@ endif
- commands.c: $(COMMANDS_DEF_FILENAME).def
+@@ -775,6 +782,7 @@ commands.c: $(COMMANDS_DEF_FILENAME).def
  
  clean:
--	rm -rf $(SERVER_NAME) $(ENGINE_SENTINEL_NAME) $(ENGINE_CLI_NAME) $(ENGINE_BENCHMARK_NAME) $(ENGINE_CHECK_RDB_NAME) $(ENGINE_CHECK_AOF_NAME) $(ENGINE_UNIT_TESTS) $(ENGINE_LIB_NAME) unit/*.o unit/*.d lua/*.o lua/*.d trace/*.o trace/*.d *.o *.gcda *.gcno *.gcov valkey.info lcov-html Makefile.dep *.so
-+	rm -rf $(SERVER_NAME) $(ENGINE_SENTINEL_NAME) $(ENGINE_SENTICACHE_NAME) $(ENGINE_CLI_NAME) $(ENGINE_BENCHMARK_NAME) $(ENGINE_CHECK_RDB_NAME) $(ENGINE_CHECK_AOF_NAME) $(ENGINE_UNIT_TESTS) $(ENGINE_LIB_NAME) unit/*.o unit/*.d lua/*.o lua/*.d trace/*.o trace/*.d *.o *.gcda *.gcno *.gcov valkey.info lcov-html Makefile.dep *.so
+ 	rm -rf $(SERVER_NAME) $(ENGINE_SENTINEL_NAME) $(ENGINE_CLI_NAME) $(ENGINE_BENCHMARK_NAME) $(ENGINE_CHECK_RDB_NAME) $(ENGINE_CHECK_AOF_NAME) $(ENGINE_UNIT_GTESTS) $(ENGINE_LIB_NAME) trace/*.o trace/*.d *.o *.gcda *.gcno *.gcov valkey.info lcov-html Makefile.dep *.so
++	rm -rf $(ENGINE_SENTICACHE_NAME)
  	rm -f $(DEP)
+ 	-(cd modules/lua && $(MAKE) clean)
  
- .PHONY: clean
-@@ -599,6 +605,9 @@ test-modules: $(SERVER_NAME)
+@@ -806,6 +814,9 @@ test-modules: $(SERVER_NAME)
  test-sentinel: $(ENGINE_SENTINEL_NAME) $(ENGINE_CLI_NAME)
  	@(cd ..; ./runtest-sentinel)
  
@@ -100,8 +103,8 @@ index 1ce928167..e6bbde88a 100644
  test-cluster: $(SERVER_NAME) $(ENGINE_CLI_NAME)
  	@(cd ..; ./runtest-cluster)
  
-@@ -637,6 +646,7 @@ helgrind:
- install: all
+@@ -845,6 +856,7 @@ helgrind:
+ install: all $(LUA_MODULE_INSTALL)
  	@mkdir -p $(INSTALL_BIN)
  	$(call MAKE_INSTALL,$(SERVER_NAME),$(INSTALL_BIN))
 +	$(call MAKE_INSTALL,$(ENGINE_SENTICACHE_NAME),$(INSTALL_BIN))
@@ -109,10 +112,10 @@ index 1ce928167..e6bbde88a 100644
  	$(call MAKE_INSTALL,$(ENGINE_CLI_NAME),$(INSTALL_BIN))
  	@ln -sf $(SERVER_NAME) $(INSTALL_BIN)/$(ENGINE_CHECK_RDB_NAME)
 diff --git a/src/commands.def b/src/commands.def
-index 0688e0e29..c3168d2f5 100644
+index 437e59948..b07106d81 100644
 --- a/src/commands.def
 +++ b/src/commands.def
-@@ -6160,6 +6160,23 @@ struct COMMAND_STRUCT SCRIPT_Subcommands[] = {
+@@ -6234,6 +6234,23 @@ struct COMMAND_STRUCT SCRIPT_Subcommands[] = {
  #define SCRIPT_Keyspecs NULL
  #endif
  
@@ -136,20 +139,20 @@ index 0688e0e29..c3168d2f5 100644
  /********** SENTINEL CKQUORUM ********************/
  
  #ifndef SKIP_CMD_HISTORY_TABLE
-@@ -6728,6 +6745,7 @@ struct COMMAND_ARG SENTINEL_SLAVES_Args[] = {
+@@ -6802,6 +6819,7 @@ struct COMMAND_ARG SENTINEL_SLAVES_Args[] = {
  
  /* SENTINEL command table */
  struct COMMAND_STRUCT SENTINEL_Subcommands[] = {
-+{MAKE_CMD("cache-update","Update Senticache state","O(1)","6.2.0",CMD_DOC_NONE,NULL,NULL,"sentinel",COMMAND_GROUP_SENTINEL,SENTINEL_CACHE_UPDATE_History,0,SENTINEL_CACHE_UPDATE_Tips,0,sentinelCommand,-4,CMD_ADMIN|CMD_SENTINEL|CMD_ONLY_SENTINEL,0,SENTINEL_CACHE_UPDATE_Keyspecs,0,NULL,0)},
- {MAKE_CMD("ckquorum","Checks for a Sentinel quorum.",NULL,"2.8.4",CMD_DOC_NONE,NULL,NULL,"sentinel",COMMAND_GROUP_SENTINEL,SENTINEL_CKQUORUM_History,0,SENTINEL_CKQUORUM_Tips,0,sentinelCommand,3,CMD_ADMIN|CMD_SENTINEL|CMD_ONLY_SENTINEL,0,SENTINEL_CKQUORUM_Keyspecs,0,NULL,1),.args=SENTINEL_CKQUORUM_Args},
- {MAKE_CMD("config","Configures Sentinel.","O(N) when N is the number of configuration parameters provided","6.2.0",CMD_DOC_NONE,NULL,NULL,"sentinel",COMMAND_GROUP_SENTINEL,SENTINEL_CONFIG_History,1,SENTINEL_CONFIG_Tips,0,sentinelCommand,-4,CMD_ADMIN|CMD_SENTINEL|CMD_ONLY_SENTINEL,0,SENTINEL_CONFIG_Keyspecs,0,NULL,1),.args=SENTINEL_CONFIG_Args},
- {MAKE_CMD("debug","Lists or updates the current configurable parameters of Sentinel.","O(N) where N is the number of configurable parameters","7.0.0",CMD_DOC_NONE,NULL,NULL,"sentinel",COMMAND_GROUP_SENTINEL,SENTINEL_DEBUG_History,0,SENTINEL_DEBUG_Tips,0,sentinelCommand,-2,CMD_ADMIN|CMD_SENTINEL|CMD_ONLY_SENTINEL,0,SENTINEL_DEBUG_Keyspecs,0,NULL,1),.args=SENTINEL_DEBUG_Args},
++{MAKE_CMD("cache-update","Update Senticache state","O(1)","6.2.0",CMD_DOC_NONE,NULL,NULL,"sentinel",COMMAND_GROUP_SENTINEL,SENTINEL_CACHE_UPDATE_History,0,SENTINEL_CACHE_UPDATE_Tips,0,sentinelCommand,-4,CMD_ADMIN|CMD_SENTINEL|CMD_ONLY_SENTINEL,ACL_CATEGORY_ADMIN|ACL_CATEGORY_DANGEROUS|ACL_CATEGORY_SLOW,NULL,SENTINEL_CACHE_UPDATE_Keyspecs,0,NULL,0)},
+ {MAKE_CMD("ckquorum","Checks for a Sentinel quorum.",NULL,"2.8.4",CMD_DOC_NONE,NULL,NULL,"sentinel",COMMAND_GROUP_SENTINEL,SENTINEL_CKQUORUM_History,0,SENTINEL_CKQUORUM_Tips,0,sentinelCommand,3,CMD_ADMIN|CMD_SENTINEL|CMD_ONLY_SENTINEL,ACL_CATEGORY_ADMIN|ACL_CATEGORY_DANGEROUS|ACL_CATEGORY_SLOW,NULL,SENTINEL_CKQUORUM_Keyspecs,0,NULL,1),.args=SENTINEL_CKQUORUM_Args},
+ {MAKE_CMD("config","Configures Sentinel.","O(N) when N is the number of configuration parameters provided","6.2.0",CMD_DOC_NONE,NULL,NULL,"sentinel",COMMAND_GROUP_SENTINEL,SENTINEL_CONFIG_History,1,SENTINEL_CONFIG_Tips,0,sentinelCommand,-4,CMD_ADMIN|CMD_SENTINEL|CMD_ONLY_SENTINEL,ACL_CATEGORY_ADMIN|ACL_CATEGORY_DANGEROUS|ACL_CATEGORY_SLOW,NULL,SENTINEL_CONFIG_Keyspecs,0,NULL,1),.args=SENTINEL_CONFIG_Args},
+ {MAKE_CMD("debug","Lists or updates the current configurable parameters of Sentinel.","O(N) where N is the number of configurable parameters","7.0.0",CMD_DOC_NONE,NULL,NULL,"sentinel",COMMAND_GROUP_SENTINEL,SENTINEL_DEBUG_History,0,SENTINEL_DEBUG_Tips,0,sentinelCommand,-2,CMD_ADMIN|CMD_SENTINEL|CMD_ONLY_SENTINEL,ACL_CATEGORY_ADMIN|ACL_CATEGORY_DANGEROUS|ACL_CATEGORY_SLOW,NULL,SENTINEL_DEBUG_Keyspecs,0,NULL,1),.args=SENTINEL_DEBUG_Args},
 diff --git a/src/commands/sentinel-cache-update.json b/src/commands/sentinel-cache-update.json
 new file mode 100644
-index 000000000..acea39255
+index 000000000..e3a4b9129
 --- /dev/null
 +++ b/src/commands/sentinel-cache-update.json
-@@ -0,0 +1,17 @@
+@@ -0,0 +1,22 @@
 +{
 +    "CACHE-UPDATE": {
 +        "summary": "Update Senticache state",
@@ -164,12 +167,17 @@ index 000000000..acea39255
 +            "SENTINEL",
 +            "ONLY_SENTINEL"
 +        ],
-+        "arguments": []
++        "arguments": [],
++        "acl_categories": [
++            "ADMIN",
++            "DANGEROUS",
++            "SLOW"
++        ]
 +    }
 +}
 diff --git a/src/senticache.c b/src/senticache.c
 new file mode 100644
-index 000000000..076bd60e3
+index 000000000..39f8b2c6c
 --- /dev/null
 +++ b/src/senticache.c
 @@ -0,0 +1,1750 @@
@@ -1610,7 +1618,7 @@ index 000000000..076bd60e3
 +    size_t valueEnd = 0;
 +
 +    for (int i = 3; i < c->argc; i++) {
-+        updateCommand = sdscatsds(updateCommand, c->argv[i]->ptr);
++        updateCommand = sdscatsds(updateCommand, objectGetVal(c->argv[i]));
 +        if (i != c->argc - 1) {
 +            updateCommand = sdscatlen(updateCommand, " ", 1);
 +        }
@@ -1673,7 +1681,7 @@ index 000000000..076bd60e3
 +}
 +
 +void sentinelCommand(client *c) {
-+    if (c->argc == 2 && !strcasecmp(c->argv[1]->ptr, "help")) {
++    if (c->argc == 2 && !strcasecmp(objectGetVal(c->argv[1]), "help")) {
 +        const char *help[] = {"CKQUORUM <master-name>",
 +                              "    Check if the current Sentinel configuration is able to reach the quorum",
 +                              "    needed to failover a master and the majority needed to authorize the",
@@ -1694,43 +1702,43 @@ index 000000000..076bd60e3
 +                              "    Show a list of Sentinel instances for this master and their state.",
 +                              NULL};
 +        addReplyHelp(c, help);
-+    } else if (!strcasecmp(c->argv[1]->ptr, "cache-update")) {
++    } else if (!strcasecmp(objectGetVal(c->argv[1]), "cache-update")) {
 +        if (c->argc < 4) goto numargserr;
-+        if (!strcasecmp(c->argv[2]->ptr, sentinel.cache_update_secret)) {
++        if (!strcasecmp(objectGetVal(c->argv[2]), sentinel.cache_update_secret)) {
 +            sentinelCacheUpdate(c);
 +        } else {
 +            addReplySubcommandSyntaxError(c);
 +        }
-+    } else if (!strcasecmp(c->argv[1]->ptr, "masters")) {
++    } else if (!strcasecmp(objectGetVal(c->argv[1]), "masters")) {
 +        /* SENTINEL MASTERS */
 +        if (c->argc != 2) goto numargserr;
 +        addReplyDictOfValkeyInstances(c, sentinel.primaries);
-+    } else if (!strcasecmp(c->argv[1]->ptr, "master")) {
++    } else if (!strcasecmp(objectGetVal(c->argv[1]), "master")) {
 +        /* SENTINEL MASTER <name> */
 +        sentinelValkeyInstance *ri;
 +
 +        if (c->argc != 3) goto numargserr;
 +        if ((ri = sentinelGetPrimaryOrReplyError(c)) == NULL) return;
 +        addReplysentinelValkeyInstance(c, ri);
-+    } else if (!strcasecmp(c->argv[1]->ptr, "slaves") || !strcasecmp(c->argv[1]->ptr, "replicas")) {
++    } else if (!strcasecmp(objectGetVal(c->argv[1]), "slaves") || !strcasecmp(objectGetVal(c->argv[1]), "replicas")) {
 +        /* SENTINEL REPLICAS <master-name> */
 +        sentinelValkeyInstance *ri;
 +
 +        if (c->argc != 3) goto numargserr;
 +        if ((ri = sentinelGetPrimaryOrReplyError(c)) == NULL) return;
 +        addReplyDictOfValkeyInstances(c, ri->replicas);
-+    } else if (!strcasecmp(c->argv[1]->ptr, "sentinels")) {
++    } else if (!strcasecmp(objectGetVal(c->argv[1]), "sentinels")) {
 +        /* SENTINEL SENTINELS <master-name> */
 +        sentinelValkeyInstance *ri;
 +
 +        if (c->argc != 3) goto numargserr;
 +        if ((ri = sentinelGetPrimaryOrReplyError(c)) == NULL) return;
 +        addReplyDictOfValkeyInstances(c, ri->sentinels);
-+    } else if (!strcasecmp(c->argv[1]->ptr, "myid") && c->argc == 2) {
++    } else if (!strcasecmp(objectGetVal(c->argv[1]), "myid") && c->argc == 2) {
 +        /* SENTINEL MYID */
 +        addReplyBulkCBuffer(c, sentinel.myid, CONFIG_RUN_ID_SIZE);
-+    } else if (!strcasecmp(c->argv[1]->ptr, "get-master-addr-by-name") ||
-+               !strcasecmp(c->argv[1]->ptr, "get-master-addr-by-name")) {
++    } else if (!strcasecmp(objectGetVal(c->argv[1]), "get-master-addr-by-name") ||
++               !strcasecmp(objectGetVal(c->argv[1]), "get-master-addr-by-name")) {
 +        /* SENTINEL GET-MASTER-ADDR-BY-NAME <master-name> */
 +        sentinelValkeyInstance *ri;
 +
@@ -1745,12 +1753,12 @@ index 000000000..076bd60e3
 +            addReplyBulkCString(c, announceSentinelAddr(addr));
 +            addReplyBulkLongLong(c, addr->port);
 +        }
-+    } else if (!strcasecmp(c->argv[1]->ptr, "ckquorum")) {
++    } else if (!strcasecmp(objectGetVal(c->argv[1]), "ckquorum")) {
 +        /* SENTINEL CKQUORUM <name> */
 +        if (c->argc != 3) goto numargserr;
 +        addReplySds(c, sdscatfmt(sdsempty(), "+OK 1 usable Sentinels. Quorum and failover authorization "
 +                                             "can be reached\r\n"));
-+    } else if (!strcasecmp(c->argv[1]->ptr, "info-cache")) {
++    } else if (!strcasecmp(objectGetVal(c->argv[1]), "info-cache")) {
 +        /* SENTINEL INFO-CACHE <name> */
 +        if (c->argc < 2) goto numargserr;
 +        mstime_t now = mstime();
@@ -1766,7 +1774,7 @@ index 000000000..076bd60e3
 +
 +            for (int i = 2; i < c->argc; i++) {
 +                sentinelValkeyInstance *ri;
-+                ri = sentinelGetPrimaryByName(c->argv[i]->ptr);
++                ri = sentinelGetPrimaryByName(objectGetVal(c->argv[i]));
 +                if (!ri) continue; /* ignore non-existing names */
 +                dictAdd(primaries_local, ri->name, ri);
 +            }
@@ -1924,10 +1932,10 @@ index 000000000..076bd60e3
 +    /* just do nothing */
 +}
 diff --git a/src/server.c b/src/server.c
-index c22e7a7dc..7012e6f10 100644
+index 60c8bbddd..2d1359cfd 100644
 --- a/src/server.c
 +++ b/src/server.c
-@@ -6908,6 +6908,8 @@ int checkForSentinelMode(int argc, char **argv, char *exec_name) {
+@@ -7219,6 +7219,8 @@ int checkForSentinelMode(int argc, char **argv, char *exec_name) {
      /* valkey may install symlinks like redis-sentinel -> valkey-sentinel. */
      if (strstr(exec_name, "redis-sentinel") != NULL) return 1;
  
@@ -1937,12 +1945,12 @@ index c22e7a7dc..7012e6f10 100644
          if (!strcmp(argv[j], "--sentinel")) return 1;
      return 0;
 diff --git a/tests/instances.tcl b/tests/instances.tcl
-index 76d9e14bc..04b1397a2 100644
+index 4782a5e49..e0871b646 100644
 --- a/tests/instances.tcl
 +++ b/tests/instances.tcl
-@@ -26,10 +26,12 @@ set ::dont_clean 0
- set ::simulate_error 0
- set ::failed 0
+@@ -27,10 +27,12 @@ set ::failed 0
+ set ::failed_tests {}
+ set ::failures_output_file ""
  set ::sentinel_instances {}
 +set ::senticache_instances {}
  set ::valkey_instances {}
@@ -1953,16 +1961,16 @@ index 76d9e14bc..04b1397a2 100644
  set ::valkey_port_count 1024
  set ::host "127.0.0.1"
  set ::leaked_fds_file [file normalize "tmp/leaked_fds.txt"]
-@@ -53,6 +55,8 @@ proc exec_instance {type dirname cfgfile} {
-         set prgname valkey-server
+@@ -58,6 +60,8 @@ proc exec_instance {type dirname cfgfile} {
+         set program_path $::VALKEY_SERVER_BIN
      } elseif {$type eq "sentinel"} {
-         set prgname valkey-sentinel
+         set program_path $::VALKEY_SENTINEL_BIN
 +    } elseif {$type eq "senticache"} {
-+        set prgname valkey-senticache
++        set program_path $::VALKEY_SENTICACHE_BIN
      } else {
          error "Unknown instance type."
      }
-@@ -544,6 +548,21 @@ proc S {n args} {
+@@ -596,6 +600,21 @@ proc S {n args} {
      [dict get $s link] {*}$args
  }
  
@@ -1986,10 +1994,17 @@ index 76d9e14bc..04b1397a2 100644
  #     [Rn 0] info
 diff --git a/tests/senticache/run.tcl b/tests/senticache/run.tcl
 new file mode 100644
-index 000000000..a5e20774b
+index 000000000..0ac34396e
 --- /dev/null
 +++ b/tests/senticache/run.tcl
-@@ -0,0 +1,23 @@
+@@ -0,0 +1,30 @@
++# Senticache test suite. Copyright (C) 2022 Yandex Cloud.
++# This software is released under the BSD License. See the COPYING file for
++# more information.
++
++# Set the executable paths at project root
++source tests/support/set_executable_path.tcl
++
 +cd tests/senticache
 +source ../instances.tcl
 +
@@ -2195,10 +2210,10 @@ index 000000000..4944e0096
 @@ -0,0 +1 @@
 +senticache_*
 diff --git a/tests/sentinel/tests/00-base.tcl b/tests/sentinel/tests/00-base.tcl
-index 33e590ab5..4f766459e 100644
+index 97cc6540a..787581138 100644
 --- a/tests/sentinel/tests/00-base.tcl
 +++ b/tests/sentinel/tests/00-base.tcl
-@@ -82,7 +82,7 @@ test "Basic failover works if the primary is down" {
+@@ -89,7 +89,7 @@ test "Basic failover works if the primary is down" {
      kill_instance valkey $master_id
      foreach_sentinel_id id {
          S $id sentinel debug ping-period 500
@@ -2207,6 +2222,15 @@ index 33e590ab5..4f766459e 100644
          wait_for_condition 1000 100 {
              [lindex [S $id SENTINEL GET-PRIMARY-ADDR-BY-NAME mymaster] 1] != $old_port
          } else {
--- 
-2.51.1
-
+diff --git a/tests/support/set_executable_path.tcl b/tests/support/set_executable_path.tcl
+index 684f22952..35b5f9aff 100644
+--- a/tests/support/set_executable_path.tcl
++++ b/tests/support/set_executable_path.tcl
+@@ -26,6 +26,7 @@ set ::VALKEY_BENCHMARK_BIN [valkey_bin_absolute_path "valkey-benchmark"]
+ set ::VALKEY_CHECK_AOF_BIN [valkey_bin_absolute_path "valkey-check-aof"]
+ set ::VALKEY_CHECK_RDB_BIN [valkey_bin_absolute_path "valkey-check-rdb"]
+ set ::VALKEY_SENTINEL_BIN  [valkey_bin_absolute_path "valkey-sentinel"]
++set ::VALKEY_SENTICACHE_BIN  [valkey_bin_absolute_path "valkey-senticache"]
+ 
+ # TLS module path: in CMake builds it's in lib/, in Make builds it's in src/
+ if {[info exists ::env(VALKEY_BIN_DIR)]} {

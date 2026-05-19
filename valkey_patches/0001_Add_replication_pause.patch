@@ -1,8 +1,8 @@
 diff --git a/src/config.c b/src/config.c
-index d0158b2c4..f788aef6f 100644
+index fcbaee7e9..5c58b971f 100644
 --- a/src/config.c
 +++ b/src/config.c
-@@ -2588,6 +2588,25 @@ static int updateExtendedRedisCompat(const char **err) {
+@@ -2641,6 +2641,25 @@ static int updateExtendedRedisCompat(const char **err) {
      return 1;
  }
  
@@ -28,16 +28,16 @@ index d0158b2c4..f788aef6f 100644
  static int updateSighandlerEnabled(const char **err) {
      UNUSED(err);
      if (server.crashlog_enabled)
-@@ -3241,6 +3260,7 @@ standardConfig static_configs[] = {
-     createBoolConfig("hide-user-data-from-log", NULL, MODIFIABLE_CONFIG, server.hide_user_data_from_log, 1, NULL, NULL),
+@@ -3312,6 +3331,7 @@ standardConfig static_configs[] = {
      createBoolConfig("lua-enable-insecure-api", "lua-enable-deprecated-api", MODIFIABLE_CONFIG | HIDDEN_CONFIG | PROTECTED_CONFIG, server.lua_enable_insecure_api, 0, NULL, updateLuaEnableInsecureApi),
      createBoolConfig("import-mode", NULL, DEBUG_CONFIG | MODIFIABLE_CONFIG, server.import_mode, 0, NULL, NULL),
+     createBoolConfig("io-threads-always-active", NULL, MODIFIABLE_CONFIG | HIDDEN_CONFIG, server.io_threads_always_active, 0, NULL, NULL),
 +    createBoolConfig("repl-paused", NULL, MODIFIABLE_CONFIG, server.repl_paused, 0, NULL, updateReplPaused),
  
      /* String Configs */
      createStringConfig("aclfile", NULL, IMMUTABLE_CONFIG, ALLOW_EMPTY_STRING, server.acl_filename, "", NULL, NULL),
 diff --git a/src/replication.c b/src/replication.c
-index 82ee9450f..25726c542 100644
+index 13cbc4183..c30560b3d 100644
 --- a/src/replication.c
 +++ b/src/replication.c
 @@ -59,7 +59,6 @@ void replicationResurrectProvisionalPrimary(void);
@@ -48,7 +48,7 @@ index 82ee9450f..25726c542 100644
  void replicationSteadyStateInit(void);
  void dualChannelSetupMainConnForPsync(connection *conn);
  void dualChannelSyncHandleRdbLoadCompletion(void);
-@@ -1069,7 +1068,7 @@ void syncCommand(client *c) {
+@@ -1115,7 +1114,7 @@ void syncCommand(client *c) {
  
      /* Refuse SYNC requests if we are a replica but the link with our primary
       * is not ok... */
@@ -57,7 +57,7 @@ index 82ee9450f..25726c542 100644
          addReplyError(c, "-NOMASTERLINK Can't SYNC while not connected with my master");
          return;
      }
-@@ -5150,7 +5149,7 @@ void replicationCron(void) {
+@@ -5284,7 +5283,7 @@ void replicationCron(void) {
      }
  
      /* Check if we should connect to a PRIMARY */
@@ -67,10 +67,10 @@ index 82ee9450f..25726c542 100644
          connectWithPrimary();
      }
 diff --git a/src/server.h b/src/server.h
-index 25f01a31e..95d31758e 100644
+index 351b1e43c..c8e03be25 100644
 --- a/src/server.h
 +++ b/src/server.h
-@@ -2117,6 +2117,7 @@ struct valkeyServer {
+@@ -2205,6 +2205,7 @@ struct valkeyServer {
      /* Synchronous replication. */
      list *clients_waiting_acks; /* Clients waiting in WAIT or WAITAOF. */
      int get_ack_from_replicas;  /* If true we send REPLCONF GETACK. */
@@ -78,69 +78,15 @@ index 25f01a31e..95d31758e 100644
      /* Limits */
      unsigned int maxclients;                    /* Max number of simultaneous clients */
      unsigned long long maxmemory;               /* Max number of memory bytes to use */
-@@ -3116,6 +3117,8 @@ void updateFailoverStatus(void);
+@@ -3240,6 +3241,8 @@ void updateFailoverStatus(void);
  void abortFailover(const char *err);
  const char *getFailoverStateString(void);
  sds getReplicaPortString(void);
 +int cancelReplicationHandshake(int reconnect);
 +int replicaIsInHandshakeState(void);
  int sendCurrentOffsetToReplica(client *replica);
+ int replicaRdbVersion(client *replica);
  void addRdbReplicaToPsyncWait(client *replica);
- void initClientReplicationData(client *c);
-diff --git a/tests/cluster/tests/99-yandex-cloud-patches.tcl b/tests/cluster/tests/99-yandex-cloud-patches.tcl
-new file mode 100644
-index 000000000..6d0c1007b
---- /dev/null
-+++ b/tests/cluster/tests/99-yandex-cloud-patches.tcl
-@@ -0,0 +1,48 @@
-+# Test Yandex Cloud patches on cluster
-+
-+source "../tests/includes/init-tests.tcl"
-+
-+proc kill_clustered_redis {id} {
-+    set pid [get_instance_attrib redis $id pid]
-+
-+    stop_instance $pid
-+    set_instance_attrib redis $id pid -1
-+    set_instance_attrib redis $id link you_tried_to_talk_with_killed_instance
-+
-+    # Remove the PID from the list of pids to kill at exit.
-+    set ::pids [lsearch -all -inline -not -exact $::pids $pid]
-+}
-+
-+test "Create a 2 node cluster (1 master and 1 replica)" {
-+    create_cluster 1 1
-+}
-+
-+test "Cluster is up" {
-+    assert_cluster_state ok
-+}
-+
-+test "Instance #1 synced with the master" {
-+    wait_for_condition 1000 50 {
-+        [RI 1 master_link_status] eq {up}
-+    } else {
-+        fail "Instance #1 master link status is not up"
-+    }
-+}
-+
-+test "Replication pause on instance #1 works" {
-+    assert {[R 1 config set repl-paused yes] eq {OK}}
-+    wait_for_condition 1000 50 {
-+        [RI 1 master_link_status] eq {down}
-+    } else {
-+        fail "Instance #1 master link status is not down"
-+    }
-+}
-+
-+test "Replication resume on instance #1 works" {
-+    assert {[R 1 config set repl-paused no] eq {OK}}
-+    wait_for_condition 1000 50 {
-+        [RI 1 master_link_status] eq {up}
-+    } else {
-+        fail "Instance #1 master link status is not up"
-+    }
-+}
 diff --git a/tests/integration/yandex-cloud-patches.tcl b/tests/integration/yandex-cloud-patches.tcl
 new file mode 100644
 index 000000000..a2c9bb949
@@ -203,6 +149,49 @@ index 000000000..a2c9bb949
 +        }
 +    }
 +}
--- 
-2.51.1
-
+diff --git a/tests/unit/cluster/99-yandex-cloud-patches.tcl b/tests/unit/cluster/99-yandex-cloud-patches.tcl
+new file mode 100644
+index 000000000..ca4d2f5ec
+--- /dev/null
++++ b/tests/unit/cluster/99-yandex-cloud-patches.tcl
+@@ -0,0 +1,40 @@
++# Test Yandex Cloud patches on cluster
++
++start_cluster 1 2 {tags {external:skip cluster}} {
++
++test "Cluster is up" {
++    wait_for_cluster_state ok
++}
++
++test "Instance 0 is master and 1 is replica" {
++    assert {[s 0 role] eq {master}}
++    assert {[s -1 role] eq {slave}}
++}
++
++test "Instance 1 synced with the master" {
++    wait_for_condition 1000 50 {
++        [s -1 master_link_status] eq {up}
++    } else {
++        fail "Instance 1 master link status is not up"
++    }
++}
++
++test "Replication pause on instance 1 works" {
++    assert {[R 1 config set repl-paused yes] eq {OK}}
++    wait_for_condition 1000 50 {
++        [s -1 master_link_status] eq {down}
++    } else {
++        fail "Instance 1 master link status is not down"
++    }
++}
++
++test "Replication resume on instance 1 works" {
++    assert {[R 1 config set repl-paused no] eq {OK}}
++    wait_for_condition 1000 50 {
++        [s -1 master_link_status] eq {up}
++    } else {
++        fail "Instance 1 master link status is not up"
++    }
++}
++
++}
