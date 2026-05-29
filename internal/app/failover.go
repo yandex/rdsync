@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -56,7 +57,7 @@ func (app *App) approveFailover(shardState map[string]*HostState, activeNodes []
 
 	var lastSwitchover Switchover
 	err := app.dcs.Get(pathLastSwitch, &lastSwitchover)
-	if err != dcs.ErrNotFound {
+	if !errors.Is(err, dcs.ErrNotFound) {
 		if err != nil {
 			return err
 		}

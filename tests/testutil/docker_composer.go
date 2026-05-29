@@ -82,7 +82,7 @@ func NewDockerComposer(project, config string) (*DockerComposer, error) {
 	}
 	config, err := filepath.Abs(config)
 	if err != nil {
-		return nil, fmt.Errorf("failed to build abs path to compose file: %s", err)
+		return nil, fmt.Errorf("failed to build abs path to compose file: %w", err)
 	}
 	if project == "" {
 		project = filepath.Base(filepath.Dir(config))
@@ -90,7 +90,7 @@ func NewDockerComposer(project, config string) (*DockerComposer, error) {
 	dc := new(DockerComposer)
 	api, err := client.New(client.FromEnv)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to docker: %s", err)
+		return nil, fmt.Errorf("failed to connect to docker: %w", err)
 	}
 	dc.api = api
 	dc.config = config
@@ -108,7 +108,7 @@ func (dc *DockerComposer) runCompose(args []string, env []string) error {
 	cmd.Env = append(os.Environ(), env...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("failed to run 'docker compose %s': %s\n%s", strings.Join(args2, " "), err, out)
+		return fmt.Errorf("failed to run 'docker compose %s': %w\n%s", strings.Join(args2, " "), err, out)
 	}
 	return nil
 }

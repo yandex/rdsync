@@ -3,6 +3,7 @@ package tests
 import (
 	"context"
 	json "encoding/json/v2"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
@@ -208,7 +209,7 @@ func (tctx *testContext) connectZookeeper(addrs []string, timeout time.Duration)
 		return err == nil
 	}, timeout, time.Second)
 	if err != nil {
-		return nil, fmt.Errorf("failed to ping zookeeper within %s: %s", timeout, err)
+		return nil, fmt.Errorf("failed to ping zookeeper within %s: %w", timeout, err)
 	}
 	return conn, nil
 }
@@ -291,11 +292,11 @@ func (tctx *testContext) getValkeyConnection(host string) (client.Client, error)
 	}
 	addr, err := tctx.composer.GetAddr(host, valkeyPort)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get valkey addr %s: %s", host, err)
+		return nil, fmt.Errorf("failed to get valkey addr %s: %w", host, err)
 	}
 	conn, err = tctx.connectValkey(addr, valkeyConnectTimeout)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to valkey %s: %s", host, err)
+		return nil, fmt.Errorf("failed to connect to valkey %s: %w", host, err)
 	}
 	tctx.conns[host] = conn
 	return conn, nil
@@ -312,11 +313,11 @@ func (tctx *testContext) getSenticacheConnection(host string) (client.Client, er
 	}
 	addr, err := tctx.composer.GetAddr(host, senticachePort)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get senticache addr %s: %s", host, err)
+		return nil, fmt.Errorf("failed to get senticache addr %s: %w", host, err)
 	}
 	conn, err = tctx.connectSenticache(addr, valkeyConnectTimeout)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to senticache %s: %s", host, err)
+		return nil, fmt.Errorf("failed to connect to senticache %s: %w", host, err)
 	}
 	tctx.senticaches[host] = conn
 	return conn, nil
@@ -392,7 +393,7 @@ func (tctx *testContext) runSenticacheCmd(host string, cmd []string) (string, er
 func (tctx *testContext) baseShardIsUpAndRunning() error {
 	err := tctx.composer.Up(tctx.composerEnv)
 	if err != nil {
-		return fmt.Errorf("failed to setup compose cluster: %s", err)
+		return fmt.Errorf("failed to setup compose cluster: %w", err)
 	}
 
 	// check zookeepers
@@ -403,7 +404,7 @@ func (tctx *testContext) baseShardIsUpAndRunning() error {
 			if strings.HasPrefix(service, zkName) {
 				addr, err2 := tctx.composer.GetAddr(service, zkPort)
 				if err2 != nil {
-					err = fmt.Errorf("failed to get zookeeper addr %s: %s", service, err2)
+					err = fmt.Errorf("failed to get zookeeper addr %s: %w", service, err2)
 					return false
 				}
 				zkAddrs = append(zkAddrs, addr)
@@ -415,28 +416,28 @@ func (tctx *testContext) baseShardIsUpAndRunning() error {
 	}, time.Minute*5, time.Second)
 
 	if err != nil {
-		return fmt.Errorf("failed to connect to zookeeper %s: %s", zkAddrs, err)
+		return fmt.Errorf("failed to connect to zookeeper %s: %w", zkAddrs, err)
 	}
 
 	err = tctx.composer.RunCommandAtHosts("/var/lib/dist/base/generate_certs.sh && supervisorctl restart rdsync",
 		"valkey",
 		time.Minute)
 	if err != nil {
-		return fmt.Errorf("failed to generate certs in valkey hosts: %s", err)
+		return fmt.Errorf("failed to generate certs in valkey hosts: %w", err)
 	}
 
 	if err = tctx.createZookeeperNode("/test"); err != nil {
-		return fmt.Errorf("failed to create namespace zk node due %s", err)
+		return fmt.Errorf("failed to create namespace zk node due %w", err)
 	}
 	if err = tctx.createZookeeperNode(dcs.JoinPath("/test", dcs.PathHANodesPrefix)); err != nil {
-		return fmt.Errorf("failed to create path prefix zk node due %s", err)
+		return fmt.Errorf("failed to create path prefix zk node due %w", err)
 	}
 
 	// prepare valkey nodes
 	for _, service := range tctx.composer.Services() {
 		if strings.HasPrefix(service, valkeyName) {
 			if err = tctx.createZookeeperNode(dcs.JoinPath("/test", dcs.PathHANodesPrefix, service)); err != nil {
-				return fmt.Errorf("failed to create %s zk node due %s", service, err)
+				return fmt.Errorf("failed to create %s zk node due %w", service, err)
 			}
 		}
 	}
@@ -466,11 +467,11 @@ func (tctx *testContext) stepClusteredShardIsUpAndRunning() error {
 		if strings.HasPrefix(service, valkeyName) {
 			addr, err := tctx.composer.GetAddr(service, valkeyPort)
 			if err != nil {
-				return fmt.Errorf("failed to get valkey addr %s: %s", service, err)
+				return fmt.Errorf("failed to get valkey addr %s: %w", service, err)
 			}
 			conn, err := tctx.connectValkey(addr, valkeyInitialConnectTimeout)
 			if err != nil {
-				return fmt.Errorf("failed to connect to valkey %s: %s", service, err)
+				return fmt.Errorf("failed to connect to valkey %s: %w", service, err)
 			}
 			tctx.conns[service] = conn
 		}
@@ -500,20 +501,20 @@ func (tctx *testContext) stepSentinelShardIsUpAndRunning() error {
 		if strings.HasPrefix(service, valkeyName) {
 			addr, err := tctx.composer.GetAddr(service, valkeyPort)
 			if err != nil {
-				return fmt.Errorf("failed to get valkey addr %s: %s", service, err)
+				return fmt.Errorf("failed to get valkey addr %s: %w", service, err)
 			}
 			conn, err := tctx.connectValkey(addr, valkeyInitialConnectTimeout)
 			if err != nil {
-				return fmt.Errorf("failed to connect to valkey %s: %s", service, err)
+				return fmt.Errorf("failed to connect to valkey %s: %w", service, err)
 			}
 			tctx.conns[service] = conn
 			saddr, err2 := tctx.composer.GetAddr(service, senticachePort)
 			if err2 != nil {
-				return fmt.Errorf("failed to get senticache addr %s: %s", service, err2)
+				return fmt.Errorf("failed to get senticache addr %s: %w", service, err2)
 			}
 			sconn, err2 := tctx.connectSenticache(saddr, valkeyInitialConnectTimeout)
 			if err2 != nil {
-				return fmt.Errorf("failed to connect to senticache %s: %s", service, err2)
+				return fmt.Errorf("failed to connect to senticache %s: %w", service, err2)
 			}
 			tctx.senticaches[service] = sconn
 		}
@@ -658,7 +659,7 @@ func (tctx *testContext) stepPathExists(path, host string) error {
 	cmd := fmt.Sprintf("stat %s", path)
 	retCode, _, err := tctx.composer.RunCommand(host, cmd, 10*time.Second)
 	if err != nil {
-		return fmt.Errorf("failed to check path %s on %s: %s", path, host, err)
+		return fmt.Errorf("failed to check path %s on %s: %w", path, host, err)
 	}
 	if retCode != 0 {
 		return fmt.Errorf("expected %s to exist on %s but it's not", path, host)
@@ -670,7 +671,7 @@ func (tctx *testContext) stepPathDoesNotExist(path, host string) error {
 	cmd := fmt.Sprintf("stat %s", path)
 	retCode, _, err := tctx.composer.RunCommand(host, cmd, 10*time.Second)
 	if err != nil {
-		return fmt.Errorf("failed to check path %s on %s: %s", path, host, err)
+		return fmt.Errorf("failed to check path %s on %s: %w", path, host, err)
 	}
 	if retCode == 0 {
 		return fmt.Errorf("expected %s to be absent on %s but it exists", path, host)
@@ -807,10 +808,10 @@ func (tctx *testContext) createZookeeperNode(node string) error {
 func (tctx *testContext) stepISetZookeeperNode(node string, body *godog.DocString) error {
 	data := []byte(strings.TrimSpace(body.Content))
 	_, stat, err := tctx.zk.Get(node)
-	if err != nil && err != zk.ErrNoNode {
+	if err != nil && !errors.Is(err, zk.ErrNoNode) {
 		return err
 	}
-	if err == zk.ErrNoNode {
+	if errors.Is(err, zk.ErrNoNode) {
 		_, err = tctx.zk.Create(node, data, 0, tctx.acl)
 	} else {
 		_, err = tctx.zk.Set(node, data, stat.Version)
@@ -866,7 +867,7 @@ func (tctx *testContext) stepZookeeperNodeShouldExistWithin(node string, timeout
 
 func (tctx *testContext) stepZookeeperNodeShouldNotExist(node string) error {
 	err := tctx.stepIGetZookeeperNode(node)
-	if err == zk.ErrNoNode {
+	if errors.Is(err, zk.ErrNoNode) {
 		return nil
 	}
 	if err != nil {
@@ -936,7 +937,7 @@ func (tctx *testContext) stepReplicationOnValkeyHostShouldRunFineWithin(host str
 func (tctx *testContext) stepValkeyHostShouldBecomeUnavailableWithin(host string, timeout int) error {
 	addr, err := tctx.composer.GetAddr(host, valkeyPort)
 	if err != nil {
-		return fmt.Errorf("failed to get valkey addr %s: %s", host, err)
+		return fmt.Errorf("failed to get valkey addr %s: %w", host, err)
 	}
 	testutil.Retry(func() bool {
 		var conn client.Client
@@ -956,7 +957,7 @@ func (tctx *testContext) stepValkeyHostShouldBecomeUnavailableWithin(host string
 func (tctx *testContext) stepValkeyHostShouldBecomeAvailableWithin(host string, timeout int) error {
 	addr, err := tctx.composer.GetAddr(host, valkeyPort)
 	if err != nil {
-		return fmt.Errorf("failed to get valkey addr %s: %s", host, err)
+		return fmt.Errorf("failed to get valkey addr %s: %w", host, err)
 	}
 	testutil.Retry(func() bool {
 		var conn client.Client

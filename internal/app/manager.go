@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -50,7 +51,7 @@ func (app *App) stateManager() appState {
 	app.logger.Info().Msgf("DCS shard state: %v", shardStateDcs)
 
 	maintenance, err := app.GetMaintenance()
-	if err != nil && err != dcs.ErrNotFound {
+	if err != nil && !errors.Is(err, dcs.ErrNotFound) {
 		app.logger.Error().Err(err).Msg("Failed to get maintenance from dcs")
 		return stateManager
 	}
@@ -94,7 +95,7 @@ func (app *App) stateManager() appState {
 			return stateManager
 		}
 		err = app.performSwitchover(shardState, activeNodes, &switchover, master)
-		if app.dcs.Get(pathCurrentSwitch, new(Switchover)) == dcs.ErrNotFound {
+		if errors.Is(app.dcs.Get(pathCurrentSwitch, new(Switchover)), dcs.ErrNotFound) {
 			app.logger.Error().Msg("Switchover was aborted")
 		} else {
 			if err != nil {
@@ -110,12 +111,12 @@ func (app *App) stateManager() appState {
 			}
 		}
 		return stateManager
-	} else if err != dcs.ErrNotFound {
+	} else if !errors.Is(err, dcs.ErrNotFound) {
 		app.logger.Error().Err(err).Msg("Getting current switchover failed")
 		return stateManager
 	}
 	poisonPill, err := app.getPoisonPill()
-	if err != nil && err != dcs.ErrNotFound {
+	if err != nil && !errors.Is(err, dcs.ErrNotFound) {
 		app.logger.Error().Err(err).Msg("Manager: failed to get poison pill from DCS")
 		return stateManager
 	}
