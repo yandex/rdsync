@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -94,10 +95,10 @@ func (app *App) stateMaintenance() appState {
 		app.createMaintenanceFile()
 	}
 	maintenance, err := app.GetMaintenance()
-	if err != nil && err != dcs.ErrNotFound {
+	if err != nil && !errors.Is(err, dcs.ErrNotFound) {
 		return stateMaintenance
 	}
-	if err == dcs.ErrNotFound || maintenance.ShouldLeave {
+	if errors.Is(err, dcs.ErrNotFound) || maintenance.ShouldLeave {
 		if app.dcs.AcquireLock(pathManagerLock) {
 			app.logger.Info().Msg("Leaving maintenance")
 			err := app.leaveMaintenance()

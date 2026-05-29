@@ -1,6 +1,7 @@
 package valkey
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"sync"
@@ -50,7 +51,7 @@ func (s *Shard) SetDCS(newDCS dcs.DCS) {
 // GetShardHostsFromDcs returns current shard hosts from dcs state
 func (s *Shard) GetShardHostsFromDcs() ([]string, error) {
 	fqdns, err := s.dcs.GetChildren(dcs.PathHANodesPrefix)
-	if err == dcs.ErrNotFound {
+	if errors.Is(err, dcs.ErrNotFound) {
 		return make([]string, 0), nil
 	}
 	if err != nil {
@@ -142,8 +143,8 @@ func (s *Shard) GetNodeConfiguration(host string) (*NodeConfiguration, error) {
 	var nc NodeConfiguration
 	err := s.dcs.Get(dcs.JoinPath(dcs.PathHANodesPrefix, host), &nc)
 	if err != nil {
-		if err != dcs.ErrNotFound && err != dcs.ErrMalformed {
-			return nil, fmt.Errorf("failed to get Priority for host %s: %s", host, err)
+		if !errors.Is(err, dcs.ErrNotFound) && !errors.Is(err, dcs.ErrMalformed) {
+			return nil, fmt.Errorf("failed to get Priority for host %s: %w", host, err)
 		}
 		return DefaultNodeConfiguration(), nil
 	}

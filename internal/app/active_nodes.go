@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"sort"
@@ -15,7 +16,7 @@ func (app *App) GetActiveNodes() ([]string, error) {
 	var activeNodes []string
 	err := app.dcs.Get(pathActiveNodes, &activeNodes)
 	if err != nil {
-		if err == dcs.ErrNotFound {
+		if errors.Is(err, dcs.ErrNotFound) {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("get active nodes from dcs: %s", err.Error())

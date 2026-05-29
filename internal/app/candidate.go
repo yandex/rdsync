@@ -1,6 +1,8 @@
 package app
 
 import (
+	"errors"
+
 	"github.com/yandex/rdsync/internal/dcs"
 )
 
@@ -20,7 +22,7 @@ func (app *App) stateCandidate() appState {
 		app.logger.Info().Msgf("Shard state: %v", shardState)
 	}
 	maintenance, err := app.GetMaintenance()
-	if err != nil && err != dcs.ErrNotFound {
+	if err != nil && !errors.Is(err, dcs.ErrNotFound) {
 		app.logger.Error().Err(err).Msg("Candidate: failed to get maintenance from DCS")
 		return stateCandidate
 	}
@@ -29,7 +31,7 @@ func (app *App) stateCandidate() appState {
 	}
 
 	poisonPill, err := app.getPoisonPill()
-	if err != nil && err != dcs.ErrNotFound {
+	if err != nil && !errors.Is(err, dcs.ErrNotFound) {
 		app.logger.Error().Err(err).Msg("Candidate: failed to get poison pill from DCS")
 		return stateCandidate
 	}
@@ -46,7 +48,7 @@ func (app *App) stateCandidate() appState {
 
 	var master string
 	err = app.dcs.Get(pathMasterNode, &master)
-	if err != nil && err != dcs.ErrNotFound {
+	if err != nil && !errors.Is(err, dcs.ErrNotFound) {
 		app.logger.Error().Err(err).Msg("Candidate: failed to get current master from DCS")
 		return stateCandidate
 	}

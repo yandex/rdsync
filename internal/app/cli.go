@@ -3,6 +3,7 @@ package app
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 
 	"os"
@@ -69,7 +70,7 @@ func (app *App) CliInfo(verbose bool) int {
 			err = app.dcs.Get(path, &switchover)
 			if err == nil {
 				data[path] = switchover.String()
-			} else if err != dcs.ErrNotFound {
+			} else if !errors.Is(err, dcs.ErrNotFound) {
 				app.logger.Error().Err(err).Msgf("Failed to get %s", path)
 				return 1
 			}
@@ -79,7 +80,7 @@ func (app *App) CliInfo(verbose bool) int {
 		err = app.dcs.Get(pathMaintenance, &maintenance)
 		if err == nil {
 			data[pathMaintenance] = maintenance.String()
-		} else if err != dcs.ErrNotFound {
+		} else if !errors.Is(err, dcs.ErrNotFound) {
 			app.logger.Error().Err(err).Msgf("Failed to get %s", pathMaintenance)
 			return 1
 		}
@@ -88,14 +89,14 @@ func (app *App) CliInfo(verbose bool) int {
 		err = app.dcs.Get(pathPoisonPill, &poisonPill)
 		if err == nil {
 			data[pathPoisonPill] = poisonPill.String()
-		} else if err != dcs.ErrNotFound {
+		} else if !errors.Is(err, dcs.ErrNotFound) {
 			app.logger.Error().Err(err).Msgf("Failed to get %s", pathPoisonPill)
 			return 1
 		}
 
 		var manager dcs.LockOwner
 		err = app.dcs.Get(pathManagerLock, &manager)
-		if err != nil && err != dcs.ErrNotFound {
+		if err != nil && !errors.Is(err, dcs.ErrNotFound) {
 			app.logger.Error().Err(err).Msgf("Failed to get %s", pathManagerLock)
 			return 1
 		}
@@ -103,7 +104,7 @@ func (app *App) CliInfo(verbose bool) int {
 
 		var master string
 		err = app.dcs.Get(pathMasterNode, &master)
-		if err != nil && err != dcs.ErrNotFound {
+		if err != nil && !errors.Is(err, dcs.ErrNotFound) {
 			app.logger.Error().Err(err).Msgf("Failed to get %s", pathMasterNode)
 			return 1
 		}
@@ -287,7 +288,7 @@ func (app *App) CliSwitch(switchFrom, switchTo string, waitTimeout time.Duration
 		app.logger.Error().Msgf("Another switchover in progress %v", switchover)
 		return 2
 	}
-	if err != dcs.ErrNotFound {
+	if !errors.Is(err, dcs.ErrNotFound) {
 		app.logger.Error().Err(err).Msg("Unable to get current switchover status")
 		return 2
 	}
@@ -307,7 +308,7 @@ func (app *App) CliSwitch(switchFrom, switchTo string, waitTimeout time.Duration
 	}
 
 	err = app.dcs.Create(pathCurrentSwitch, switchover)
-	if err == dcs.ErrExists {
+	if errors.Is(err, dcs.ErrExists) {
 		app.logger.Error().Msg("Another switchover in progress")
 		return 2
 	}
@@ -364,7 +365,7 @@ func (app *App) CliEnableMaintenance(waitTimeout time.Duration) int {
 		InitiatedAt: time.Now(),
 	}
 	err = app.dcs.Create(pathMaintenance, maintenance)
-	if err != nil && err != dcs.ErrExists {
+	if err != nil && !errors.Is(err, dcs.ErrExists) {
 		app.logger.Error().Err(err).Msg("Unable to create maintenance path in dcs")
 		return 1
 	}
@@ -410,7 +411,7 @@ func (app *App) CliDisableMaintenance(waitTimeout time.Duration) int {
 
 	maintenance := &Maintenance{}
 	err = app.dcs.Get(pathMaintenance, maintenance)
-	if err == dcs.ErrNotFound {
+	if errors.Is(err, dcs.ErrNotFound) {
 		fmt.Println("maintenance disabled")
 		return 0
 	} else if err != nil {
@@ -432,7 +433,7 @@ func (app *App) CliDisableMaintenance(waitTimeout time.Duration) int {
 			select {
 			case <-ticker.C:
 				err = app.dcs.Get(pathMaintenance, maintenance)
-				if err == dcs.ErrNotFound {
+				if errors.Is(err, dcs.ErrNotFound) {
 					maintenance = nil
 					break Out
 				}
@@ -466,15 +467,15 @@ func (app *App) CliGetMaintenance() int {
 
 	var maintenance Maintenance
 	err = app.dcs.Get(pathMaintenance, &maintenance)
-	switch err {
-	case nil:
+	switch {
+	case err == nil:
 		if maintenance.RdSyncPaused {
 			fmt.Println("on")
 		} else {
 			fmt.Println("scheduled")
 		}
 		return 0
-	case dcs.ErrNotFound:
+	case errors.Is(err, dcs.ErrNotFound):
 		fmt.Println("off")
 		return 0
 	default:
@@ -494,7 +495,7 @@ func (app *App) CliAbort() int {
 	app.dcs.Initialize()
 
 	err = app.dcs.Get(pathCurrentSwitch, new(Switchover))
-	if err == dcs.ErrNotFound {
+	if errors.Is(err, dcs.ErrNotFound) {
 		fmt.Println("no active switchover")
 		return 0
 	}
@@ -578,7 +579,7 @@ func (app *App) CliHostAdd(host string, priority *int, dryRun bool, skipValkeyCh
 
 	// root path probably does not exist
 	err = app.dcs.Create(dcs.JoinPath(pathHANodes), nil)
-	if err != nil && err != dcs.ErrExists {
+	if err != nil && !errors.Is(err, dcs.ErrExists) {
 		return 1
 	}
 
@@ -598,7 +599,7 @@ func (app *App) CliHostAdd(host string, priority *int, dryRun bool, skipValkeyCh
 
 	if !dryRun && priority == nil {
 		err = app.dcs.Set(dcs.JoinPath(pathHANodes, host), *valkey.DefaultNodeConfiguration())
-		if err != nil && err != dcs.ErrExists {
+		if err != nil && !errors.Is(err, dcs.ErrExists) {
 			app.logger.Error().Err(err).Msgf("Unable to create dcs path for %s", host)
 			return 1
 		}
@@ -632,7 +633,7 @@ func (app *App) CliHostRemove(host string) int {
 	app.dcs.Initialize()
 
 	err = app.dcs.Delete(dcs.JoinPath(pathHANodes, host))
-	if err != nil && err != dcs.ErrNotFound {
+	if err != nil && !errors.Is(err, dcs.ErrNotFound) {
 		app.logger.Error().Err(err).Msgf("Unable to delete dcs path for %s", host)
 		return 1
 	}
@@ -668,7 +669,7 @@ func (app *App) processPriority(priority *int, dryRun bool, host string) (change
 	}
 
 	err = app.dcs.Set(dcs.JoinPath(pathHANodes, host), targetConf)
-	if err != nil && err != dcs.ErrExists {
+	if err != nil && !errors.Is(err, dcs.ErrExists) {
 		return false, err
 	}
 

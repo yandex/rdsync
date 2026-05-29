@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"time"
@@ -80,7 +81,7 @@ func (app *App) closeStaleReplica(master string) error {
 			app.logger.Debug().Msgf("Skipping staleness close due to switchover in progress: %v.", switchover)
 			return nil
 		}
-		if err != dcs.ErrNotFound {
+		if !errors.Is(err, dcs.ErrNotFound) {
 			return err
 		}
 		shardState, err := app.getShardStateFromDcs()

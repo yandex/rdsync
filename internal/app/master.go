@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -14,8 +15,8 @@ func (app *App) getNumReplicasToWrite(activeNodes []string) int {
 func (app *App) getCurrentMaster(shardState map[string]*HostState) (string, error) {
 	var master string
 	err := app.dcs.Get(pathMasterNode, &master)
-	if err != nil && err != dcs.ErrNotFound {
-		return "", fmt.Errorf("failed to get current master from dcs: %s", err)
+	if err != nil && !errors.Is(err, dcs.ErrNotFound) {
+		return "", fmt.Errorf("failed to get current master from dcs: %w", err)
 	}
 	if master != "" {
 		stateMaster, err := app.getMasterHost(shardState)
@@ -84,7 +85,7 @@ func (app *App) ensureCurrentMaster(shardState map[string]*HostState) (string, e
 	}
 	err = app.dcs.Set(pathMasterNode, master)
 	if err != nil {
-		return "", fmt.Errorf("failed to set current master in dcs: %s", err)
+		return "", fmt.Errorf("failed to set current master in dcs: %w", err)
 	}
 	return master, nil
 }

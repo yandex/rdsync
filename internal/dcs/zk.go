@@ -178,7 +178,7 @@ func (z *zkDCS) makePath(path string) error {
 		if err == nil {
 			break
 		}
-		if err == zk.ErrNoNode {
+		if errors.Is(err, zk.ErrNoNode) {
 			createPaths = append(createPaths, path)
 		} else {
 			return err
@@ -187,7 +187,7 @@ func (z *zkDCS) makePath(path string) error {
 	slices.Reverse(createPaths)
 	for _, path := range createPaths {
 		_, err := z.retryCreate(path, []byte{}, 0, z.acl)
-		if err != nil && err != zk.ErrNodeExists {
+		if err != nil && !errors.Is(err, zk.ErrNodeExists) {
 			return err
 		}
 	}
@@ -278,7 +278,7 @@ func (z *zkDCS) Initialize() {
 
 func (z *zkDCS) retryRequestInternal(code func() error) error {
 	err := code()
-	if err != zk.ErrConnectionClosed {
+	if !errors.Is(err, zk.ErrConnectionClosed) {
 		return backoff.Permanent(err)
 	}
 	if !z.IsConnected() {
@@ -353,18 +353,18 @@ func (z *zkDCS) AcquireLock(path string) bool {
 	}
 	self := z.getSelfLockOwner()
 	data, _, err := z.retryGet(fullPath)
-	if err != nil && err != zk.ErrNoNode {
+	if err != nil && !errors.Is(err, zk.ErrNoNode) {
 		z.logger.Error().Err(err).Msgf("Failed to get lock info %s", fullPath)
 		return false
 	}
-	if err == zk.ErrNoNode {
+	if errors.Is(err, zk.ErrNoNode) {
 		data, err = json.Marshal(&self)
 		if err != nil {
 			panic(fmt.Sprintf("failed to serialize to JSON %#v", self))
 		}
 		_, err = z.retryCreate(fullPath, data, zk.FlagEphemeral, z.acl)
 		if err != nil {
-			if err != zk.ErrNodeExists {
+			if !errors.Is(err, zk.ErrNodeExists) {
 				z.logger.Error().Err(err).Msgf("Failed to acquire lock %s", fullPath)
 			}
 			return false
@@ -395,19 +395,19 @@ func (z *zkDCS) ReleaseLockOrError(path string) error {
 	fullPath := z.buildFullPath(path)
 	z.lockHeld.Delete(fullPath)
 	data, stat, err := z.retryGet(fullPath)
-	if err != nil && err != zk.ErrNoNode {
-		return fmt.Errorf("failed to get lock info %s: %v", fullPath, err)
+	if err != nil && !errors.Is(err, zk.ErrNoNode) {
+		return fmt.Errorf("failed to get lock info %s: %w", fullPath, err)
 	}
 	owner := LockOwner{}
 	if err = json.Unmarshal(data, &owner); err != nil {
-		return fmt.Errorf("unexpected lock data %s (%s): %v", fullPath, data, err)
+		return fmt.Errorf("unexpected lock data %s (%s): %w", fullPath, data, err)
 	}
 	if owner != z.getSelfLockOwner() {
 		return fmt.Errorf("failed to release lock %s: process is not an owner", fullPath)
 	}
 	err = z.retryDelete(fullPath, stat.Version)
 	if err != nil {
-		return fmt.Errorf("failed to delete lock node %s: %v", fullPath, err)
+		return fmt.Errorf("failed to delete lock node %s: %w", fullPath, err)
 	}
 	return nil
 }
@@ -420,7 +420,7 @@ func (z *zkDCS) create(path string, val any, flags int32) error {
 	}
 	_, err = z.retryCreate(fullPath, data, flags, z.acl)
 	if err != nil {
-		if err == zk.ErrNodeExists {
+		if errors.Is(err, zk.ErrNodeExists) {
 			return ErrExists
 		}
 		z.logger.Error().Err(err).Msgf("Failed to create node %s with %+v", fullPath, val)
@@ -443,11 +443,11 @@ func (z *zkDCS) set(path string, val any, flags int32) error {
 		return fmt.Errorf("failed to serialize to JSON %#v", val)
 	}
 	_, stat, err := z.retryGet(fullPath)
-	if err != nil && err != zk.ErrNoNode {
+	if err != nil && !errors.Is(err, zk.ErrNoNode) {
 		z.logger.Error().Err(err).Msgf("Failed to get node %s", fullPath)
 		return err
 	}
-	if err == zk.ErrNoNode {
+	if errors.Is(err, zk.ErrNoNode) {
 		parts := strings.Split(fullPath, sep)
 		err = z.makePath(strings.Join(parts[:len(parts)-1], sep))
 		if err != nil {
@@ -480,7 +480,7 @@ func (z *zkDCS) SetEphemeral(path string, val any) error {
 func (z *zkDCS) Delete(path string) error {
 	fullPath := z.buildFullPath(path)
 	_, stat, err := z.retryGet(fullPath)
-	if err == zk.ErrNoNode {
+	if errors.Is(err, zk.ErrNoNode) {
 		return nil
 	}
 	if err != nil {
@@ -497,7 +497,7 @@ func (z *zkDCS) Delete(path string) error {
 func (z *zkDCS) Get(path string, dest any) error {
 	fullPath := z.buildFullPath(path)
 	data, _, err := z.retryGet(fullPath)
-	if err == zk.ErrNoNode {
+	if errors.Is(err, zk.ErrNoNode) {
 		return ErrNotFound
 	}
 	if err != nil {
@@ -549,7 +549,7 @@ func (z *zkDCS) GetTree(path string) (any, error) {
 func (z *zkDCS) GetChildren(path string) ([]string, error) {
 	fullPath := z.buildFullPath(path)
 	children, err := z.retryChildren(fullPath)
-	if err == zk.ErrNoNode {
+	if errors.Is(err, zk.ErrNoNode) {
 		return nil, ErrNotFound
 	}
 	if err != nil {

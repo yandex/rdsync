@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -201,7 +202,7 @@ func (app *App) getShardStateFromDcs() (map[string]*HostState, error) {
 	getter := func(host string) (*HostState, error) {
 		var state HostState
 		err := app.dcs.Get(dcs.JoinPath(pathHealthPrefix, host), &state)
-		if err != nil && err != dcs.ErrNotFound {
+		if err != nil && !errors.Is(err, dcs.ErrNotFound) {
 			return nil, err
 		}
 		return &state, nil

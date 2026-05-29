@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"time"
@@ -27,11 +28,11 @@ func countAliveHAReplicasWithinNodes(nodes []string, shardState map[string]*Host
 func (app *App) getLastSwitchover() Switchover {
 	var lastSwitch, lastRejectedSwitch Switchover
 	err := app.dcs.Get(pathLastSwitch, &lastSwitch)
-	if err != nil && err != dcs.ErrNotFound {
+	if err != nil && !errors.Is(err, dcs.ErrNotFound) {
 		app.logger.Error().Err(err).Msg(pathLastSwitch)
 	}
 	errRejected := app.dcs.Get(pathLastRejectedSwitch, &lastRejectedSwitch)
-	if errRejected != nil && errRejected != dcs.ErrNotFound {
+	if errRejected != nil && !errors.Is(errRejected, dcs.ErrNotFound) {
 		app.logger.Error().Err(errRejected).Msg(pathLastRejectedSwitch)
 	}
 
@@ -187,7 +188,7 @@ func (app *App) performSwitchover(shardState map[string]*HostState, activeNodes 
 	}
 
 	poisonPill, err := app.getPoisonPill()
-	if err != nil && err != dcs.ErrNotFound {
+	if err != nil && !errors.Is(err, dcs.ErrNotFound) {
 		return fmt.Errorf("unable to get poison pill: %s", err.Error())
 	}
 	if !shardState[oldMaster].PingOk {
@@ -342,11 +343,11 @@ func (app *App) performSwitchover(shardState map[string]*HostState, activeNodes 
 
 		err = app.dcs.Set(pathMasterNode, newMaster)
 		if err != nil {
-			return fmt.Errorf("failed to set new master in dcs: %s", err)
+			return fmt.Errorf("failed to set new master in dcs: %w", err)
 		}
 
 		poisonPill, err = app.getPoisonPill()
-		if err != nil && err != dcs.ErrNotFound {
+		if err != nil && !errors.Is(err, dcs.ErrNotFound) {
 			return fmt.Errorf("unable to get poison pill: %s", err.Error())
 		}
 		needIssue := true
