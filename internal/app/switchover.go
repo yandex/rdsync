@@ -71,14 +71,6 @@ func (app *App) failSwitchover(switchover *Switchover, err error) error {
 	switchover.Result.Error = err.Error()
 	switchover.Result.FinishedAt = time.Now()
 
-	// Report failure timing
-	dur := time.Since(switchover.StartedAt)
-	eventName := "switchover_failed"
-	if switchover.Cause == CauseAuto {
-		eventName = "failover_failed"
-	}
-	app.timings.reportTiming(eventName, dur)
-
 	return app.dcs.Set(pathCurrentSwitch, switchover)
 }
 
@@ -106,17 +98,23 @@ func (app *App) finishSwitchover(switchover *Switchover, switchErr error) error 
 	switchover.Result.Ok = result
 	switchover.Result.FinishedAt = time.Now()
 
+	var eventName string
+
 	if switchErr != nil {
+		eventName = "switchover_failed"
+		if switchover.Cause == CauseAuto {
+			eventName = "failover_failed"
+		}
 		switchover.Result.Error = switchErr.Error()
 	} else {
 		// Report success timing
-		dur := time.Since(switchover.StartedAt)
-		eventName := "switchover_complete"
+		eventName = "switchover_complete"
 		if switchover.Cause == CauseAuto {
 			eventName = "failover_complete"
 		}
-		app.timings.reportTiming(eventName, dur)
 	}
+	dur := time.Since(switchover.StartedAt)
+	app.timings.reportTiming(eventName, dur)
 
 	err := app.dcs.Delete(pathCurrentSwitch)
 	if err != nil {
