@@ -87,6 +87,24 @@ func (app *App) updateActiveNodes(state, stateDcs map[string]*HostState, oldActi
 		return err
 	}
 
+	if removingNodes {
+		expectedNumReplicas := app.getNumReplicasToWrite(activeNodes)
+		masterNode := app.shard.Get(master)
+		actualNumReplicas, err := masterNode.GetNumQuorumReplicas(app.ctx)
+		if err != nil {
+			app.logger.Error().Err(err).Msg("Update active nodes: failed to get num quorum replicas on master")
+		} else if expectedNumReplicas < actualNumReplicas {
+			app.logger.Info().Msgf("Update active nodes: changing num quorum replicas from %d to %d on master", actualNumReplicas, expectedNumReplicas)
+			err, rewriteErr := masterNode.SetNumQuorumReplicas(app.ctx, expectedNumReplicas)
+			if err != nil {
+				app.logger.Error().Err(err).Msg("Update active nodes: failed to set num quorum replicas on master")
+			}
+			if rewriteErr != nil {
+				app.logger.Error().Err(rewriteErr).Msg("Update active nodes: failed to rewrite config on master")
+			}
+		}
+	}
+
 	if !removingNodes {
 		err := app.dcs.Set(pathActiveNodes, activeNodes)
 		if err != nil {
