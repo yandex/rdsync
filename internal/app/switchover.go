@@ -370,21 +370,30 @@ func (app *App) performSwitchover(shardState map[string]*HostState, activeNodes 
 			app.waitPoisonPill(app.config.Valkey.WaitPoisonPillTimeout)
 		}
 
+		newMasterNode := app.shard.Get(newMaster)
 		if len(aliveActiveNodes) == 1 || app.config.Valkey.AllowDataLoss {
-			node := app.shard.Get(newMaster)
-			err, errConf := node.SetReadWrite(app.ctx)
+			err, errConf := newMasterNode.SetReadWrite(app.ctx)
 			if err != nil {
 				return fmt.Errorf("unable to set %s available for write before promote: %s", newMaster, err.Error())
 			}
 			if errConf != nil {
 				return fmt.Errorf("unable to rewrite config on %s before promote: %s", newMaster, errConf.Error())
 			}
-			err, errConf = node.SetNumQuorumReplicas(app.ctx, 0)
+			err, errConf = newMasterNode.SetNumQuorumReplicas(app.ctx, 0)
 			if err != nil {
 				return fmt.Errorf("unable to set num quorum replicas to 0 on %s: %s", newMaster, err.Error())
 			}
 			if errConf != nil {
 				return fmt.Errorf("unable to rewrite config on %s before promote: %s", newMaster, errConf.Error())
+			}
+		} else {
+			expectedNumReplicas := app.getNumReplicasToWrite(aliveActiveNodes)
+			err, errConf := newMasterNode.SetNumQuorumReplicas(app.ctx, expectedNumReplicas)
+			if err != nil {
+				return fmt.Errorf("unable to set num quorum replicas to %d on %s before promote: %s", expectedNumReplicas, newMaster, err.Error())
+			}
+			if errConf != nil {
+				app.logger.Warn().Err(errConf).Msgf("Unable to rewrite config on %s after setting num quorum replicas before promote", newMaster)
 			}
 		}
 

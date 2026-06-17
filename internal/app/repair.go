@@ -54,15 +54,6 @@ func (app *App) repairShard(shardState map[string]*HostState, activeNodes []stri
 }
 
 func (app *App) repairMaster(node *valkey.Node, activeNodes []string, state *HostState) {
-	if state.IsReadOnly || state.MinReplicasToWrite != 0 {
-		err, rewriteErr := node.SetReadWrite(app.ctx)
-		if err != nil {
-			app.logger.Error().Str("fqdn", node.FQDN()).Err(err).Msg("Unable to set master read-write")
-		}
-		if rewriteErr != nil {
-			app.logger.Error().Str("fqdn", node.FQDN()).Err(rewriteErr).Msg("Unable to rewrite config on master")
-		}
-	}
 	expectedNumReplicas := app.getNumReplicasToWrite(activeNodes)
 	actualNumReplicas, err := node.GetNumQuorumReplicas(app.ctx)
 	if err != nil {
@@ -74,6 +65,16 @@ func (app *App) repairMaster(node *valkey.Node, activeNodes []string, state *Hos
 		err, rewriteErr := node.SetNumQuorumReplicas(app.ctx, expectedNumReplicas)
 		if err != nil {
 			app.logger.Error().Str("fqdn", node.FQDN()).Err(err).Msg("Unable to set num quorum replicas on master")
+			return
+		}
+		if rewriteErr != nil {
+			app.logger.Error().Str("fqdn", node.FQDN()).Err(rewriteErr).Msg("Unable to rewrite config on master")
+		}
+	}
+	if state.IsReadOnly || state.MinReplicasToWrite != 0 {
+		err, rewriteErr := node.SetReadWrite(app.ctx)
+		if err != nil {
+			app.logger.Error().Str("fqdn", node.FQDN()).Err(err).Msg("Unable to set master read-write")
 		}
 		if rewriteErr != nil {
 			app.logger.Error().Str("fqdn", node.FQDN()).Err(rewriteErr).Msg("Unable to rewrite config on master")
@@ -321,6 +322,30 @@ func (app *App) repairLocalNode(master string) bool {
 		dur := time.Since(failTime)
 		app.timings.reportTiming("node_offline", dur)
 		delete(app.nodeFailTime, local.FQDN())
+	}
+	if master == local.FQDN() {
+		activeNodes, err := app.GetActiveNodes()
+		if err != nil {
+			app.logger.Error().Err(err).Msg("Unable to get active nodes before setting local master online")
+			return false
+		}
+		expectedNumReplicas := app.getNumReplicasToWrite(activeNodes)
+		actualNumReplicas, err := local.GetNumQuorumReplicas(app.ctx)
+		if err != nil {
+			app.logger.Error().Err(err).Msg("Unable to get num quorum replicas before setting local master online")
+			return false
+		}
+		if expectedNumReplicas > actualNumReplicas {
+			app.logger.Info().Msgf("Setting num quorum replicas to %d before setting local master online", expectedNumReplicas)
+			err, rewriteErr := local.SetNumQuorumReplicas(app.ctx, expectedNumReplicas)
+			if err != nil {
+				app.logger.Error().Err(err).Msg("Unable to set num quorum replicas before setting local master online")
+				return false
+			}
+			if rewriteErr != nil {
+				app.logger.Error().Err(rewriteErr).Msg("Unable to rewrite config after setting num quorum replicas on local master")
+			}
+		}
 	}
 	err = local.SetOnline(app.ctx)
 	if err != nil {
