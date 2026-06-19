@@ -10,8 +10,8 @@ require (
 	github.com/go-zookeeper/zk v1.0.4
 	github.com/gofrs/flock v0.13.0
 	github.com/heetch/confita v0.11.0
-	github.com/moby/moby/api v1.54.2
-	github.com/moby/moby/client v0.4.1
+	github.com/moby/moby/api v1.55.0
+	github.com/moby/moby/client v0.5.0
 	github.com/rs/zerolog v1.35.1
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
