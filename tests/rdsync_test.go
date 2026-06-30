@@ -1096,12 +1096,10 @@ func (tctx *testContext) stepFileOnHostsShouldMatchRegexpWithin(filepath, hostsS
 
 	// If we get here, no host matched within the timeout
 	var details strings.Builder
-	details.WriteString(fmt.Sprintf("file %s did not match pattern on any host after %d seconds.\n", filepath, timeout))
-	details.WriteString("Pattern:\n")
-	details.WriteString(fmt.Sprintf("  %s\n", pattern))
-	details.WriteString("Outputs from each host:\n")
+	fmt.Fprintf(&details, "file %s did not match pattern on any host after %d seconds.\n", filepath, timeout)
+	fmt.Fprintf(&details, "Pattern:\n  %s\nOutputs from each host:\n", pattern)
 	for host, output := range outputs {
-		details.WriteString(fmt.Sprintf("  %s: %s\n", host, output))
+		fmt.Fprintf(&details, "  %s: %s\n", host, output)
 	}
 	lastError = fmt.Errorf("%s", details.String())
 	return lastError
