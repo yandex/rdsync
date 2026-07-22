@@ -243,7 +243,7 @@ func (app *App) stateManager() appState {
 	if updateActive {
 		err = app.updateActiveNodes(shardState, shardStateDcs, activeNodes, master)
 		if err != nil {
-			app.logger.Error().Err(err).Msg("Failed to update active nodes in dcs")
+			app.logger.Error().Err(err).Msg("Failed to update active nodes")
 		}
 	}
 

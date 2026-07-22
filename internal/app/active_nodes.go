@@ -61,58 +61,141 @@ func (app *App) actualizeQuorumReplicas(master string, activeNodes []string) err
 	return nil
 }
 
-func (app *App) updateActiveNodes(state, stateDcs map[string]*HostState, oldActiveNodes []string, master string) error {
-	activeNodes := app.calcActiveNodes(state, stateDcs, oldActiveNodes, master)
+type activeNodesTransitionOps struct {
+	setQuorumReplicas    func([]string) error
+	setNumQuorumReplicas func(int) error
+	setActiveNodes       func([]string) error
+}
 
-	removingNodes := false
+func activeNodesSet(nodes []string) map[string]struct{} {
+	set := make(map[string]struct{}, len(nodes))
+	for _, node := range nodes {
+		set[node] = struct{}{}
+	}
+	return set
+}
 
-	for _, node := range oldActiveNodes {
-		if !slices.Contains(activeNodes, node) {
-			removingNodes = true
-			break
+func activeNodesIntersection(left, right []string) []string {
+	rightSet := activeNodesSet(right)
+	intersection := make([]string, 0, len(left))
+	for _, node := range left {
+		if _, ok := rightSet[node]; ok {
+			intersection = append(intersection, node)
 		}
 	}
+	sort.Strings(intersection)
+	return intersection
+}
 
-	if removingNodes {
-		err := app.dcs.Set(pathActiveNodes, activeNodes)
-		if err != nil {
-			app.logger.Error().Err(err).Msg("Update active nodes: failed to update active nodes in dcs")
+func activeNodesEqual(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	leftSet := activeNodesSet(left)
+	for _, node := range right {
+		if _, ok := leftSet[node]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func hasAddedActiveNodes(oldActiveNodes, activeNodes []string) bool {
+	oldSet := activeNodesSet(oldActiveNodes)
+	for _, node := range activeNodes {
+		if _, ok := oldSet[node]; !ok {
+			return true
+		}
+	}
+	return false
+}
+
+func applyActiveNodesTransition(oldActiveNodes, activeNodes []string, actualNumReplicas, expectedNumReplicas int, ops activeNodesTransitionOps) error {
+	if activeNodesEqual(oldActiveNodes, activeNodes) {
+		if actualNumReplicas < expectedNumReplicas {
+			if err := ops.setNumQuorumReplicas(expectedNumReplicas); err != nil {
+				return err
+			}
+		}
+		if err := ops.setQuorumReplicas(activeNodes); err != nil {
 			return err
 		}
+		if actualNumReplicas > expectedNumReplicas {
+			return ops.setNumQuorumReplicas(expectedNumReplicas)
+		}
+		return nil
 	}
 
-	err := app.actualizeQuorumReplicas(master, activeNodes)
-	if err != nil {
-		app.logger.Error().Err(err).Msg("Update active nodes: failed to actualize quorum replicas")
+	if hasAddedActiveNodes(oldActiveNodes, activeNodes) || expectedNumReplicas > actualNumReplicas {
+		commonActiveNodes := activeNodesIntersection(oldActiveNodes, activeNodes)
+		if err := ops.setQuorumReplicas(commonActiveNodes); err != nil {
+			return err
+		}
+		if actualNumReplicas < expectedNumReplicas {
+			if err := ops.setNumQuorumReplicas(expectedNumReplicas); err != nil {
+				return err
+			}
+		}
+		if err := ops.setActiveNodes(activeNodes); err != nil {
+			return err
+		}
+		if err := ops.setQuorumReplicas(activeNodes); err != nil {
+			return err
+		}
+		if actualNumReplicas > expectedNumReplicas {
+			return ops.setNumQuorumReplicas(expectedNumReplicas)
+		}
+		return nil
+	}
+
+	if err := ops.setActiveNodes(activeNodes); err != nil {
 		return err
 	}
+	if err := ops.setQuorumReplicas(activeNodes); err != nil {
+		return err
+	}
+	if actualNumReplicas != expectedNumReplicas {
+		return ops.setNumQuorumReplicas(expectedNumReplicas)
+	}
+	return nil
+}
 
-	if removingNodes {
-		expectedNumReplicas := app.getNumReplicasToWrite(activeNodes)
-		masterNode := app.shard.Get(master)
-		actualNumReplicas, err := masterNode.GetNumQuorumReplicas(app.ctx)
-		if err != nil {
-			app.logger.Error().Err(err).Msg("Update active nodes: failed to get num quorum replicas on master")
-		} else if expectedNumReplicas < actualNumReplicas {
-			app.logger.Info().Msgf("Update active nodes: changing num quorum replicas from %d to %d on master", actualNumReplicas, expectedNumReplicas)
-			err, rewriteErr := masterNode.SetNumQuorumReplicas(app.ctx, expectedNumReplicas)
+func (app *App) updateActiveNodes(state, stateDcs map[string]*HostState, oldActiveNodes []string, master string) error {
+	activeNodes := app.calcActiveNodes(state, stateDcs, oldActiveNodes, master)
+	masterNode := app.shard.Get(master)
+	actualNumReplicas, err := masterNode.GetNumQuorumReplicas(app.ctx)
+	if err != nil {
+		return fmt.Errorf("get num quorum replicas on master: %w", err)
+	}
+	expectedNumReplicas := app.getNumReplicasToWrite(activeNodes)
+
+	ops := activeNodesTransitionOps{
+		setQuorumReplicas: func(nodes []string) error {
+			if err := app.actualizeQuorumReplicas(master, nodes); err != nil {
+				return fmt.Errorf("actualize quorum replicas: %w", err)
+			}
+			return nil
+		},
+		setNumQuorumReplicas: func(value int) error {
+			app.logger.Info().Msgf("Update active nodes: changing num quorum replicas from %d to %d on master", actualNumReplicas, value)
+			err, rewriteErr := masterNode.SetNumQuorumReplicas(app.ctx, value)
 			if err != nil {
-				app.logger.Error().Err(err).Msg("Update active nodes: failed to set num quorum replicas on master")
+				return fmt.Errorf("set num quorum replicas on master: %w", err)
 			}
 			if rewriteErr != nil {
 				app.logger.Error().Err(rewriteErr).Msg("Update active nodes: failed to rewrite config on master")
 			}
-		}
+			return nil
+		},
+		setActiveNodes: func(nodes []string) error {
+			if err := app.dcs.Set(pathActiveNodes, nodes); err != nil {
+				return fmt.Errorf("update active nodes in dcs: %w", err)
+			}
+			return nil
+		},
 	}
 
-	if !removingNodes {
-		err := app.dcs.Set(pathActiveNodes, activeNodes)
-		if err != nil {
-			app.logger.Error().Err(err).Msg("Update active nodes: failed to update active nodes in dcs")
-			return err
-		}
-	}
-	return nil
+	return applyActiveNodesTransition(oldActiveNodes, activeNodes, actualNumReplicas, expectedNumReplicas, ops)
 }
 
 func (app *App) calcActiveNodes(state, stateDcs map[string]*HostState, oldActiveNodes []string, master string) []string {
