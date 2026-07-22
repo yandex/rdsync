@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"sort"
 	"time"
 
 	"github.com/yandex/rdsync/internal/dcs"
@@ -473,6 +474,7 @@ func (app *App) performSwitchover(shardState map[string]*HostState, activeNodes 
 	psyncActiveNodes := make([]string, len(psyncNodes))
 	copy(psyncActiveNodes, psyncNodes)
 	psyncActiveNodes = append(psyncActiveNodes, newMaster)
+	sort.Strings(psyncActiveNodes)
 
 	err = app.dcs.Set(pathActiveNodes, psyncActiveNodes)
 	if err != nil {
