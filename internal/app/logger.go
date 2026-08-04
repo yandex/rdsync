@@ -25,7 +25,7 @@ func parseLevel(level string) (zerolog.Level, error) {
 	return zerolog.InfoLevel, fmt.Errorf("unknown log level: %s", level)
 }
 
-func levelToUpper(i interface{}) string {
+func levelToUpper(i any) string {
 	if i == nil {
 		return ""
 	}
@@ -50,19 +50,19 @@ func newEventLogger(f *os.File, bufSize int, poll time.Duration) (*zerolog.Logge
 		NoColor:     true,
 		TimeFormat:  time.RFC3339,
 		FieldsOrder: []string{"event", "duration_ms"},
-		FormatTimestamp: func(i interface{}) string {
+		FormatTimestamp: func(i any) string {
 			return fmt.Sprintf("time=%v", i)
 		},
-		FormatLevel: func(i interface{}) string {
+		FormatLevel: func(i any) string {
 			return fmt.Sprintf("level=%s", strings.ToUpper(fmt.Sprintf("%s", i)))
 		},
-		FormatMessage: func(i interface{}) string {
+		FormatMessage: func(i any) string {
 			return fmt.Sprintf("msg=%v", i)
 		},
-		FormatFieldName: func(i interface{}) string {
+		FormatFieldName: func(i any) string {
 			return fmt.Sprintf("%s=", i)
 		},
-		FormatFieldValue: func(i interface{}) string {
+		FormatFieldValue: func(i any) string {
 			return fmt.Sprintf("%v", i)
 		},
 	}
