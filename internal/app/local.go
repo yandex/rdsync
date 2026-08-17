@@ -15,7 +15,8 @@ func (app *App) getLocalState() *HostState {
 }
 
 func (app *App) healthChecker() {
-	ticker := time.NewTicker(app.config.HealthCheckInterval)
+	ticker := time.NewTicker(app.config.DcsUpdateInterval)
+	defer ticker.Stop()
 	path := dcs.JoinPath(pathHealthPrefix, app.config.Hostname)
 	hcCheckTime := time.Time{}
 	for {
@@ -30,7 +31,7 @@ func (app *App) healthChecker() {
 					app.logger.Error().Err(err).Msg("Failed to set healthcheck status to dcs")
 				}
 			} else if !hcCheckTime.IsZero() {
-				if time.Since(hcCheckTime) < 5*app.config.HealthCheckInterval {
+				if time.Since(hcCheckTime) < 5*app.config.DcsUpdateInterval {
 					app.logger.Warn().Msg("Unable to get local node state, leaving health node in dcs intact")
 				} else {
 					app.logger.Warn().Msg("Unable to get local node state, dropping health node from dcs")

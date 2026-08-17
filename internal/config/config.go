@@ -77,7 +77,8 @@ type Config struct {
 	Valkey                  ValkeyConfig        `yaml:"valkey"`
 	LogPollInterval         time.Duration       `yaml:"log_poll_interval"`
 	LogBufferSize           int                 `yaml:"log_buffer_size"`
-	HealthCheckInterval     time.Duration       `yaml:"healthcheck_interval"`
+	DcsReadInterval         time.Duration       `yaml:"dcs_read_interval"`
+	DcsUpdateInterval       time.Duration       `yaml:"dcs_update_interval"`
 	InfoFileHandlerInterval time.Duration       `yaml:"info_file_handler_interval"`
 	InactivationDelay       time.Duration       `yaml:"inactivation_delay"`
 	DcsWaitTimeout          time.Duration       `yaml:"dcs_wait_timeout"`
@@ -176,9 +177,10 @@ func DefaultConfig() (Config, error) {
 		LogBufferSize:           10000,
 		LogPollInterval:         50 * time.Millisecond,
 		PingStable:              3,
-		TickInterval:            5 * time.Second,
+		TickInterval:            1 * time.Second,
 		InactivationDelay:       30 * time.Second,
-		HealthCheckInterval:     5 * time.Second,
+		DcsReadInterval:         5 * time.Second,
+		DcsUpdateInterval:       5 * time.Second,
 		InfoFileHandlerInterval: 30 * time.Second,
 		PprofAddr:               "",
 		Zookeeper:               zkConfig,

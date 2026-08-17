@@ -35,6 +35,7 @@ type App struct {
 	cache          *valkey.SentiCacheNode
 	daemonLock     *flock.Flock
 	timings        *TimingReporter
+	primary        string
 	mode           appMode
 	aofMode        aofMode
 	state          appState
@@ -175,37 +176,69 @@ func (app *App) Run() int {
 	sighup := make(chan os.Signal, 1)
 	signal.Notify(sighup, syscall.SIGHUP)
 
-	ticker := time.NewTicker(app.config.TickInterval)
+	stateTicker := time.NewTicker(app.config.DcsReadInterval)
+	defer stateTicker.Stop()
+	primaryTicker := time.NewTicker(app.config.TickInterval)
+	defer primaryTicker.Stop()
 	for {
 		select {
 		case <-sighup:
 			app.timings.Reopen()
-		case <-ticker.C:
-			for {
-				app.logger.Info().Msgf("Rdsync state: %s", app.state)
-				stateHandler := map[appState](func() appState){
-					stateInit:        app.stateInit,
-					stateManager:     app.stateManager,
-					stateCandidate:   app.stateCandidate,
-					stateLost:        app.stateLost,
-					stateMaintenance: app.stateMaintenance,
-				}[app.state]
-				if stateHandler == nil {
-					panic(fmt.Sprintf("Unknown state: %s", app.state))
-				}
-				nextState := stateHandler()
-				if nextState == app.state {
-					break
-				}
-				if nextState == stateLost && app.state != stateLost {
-					app.lostSince = time.Now()
-				} else if nextState != stateLost && app.state == stateLost {
-					app.lostSince = time.Time{}
-				}
-				app.state = nextState
-			}
+		case <-stateTicker.C:
+			app.runStateMachine()
+		case <-primaryTicker.C:
+			app.checkPrimary()
 		case <-app.ctx.Done():
 			return 0
 		}
+	}
+}
+
+func (app *App) checkPrimary() {
+	if app.state != stateManager || app.primary == "" {
+		return
+	}
+	if failTime, failed := app.nodeFailTime[app.primary]; failed && !failTime.IsZero() {
+		return
+	}
+	if app.shard.Get(app.primary) == nil {
+		app.primary = ""
+		return
+	}
+	state := app.getHostState(app.primary)
+	if state.PingOk {
+		return
+	}
+	app.nodeFailTime[app.primary] = time.Now()
+	app.logger.Warn().Str("fqdn", app.primary).Msg("Primary failure detected; waking manager reconciliation")
+	app.runStateMachine()
+}
+
+func (app *App) runStateMachine() {
+	for {
+		app.logger.Info().Msgf("Rdsync state: %s", app.state)
+		stateHandler := map[appState](func() appState){
+			stateInit:        app.stateInit,
+			stateManager:     app.stateManager,
+			stateCandidate:   app.stateCandidate,
+			stateLost:        app.stateLost,
+			stateMaintenance: app.stateMaintenance,
+		}[app.state]
+		if stateHandler == nil {
+			panic(fmt.Sprintf("Unknown state: %s", app.state))
+		}
+		nextState := stateHandler()
+		if nextState == app.state {
+			break
+		}
+		if nextState != stateManager {
+			app.primary = ""
+		}
+		if nextState == stateLost && app.state != stateLost {
+			app.lostSince = time.Now()
+		} else if nextState != stateLost && app.state == stateLost {
+			app.lostSince = time.Time{}
+		}
+		app.state = nextState
 	}
 }

@@ -79,6 +79,7 @@ Feature: Cluster mode local node repair
             valkey-cli -a functestpassword eval 'while true do end' 0
         """
         Then valkey host "valkey1" should become available within "60" seconds
+        And valkey host "valkey1" should be master
 
     Scenario: Cluster mode replica is restarted after OOM
         Given clustered shard is up and running
