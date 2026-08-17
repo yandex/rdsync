@@ -10,6 +10,7 @@ import (
 )
 
 func (app *App) stateManager() appState {
+	app.primary = ""
 	if !app.dcs.IsConnected() {
 		return stateLost
 	}
@@ -211,7 +212,8 @@ func (app *App) stateManager() appState {
 		app.dcs.ReleaseLock(pathManagerLock)
 		waitCtx, cancel := context.WithTimeout(app.ctx, app.config.Valkey.FailoverTimeout)
 		defer cancel()
-		ticker := time.NewTicker(app.config.TickInterval)
+		ticker := time.NewTicker(app.config.DcsReadInterval)
+		defer ticker.Stop()
 		var manager dcs.LockOwner
 	Out:
 		for {
@@ -232,11 +234,11 @@ func (app *App) stateManager() appState {
 		return stateCandidate
 	}
 	// Report master unavailability duration when master recovers
-	if failTime, ok := app.nodeFailTime[master]; ok {
+	if failTime, ok := app.nodeFailTime[master]; ok && shardState[master].Error == "" {
 		dur := time.Since(failTime)
 		app.timings.reportTiming("master_unavailable", dur)
+		delete(app.nodeFailTime, master)
 	}
-	delete(app.nodeFailTime, master)
 	delete(app.splitTime, master)
 	app.repairShard(shardState, activeNodes, master)
 
@@ -246,6 +248,7 @@ func (app *App) stateManager() appState {
 			app.logger.Error().Err(err).Msg("Failed to update active nodes")
 		}
 	}
+	app.primary = master
 
 	return stateManager
 }

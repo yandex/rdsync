@@ -91,7 +91,7 @@ func (app *App) closeStaleReplica(master string) error {
 		if _, ok := shardState[master]; !ok {
 			return fmt.Errorf("no %s in shard state from dcs: %+v", master, shardState)
 		}
-		if shardState[master].PingOk && shardState[master].PingStable && time.Since(shardState[master].CheckAt) < 3*app.config.HealthCheckInterval {
+		if shardState[master].PingOk && shardState[master].PingStable && time.Since(shardState[master].CheckAt) < 3*app.config.DcsUpdateInterval {
 			okReplicas := 0
 			staleReplicas := 0
 			for host, state := range shardState {

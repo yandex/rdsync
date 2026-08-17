@@ -312,7 +312,7 @@ func (app *App) repairLocalNode(master string) bool {
 				app.logger.Error().Msgf("Leaving local offline replica broken: currently syncing %d/%d", syncing, app.config.Valkey.MaxParallelSyncs)
 			}
 		}
-		if shardState[master].PingOk && shardState[master].PingStable && time.Since(shardState[master].CheckAt) < 3*app.config.HealthCheckInterval {
+		if shardState[master].PingOk && shardState[master].PingStable && time.Since(shardState[master].CheckAt) < 3*app.config.DcsUpdateInterval {
 			app.logger.Error().Msg("Not making local node online: considered stale")
 			return false
 		}

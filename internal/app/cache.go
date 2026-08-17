@@ -86,7 +86,8 @@ func (app *App) updateCache(refState map[string]*HostState, cache *valkey.SentiC
 }
 
 func (app *App) cacheUpdater() {
-	ticker := time.NewTicker(app.config.TickInterval)
+	ticker := time.NewTicker(app.config.DcsReadInterval)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-ticker.C:

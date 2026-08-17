@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -34,6 +35,7 @@ type Node struct {
 	ips         []net.IP
 	infoResults []bool
 	opts        client.ClientOption
+	stateLock   sync.Mutex
 }
 
 func uniqLookup(host string) ([]net.IP, error) {
@@ -156,7 +158,6 @@ func (n *Node) MatchHost(host string) bool {
 // RefreshAddrs updates internal ip address list if ttl exceeded
 func (n *Node) RefreshAddrs() error {
 	if time.Since(n.ipsTime) < n.config.Valkey.DNSTTL {
-		n.logger.Debug().Msg("Not updating ips cache due to ttl")
 		return nil
 	}
 	n.logger.Debug().Msg("Updating ips cache")
@@ -450,35 +451,28 @@ func (n *Node) Restart(ctx context.Context) error {
 
 // GetState returns raw info map, min-replicas-to-write setting value and flags: read-only, offline, repl-paused
 func (n *Node) GetState(ctx context.Context) (map[string]string, int64, bool, bool, bool, error) {
+	n.stateLock.Lock()
+	defer n.stateLock.Unlock()
+
 	var err error
 	var resps []client.ValkeyResult
 	err = n.ensureConn()
-	if err == nil {
-		resps = n.conn.DoMulti(
-			ctx,
-			n.conn.B().Ping().Build(),
-			n.conn.B().Info().Build(),
-			n.conn.B().ConfigGet().Parameter("min-replicas-to-write").Build(),
-			n.conn.B().ConfigGet().Parameter("offline").Build(),
-			n.conn.B().ConfigGet().Parameter("repl-paused").Build(),
-		)
-		err = resps[0].Error()
-	}
 	if err != nil {
-		n.infoResults = append(n.infoResults, false)
-		if len(n.infoResults) > n.config.PingStable {
-			n.infoResults = n.infoResults[1:]
-		}
-		clearCache := true
-		for _, result := range n.infoResults {
-			if result {
-				clearCache = false
-				break
-			}
-		}
-		if clearCache {
-			n.cachedInfo = nil
-		}
+		n.recordPing(err)
+		return n.cachedInfo, 0, false, false, false, err
+	}
+
+	resps = n.conn.DoMulti(
+		ctx,
+		n.conn.B().Ping().Build(),
+		n.conn.B().Info().Build(),
+		n.conn.B().ConfigGet().Parameter("min-replicas-to-write").Build(),
+		n.conn.B().ConfigGet().Parameter("offline").Build(),
+		n.conn.B().ConfigGet().Parameter("repl-paused").Build(),
+	)
+	err = resps[0].Error()
+	n.recordPing(err)
+	if err != nil {
 		return n.cachedInfo, 0, false, false, false, err
 	}
 
@@ -501,10 +495,6 @@ func (n *Node) GetState(ctx context.Context) (map[string]string, int64, bool, bo
 			continue
 		}
 		res[before] = after
-	}
-	n.infoResults = append(n.infoResults, true)
-	if len(n.infoResults) > n.config.PingStable {
-		n.infoResults = n.infoResults[1:]
 	}
 	n.cachedInfo = res
 	minReplicasStr, err := configParse("min-replicas-to-write", resps[2])
@@ -529,6 +519,9 @@ func (n *Node) GetState(ctx context.Context) (map[string]string, int64, bool, bo
 }
 
 func (n *Node) EvaluatePing() (bool, bool) {
+	n.stateLock.Lock()
+	defer n.stateLock.Unlock()
+
 	res := false
 	stable := true
 	for _, result := range n.infoResults {
@@ -539,6 +532,23 @@ func (n *Node) EvaluatePing() (bool, bool) {
 		}
 	}
 	return res, stable
+}
+
+func (n *Node) recordPing(err error) {
+	ok := err == nil
+	n.infoResults = append(n.infoResults, ok)
+	if len(n.infoResults) > n.config.PingStable {
+		n.infoResults = n.infoResults[1:]
+	}
+	if ok {
+		return
+	}
+	for _, result := range n.infoResults {
+		if result {
+			return
+		}
+	}
+	n.cachedInfo = nil
 }
 
 // SentinelMakeReplica makes node replica of target in sentinel mode

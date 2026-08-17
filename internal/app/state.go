@@ -30,8 +30,7 @@ func (app *App) getHostState(fqdn string) *HostState {
 	if err != nil {
 		app.setStateError(&state, fqdn, err.Error())
 		if len(info) == 0 {
-			state.PingOk = false
-			state.PingStable = false
+			state.PingOk, state.PingStable = node.EvaluatePing()
 			return &state
 		}
 	}
