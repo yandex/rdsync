@@ -2,7 +2,6 @@ package dcs
 
 import (
 	"context"
-	json "encoding/json/v2"
 	"errors"
 	"fmt"
 	"net"
@@ -15,6 +14,8 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"github.com/go-zookeeper/zk"
 	"github.com/rs/zerolog"
+
+	"github.com/yandex/rdsync/internal/jsonutil"
 )
 
 type zkDCS struct {
@@ -23,11 +24,13 @@ type zkDCS struct {
 	conn               *zk.Conn
 	eventsChan         <-chan zk.Event
 	disconnectCallback func() error
+	fatalCallback      func(error)
 	closeTimer         *time.Timer
 	lockHeld           sync.Map
 	connectedChans     []chan struct{}
 	acl                []zk.ACL
 	connectedLock      sync.Mutex
+	callbackLock       sync.RWMutex
 	isConnected        bool
 }
 
@@ -125,6 +128,7 @@ func NewZookeeper(ctx context.Context, config *ZookeeperConfig, logger *zerolog.
 		logger:             logger,
 		conn:               conn,
 		disconnectCallback: func() error { return nil },
+		fatalCallback:      func(error) {},
 		eventsChan:         ec,
 		acl:                acl,
 	}
@@ -244,6 +248,24 @@ func (z *zkDCS) SetDisconnectCallback(callback func() error) {
 	z.disconnectCallback = callback
 }
 
+func (z *zkDCS) SetFatalCallback(callback func(error)) {
+	if callback == nil {
+		callback = func(error) {}
+	}
+	z.callbackLock.Lock()
+	defer z.callbackLock.Unlock()
+	z.fatalCallback = callback
+}
+
+func (z *zkDCS) reportFatal(err error) {
+	z.callbackLock.RLock()
+	callback := z.fatalCallback
+	z.callbackLock.RUnlock()
+	if callback != nil {
+		callback(err)
+	}
+}
+
 func (z *zkDCS) IsConnected() bool {
 	z.connectedLock.Lock()
 	defer z.connectedLock.Unlock()
@@ -358,9 +380,10 @@ func (z *zkDCS) AcquireLock(path string) bool {
 		return false
 	}
 	if errors.Is(err, zk.ErrNoNode) {
-		data, err = json.Marshal(&self)
+		data, err = z.marshal(&self)
 		if err != nil {
-			panic(fmt.Sprintf("failed to serialize to JSON %#v", self))
+			z.logger.Error().Err(err).Msgf("Failed to serialize lock owner for %s", fullPath)
+			return false
 		}
 		_, err = z.retryCreate(fullPath, data, zk.FlagEphemeral, z.acl)
 		if err != nil {
@@ -373,7 +396,7 @@ func (z *zkDCS) AcquireLock(path string) bool {
 		return true
 	}
 	owner := LockOwner{}
-	if err = json.Unmarshal(data, &owner); err != nil {
+	if err = jsonutil.Unmarshal(data, &owner); err != nil {
 		z.logger.Error().Err(err).Msgf("Malformed lock data %s (%s)", fullPath, data)
 		return false
 	}
@@ -399,7 +422,7 @@ func (z *zkDCS) ReleaseLockOrError(path string) error {
 		return fmt.Errorf("failed to get lock info %s: %w", fullPath, err)
 	}
 	owner := LockOwner{}
-	if err = json.Unmarshal(data, &owner); err != nil {
+	if err = jsonutil.Unmarshal(data, &owner); err != nil {
 		return fmt.Errorf("unexpected lock data %s (%s): %w", fullPath, data, err)
 	}
 	if owner != z.getSelfLockOwner() {
@@ -414,9 +437,9 @@ func (z *zkDCS) ReleaseLockOrError(path string) error {
 
 func (z *zkDCS) create(path string, val any, flags int32) error {
 	fullPath := z.buildFullPath(path)
-	data, err := json.Marshal(val)
+	data, err := z.marshal(val)
 	if err != nil {
-		return fmt.Errorf("failed to serialize to JSON %#v", val)
+		return err
 	}
 	_, err = z.retryCreate(fullPath, data, flags, z.acl)
 	if err != nil {
@@ -438,9 +461,9 @@ func (z *zkDCS) CreateEphemeral(path string, val any) error {
 
 func (z *zkDCS) set(path string, val any, flags int32) error {
 	fullPath := z.buildFullPath(path)
-	data, err := json.Marshal(val)
+	data, err := z.marshal(val)
 	if err != nil {
-		return fmt.Errorf("failed to serialize to JSON %#v", val)
+		return err
 	}
 	_, stat, err := z.retryGet(fullPath)
 	if err != nil && !errors.Is(err, zk.ErrNoNode) {
@@ -467,6 +490,21 @@ func (z *zkDCS) set(path string, val any, flags int32) error {
 		z.logger.Error().Err(err).Msgf("Failed to set node %s to %+v", fullPath, val)
 	}
 	return err
+}
+
+func (z *zkDCS) marshal(val any) ([]byte, error) {
+	return z.marshalWith(jsonutil.Marshal, val)
+}
+
+func (z *zkDCS) marshalWith(marshal func(any) ([]byte, error), val any) ([]byte, error) {
+	data, err := marshal(val)
+	if err == nil {
+		return data, nil
+	}
+	if errors.Is(err, jsonutil.ErrInvalidMarshalOutput) {
+		z.reportFatal(err)
+	}
+	return nil, fmt.Errorf("failed to serialize %T to JSON: %w", val, err)
 }
 
 func (z *zkDCS) Set(path string, val any) error {
@@ -504,7 +542,7 @@ func (z *zkDCS) Get(path string, dest any) error {
 		z.logger.Error().Err(err).Msgf("Failed to get node %s", fullPath)
 		return err
 	}
-	if err = json.Unmarshal(data, dest); err != nil {
+	if err = jsonutil.Unmarshal(data, dest); err != nil {
 		z.logger.Error().Err(err).Msgf("Malformed node data %s (%s)", fullPath, data)
 		return ErrMalformed
 	}
@@ -529,7 +567,7 @@ func (z *zkDCS) GetTree(path string) (any, error) {
 			return nil, nil
 		}
 		var ret any
-		err = json.Unmarshal(data, &ret)
+		err = jsonutil.Unmarshal(data, &ret)
 		if err != nil {
 			z.logger.Error().Err(err).Msgf("Malformed node data %s (%s)", fullPath, data)
 			return nil, err

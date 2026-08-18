@@ -17,6 +17,7 @@ type DCS interface {
 	WaitConnected(timeout time.Duration) bool
 	Initialize() // Create initial data structure if not exists
 	SetDisconnectCallback(callback func() error)
+	SetFatalCallback(callback func(error))
 	AcquireLock(path string) bool
 	ReleaseLock(path string)
 	Create(path string, value any) error

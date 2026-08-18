@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -25,31 +26,38 @@ type App struct {
 	lostSince      time.Time
 	critical       atomic.Value
 	ctx            context.Context
-	dcs            dcs.DCS
-	config         *config.Config
-	splitTime      map[string]time.Time
-	logger         *zerolog.Logger
 	loggerCloser   io.Closer
-	nodeFailTime   map[string]time.Time
+	dcs            dcs.DCS
+	splitTime      map[string]time.Time
 	shard          *valkey.Shard
+	config         *config.Config
+	fatalErr       chan error
+	logger         *zerolog.Logger
+	cancel         context.CancelFunc
+	nodeFailTime   map[string]time.Time
+	timings        *TimingReporter
 	cache          *valkey.SentiCacheNode
 	daemonLock     *flock.Flock
-	timings        *TimingReporter
 	primary        string
 	mode           appMode
 	aofMode        aofMode
 	state          appState
+	fatalOnce      sync.Once
 }
 
-func baseContext() context.Context {
+func baseContext() (context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithCancel(context.Background())
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
-		<-signals
-		cancel()
+		select {
+		case <-signals:
+			cancel()
+		case <-ctx.Done():
+		}
+		signal.Stop(signals)
 	}()
-	return ctx
+	return ctx, cancel
 }
 
 // NewApp is an App constructor
@@ -75,8 +83,11 @@ func NewApp(configFile, logLevel string) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
+	ctx, cancel := baseContext()
 	app := &App{
-		ctx:          baseContext(),
+		ctx:          ctx,
+		cancel:       cancel,
+		fatalErr:     make(chan error, 1),
 		mode:         mode,
 		aofMode:      aofMode,
 		nodeFailTime: make(map[string]time.Time),
@@ -96,7 +107,20 @@ func (app *App) connectDCS() error {
 	if err != nil {
 		return fmt.Errorf("failed to connect to zkDCS: %s", err.Error())
 	}
+	app.dcs.SetFatalCallback(app.reportFatal)
 	return nil
+}
+
+func (app *App) reportFatal(err error) {
+	if err == nil {
+		return
+	}
+	app.fatalOnce.Do(func() {
+		select {
+		case app.fatalErr <- err:
+		default:
+		}
+	})
 }
 
 func (app *App) reconnectDCS() error {
@@ -168,6 +192,7 @@ func (app *App) Run() int {
 		defer app.cache.Close()
 		go app.cacheUpdater()
 	}
+	defer app.cancel()
 
 	go app.pprofHandler()
 	go app.healthChecker()
@@ -188,6 +213,9 @@ func (app *App) Run() int {
 			app.runStateMachine()
 		case <-primaryTicker.C:
 			app.checkPrimary()
+		case err := <-app.fatalErr:
+			app.logger.Error().Err(err).Msg("Fatal process integrity failure")
+			return 1
 		case <-app.ctx.Done():
 			return 0
 		}

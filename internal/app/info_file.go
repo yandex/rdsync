@@ -1,9 +1,11 @@
 package app
 
 import (
-	json "encoding/json/v2"
+	"errors"
 	"os"
 	"time"
+
+	"github.com/yandex/rdsync/internal/jsonutil"
 )
 
 func (app *App) stateFileHandler() {
@@ -17,10 +19,14 @@ func (app *App) stateFileHandler() {
 				_ = os.Remove(app.config.InfoFile)
 				continue
 			}
-			data, err := json.Marshal(tree)
+			data, err := jsonutil.Marshal(tree)
 			if err != nil {
 				app.logger.Error().Err(err).Msg("StateFileHandler: failed to marshal zk node data")
 				_ = os.Remove(app.config.InfoFile)
+				if errors.Is(err, jsonutil.ErrInvalidMarshalOutput) {
+					app.reportFatal(err)
+					return
+				}
 				continue
 			}
 			err = os.WriteFile(app.config.InfoFile, data, 0o640)
