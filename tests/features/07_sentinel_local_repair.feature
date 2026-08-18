@@ -95,7 +95,8 @@ Feature: Sentinel mode local node repair
         """
             valkey-cli -a functestpassword eval 'while true do end' 0
         """
-        Then valkey host "valkey1" should become available within "60" seconds
+        Then valkey host "valkey1" should become unavailable within "30" seconds
+        And valkey host "valkey1" should become available within "60" seconds
         And valkey host "valkey1" should be master
 
     Scenario: Sentinel mode replica is restarted after OOM
