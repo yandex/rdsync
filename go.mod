@@ -16,7 +16,7 @@ require (
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
 	github.com/stretchr/testify v1.12.0
-	github.com/valkey-io/valkey-go v1.0.76
+	github.com/valkey-io/valkey-go v1.0.77
 	gopkg.in/yaml.v2 v2.4.0
 )
 
