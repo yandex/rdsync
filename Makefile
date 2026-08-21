@@ -3,14 +3,14 @@ PROJECT=rdsync
 ZK_VERSION=3.9.5
 
 cmd/rdsync/rdsync:
-	GOEXPERIMENT=jsonv2 GOOS=linux go build -tags netgo,osusergo -o ./cmd/rdsync/rdsync ./cmd/rdsync/...
+	GOOS=linux go build -tags netgo,osusergo -o ./cmd/rdsync/rdsync ./cmd/rdsync/...
 
 format:
 	gofmt -s -w `find . -name '*.go'`
 	goimports -w `find . -name '*.go'`
 
 lint:
-	docker run --rm --env GOEXPERIMENT=jsonv2 -v ${CURDIR}:/app -w /app golangci/golangci-lint:v2.12-alpine golangci-lint run -v
+	docker run --rm -v ${CURDIR}:/app -w /app golangci/golangci-lint:v2.13-alpine golangci-lint run -v
 
 unittests:
 	go test ./cmd/... ./internal/...
@@ -24,8 +24,8 @@ test: base_image valkey/src/valkey-server cmd/rdsync/rdsync recreate_logs
 	rm -rf ./tests/images/valkey/valkey-server && cp valkey/src/valkey-server ./tests/images/valkey/valkey-server
 	rm -rf ./tests/images/valkey/valkey-senticache && cp valkey/src/valkey-senticache ./tests/images/valkey/valkey-senticache
 	rm -rf ./tests/images/valkey/valkey-cli && cp valkey/src/valkey-cli ./tests/images/valkey/valkey-cli
-	GOEXPERIMENT=jsonv2 go build ./tests/...
-	(cd tests; GOEXPERIMENT=jsonv2 go test -timeout 180m)
+	go build ./tests/...
+	(cd tests; go test -timeout 180m)
 
 recreate_logs:
 	@if [ "$(shell ls tests/logs 2>/dev/null | wc -l)" != "0" ]; then\

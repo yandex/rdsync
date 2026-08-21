@@ -66,8 +66,7 @@ func newIntegrityError(v any, data []byte) *IntegrityError {
 	var decoded any
 	parseErr := json.Unmarshal(data, &decoded)
 	offset := int64(-1)
-	var syntaxErr *jsontext.SyntacticError
-	if errors.As(parseErr, &syntaxErr) {
+	if syntaxErr, ok := errors.AsType[*jsontext.SyntacticError](parseErr); ok {
 		offset = syntaxErr.ByteOffset
 	}
 
