@@ -6,7 +6,7 @@ require (
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cucumber/godog v0.16.0
 	github.com/go-zookeeper/zk v1.0.4
-	github.com/gofrs/flock v0.13.0
+	github.com/gofrs/flock v0.13.1
 	github.com/heetch/confita v0.11.0
 	github.com/moby/moby/api v1.55.0
 	github.com/moby/moby/client v0.5.1
