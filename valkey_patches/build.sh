@@ -3,7 +3,7 @@
 set -xe
 
 apt update
-DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt -y install build-essential git
+DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt -y install build-essential git libssl-dev
 cd /app
 git clone https://github.com/valkey-io/valkey.git
 cd valkey
@@ -14,4 +14,4 @@ do
     git apply "${i}"
 done
 
-make -j
+make BUILD_TLS=yes -j

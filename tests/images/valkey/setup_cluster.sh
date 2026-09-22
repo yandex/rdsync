@@ -18,7 +18,7 @@ supervisorctl start valkey
 if [ "${MASTER}" != "" ]
 then
     valkey-cli -e -a functestpassword -p 6379 config set offline no
-    master_addr=$(host ${MASTER} | awk '{print $NF}')
+    master_addr=$(host ${MASTER} | awk '/has address/ {print $NF; exit}')
     valkey-cli -e -a functestpassword -p 6379 cluster meet ${master_addr} 6379
     master_id=$(valkey-cli -e -a functestpassword -h ${master_addr} -p 6379 cluster myid)
     tries=0

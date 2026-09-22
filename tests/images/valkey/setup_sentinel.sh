@@ -7,7 +7,7 @@ MASTER=${1}
 if [ "${MASTER}" != "" ]
 then
     valkey-cli -e -a functestpassword -p 6379 config set offline no
-    master_addr=$(host ${MASTER} | awk '{print $NF}')
+    master_addr=$(host ${MASTER} | awk '/has address/ {print $NF; exit}')
     valkey-cli -e -a functestpassword -p 6379 replicaof ${master_addr} 6379
     valkey-cli -e -a functestpassword -p 6379 config rewrite
     tries=0

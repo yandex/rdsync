@@ -17,7 +17,7 @@ unittests:
 	go test ./cmd/... ./tests/testutil/matchers/
 
 valkey/src/valkey-server:
-	docker run --rm -v ${CURDIR}:/app -w /app ubuntu:noble /app/valkey_patches/build.sh
+	docker run --rm -v ${CURDIR}:/app -w /app ubuntu:resolute /app/valkey_patches/build.sh
 
 test: base_image valkey/src/valkey-server cmd/rdsync/rdsync recreate_logs
 	rm -rf ./tests/images/valkey/rdsync && cp cmd/rdsync/rdsync ./tests/images/valkey/rdsync

@@ -87,7 +87,18 @@ func newTestContext() (*testContext, error) {
 }
 
 func (tctx *testContext) saveLogs(scenario string) error {
+	var retVal error
 	for _, service := range tctx.composer.Services() {
+		logdir := filepath.Join("logs", scenario, service)
+		if err := os.MkdirAll(logdir, 0755); err != nil {
+			return err
+		}
+		if containerLogs, err := tctx.composer.GetLogs(service); err == nil {
+			_ = os.WriteFile(filepath.Join(logdir, "docker.log"), []byte(containerLogs), 0644)
+		} else {
+			log.Printf("failed to save docker logs of %s: %v", service, err)
+			retVal = err
+		}
 		var logsToSave map[string]string
 		switch {
 		case strings.HasPrefix(service, valkeyName):
@@ -97,29 +108,28 @@ func (tctx *testContext) saveLogs(scenario string) error {
 		default:
 			continue
 		}
-		logdir := filepath.Join("logs", scenario, service)
-		err := os.MkdirAll(logdir, 0755)
-		if err != nil {
-			return err
-		}
 		for remotePath, localPath := range logsToSave {
 			remoteFile, err := tctx.composer.GetFile(service, remotePath)
 			if err != nil {
-				return err
+				log.Printf("failed to fetch %s from %s: %v", remotePath, service, err)
+				continue
 			}
-			defer func() { _ = remoteFile.Close() }()
 			localFile, err := os.OpenFile(filepath.Join(logdir, localPath), os.O_RDWR|os.O_CREATE, 0644)
 			if err != nil {
-				return err
+				_ = remoteFile.Close()
+				log.Printf("failed to open local file for %s: %v", localPath, err)
+				continue
 			}
-			defer func() { _ = localFile.Close() }()
 			_, err = io.Copy(localFile, remoteFile)
+			_ = remoteFile.Close()
+			_ = localFile.Close()
 			if err != nil {
-				return err
+				log.Printf("failed to copy %s from %s: %v", remotePath, service, err)
+				retVal = err
 			}
 		}
 	}
-	return nil
+	return retVal
 }
 
 func (tctx *testContext) templateStep(step *godog.Step) error {
@@ -449,17 +459,26 @@ func (tctx *testContext) stepClusteredShardIsUpAndRunning() error {
 	if err != nil {
 		return err
 	}
-	_, _, err = tctx.composer.RunCommand("valkey1", "setup_cluster.sh", 1*time.Minute)
+	retcode, out, err := tctx.composer.RunCommand("valkey1", "setup_cluster.sh", 5*time.Minute)
 	if err != nil {
 		return err
 	}
-	_, _, err = tctx.composer.RunCommand("valkey2", "setup_cluster.sh valkey1", 1*time.Minute)
+	if retcode != 0 {
+		return fmt.Errorf("setup_cluster.sh failed on valkey1: %s", out)
+	}
+	retcode, out, err = tctx.composer.RunCommand("valkey2", "setup_cluster.sh valkey1", 5*time.Minute)
 	if err != nil {
 		return err
 	}
-	_, _, err = tctx.composer.RunCommand("valkey3", "setup_cluster.sh valkey1", 1*time.Minute)
+	if retcode != 0 {
+		return fmt.Errorf("setup_cluster.sh failed on valkey2: %s", out)
+	}
+	retcode, out, err = tctx.composer.RunCommand("valkey3", "setup_cluster.sh valkey1", 5*time.Minute)
 	if err != nil {
 		return err
+	}
+	if retcode != 0 {
+		return fmt.Errorf("setup_cluster.sh failed on valkey3: %s", out)
 	}
 
 	// check valkey nodes
@@ -484,17 +503,26 @@ func (tctx *testContext) stepSentinelShardIsUpAndRunning() error {
 	if err != nil {
 		return err
 	}
-	_, _, err = tctx.composer.RunCommand("valkey1", "setup_sentinel.sh", 1*time.Minute)
+	retcode, out, err := tctx.composer.RunCommand("valkey1", "setup_sentinel.sh", 5*time.Minute)
 	if err != nil {
 		return err
 	}
-	_, _, err = tctx.composer.RunCommand("valkey2", "setup_sentinel.sh valkey1", 1*time.Minute)
+	if retcode != 0 {
+		return fmt.Errorf("setup_sentinel.sh failed on valkey1: %s", out)
+	}
+	retcode, out, err = tctx.composer.RunCommand("valkey2", "setup_sentinel.sh valkey1", 5*time.Minute)
 	if err != nil {
 		return err
 	}
-	_, _, err = tctx.composer.RunCommand("valkey3", "setup_sentinel.sh valkey1", 1*time.Minute)
+	if retcode != 0 {
+		return fmt.Errorf("setup_sentinel.sh failed on valkey2: %s", out)
+	}
+	retcode, out, err = tctx.composer.RunCommand("valkey3", "setup_sentinel.sh valkey1", 5*time.Minute)
 	if err != nil {
 		return err
+	}
+	if retcode != 0 {
+		return fmt.Errorf("setup_sentinel.sh failed on valkey3: %s", out)
 	}
 	// check valkey nodes
 	for _, service := range tctx.composer.Services() {
