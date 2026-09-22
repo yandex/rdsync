@@ -35,7 +35,7 @@ ln -sf /usr/sbin/iptables-legacy /usr/sbin/iptables
 
 mkdir -p /run/sshd
 cp /var/lib/dist/base/sshd_config /etc/ssh/sshd_config
-mkdir /root/.ssh
+mkdir -p /root/.ssh
 chmod 0700 /root/.ssh
 yes | ssh-keygen -t rsa -N '' -f /root/.ssh/id_rsa
 cp /root/.ssh/id_rsa.pub /root/.ssh/authorized_keys

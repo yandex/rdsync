@@ -1,4 +1,4 @@
-FROM ubuntu:noble
+FROM ubuntu:resolute
 ENV container=docker
 ENV DEBIAN_FRONTEND=noninteractive
 COPY . /var/lib/dist/base

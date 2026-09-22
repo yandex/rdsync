@@ -87,7 +87,7 @@ Jl8tzMujbHNHhw+OQAQOPHi6EUPs/H37euj3G7oBaVUwXJq3Tbwg95W5Jih+CgTB
 Sbe6eYpR/j/SYGwbS6/DbHi3IjvblN+2pSPI05JvXMhLC/lAeqcdVJAgTvw=
 -----END RSA PRIVATE KEY-----" > /etc/zk-ssl/ca.key
 
-openssl genrsa -out /etc/zk-ssl/server.key -passout pass:testpassword123 4096
+openssl genrsa -out /etc/zk-ssl/server.key -passout pass:testpassword123 2048
 openssl req -new -key /etc/zk-ssl/server.key -out /etc/zk-ssl/server.csr -passin pass:testpassword123 -subj "/C=RU/ST=Test/L=Test/O=Test/OU=Test/CN=${FQDN}"
 echo "[SAN]
 subjectAltName = @alt_names

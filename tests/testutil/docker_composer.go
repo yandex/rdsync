@@ -63,6 +63,8 @@ type Composer interface {
 	RunAsyncCommand(service, cmd string) error
 	// Returns content of the file from container by path
 	GetFile(service, path string) (io.ReadCloser, error)
+	// Returns container stdout/stderr (docker logs) for given service
+	GetLogs(service string) (string, error)
 }
 
 // DockerComposer is a Composer implementation based on docker and docker-compose
@@ -465,6 +467,44 @@ func (dc *DockerComposer) UnBlockHostConnections(service, host string) error {
 		}
 	}
 	return nil
+}
+
+// GetLogs returns container stdout/stderr for given service
+func (dc *DockerComposer) GetLogs(service string) (string, error) {
+	cont, ok := dc.containers[service]
+	if !ok {
+		return "", fmt.Errorf("no such service: %s", service)
+	}
+	logsResult, err := dc.api.ContainerLogs(context.Background(), cont.ID, client.ContainerLogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+	})
+	if err != nil {
+		return "", err
+	}
+	defer logsResult.Close()
+	logs, err := io.ReadAll(logsResult)
+	if err != nil {
+		return "", err
+	}
+	return demuxDockerLogs(logs), nil
+}
+
+func demuxDockerLogs(logs []byte) string {
+	var out strings.Builder
+	for len(logs) > 0 {
+		if len(logs) < 8 {
+			out.Write(logs)
+			break
+		}
+		payloadLen := int(logs[4])<<24 | int(logs[5])<<16 | int(logs[6])<<8 | int(logs[7])
+		if 8+payloadLen > len(logs) {
+			payloadLen = len(logs) - 8
+		}
+		out.Write(logs[8 : 8+payloadLen])
+		logs = logs[8+payloadLen:]
+	}
+	return out.String()
 }
 
 func newUntarReaderCloser(reader io.ReadCloser) (io.ReadCloser, error) {
