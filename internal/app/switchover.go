@@ -438,6 +438,16 @@ func (app *App) performSwitchover(shardState map[string]*HostState, activeNodes 
 				return fmt.Errorf("promote new master %s failed: %s", newMaster, err.Error())
 			}
 			time.Sleep(1 * time.Second)
+			if app.mode == modeCluster {
+				hasSlots, err := newMasterNode.HasClusterSlots(app.ctx)
+				if err != nil {
+					return fmt.Errorf("check for slots during switchover after promote: %s", err.Error())
+				}
+				if !hasSlots {
+					app.logger.Warn().Msgf("Switchover: phase 5: %s has no slots assigned, trying again", newMaster)
+					continue
+				}
+			}
 			shardState, err = app.getShardStateFromDB()
 			if err != nil {
 				return fmt.Errorf("update shard state during switchover after promote: %s", err.Error())
