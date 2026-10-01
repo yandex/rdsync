@@ -46,8 +46,14 @@ func (app *App) stateManager() appState {
 		app.logger.Error().Err(err).Msg("Failed to get active nodes")
 		return stateManager
 	}
+	err = app.loadMasterInfo()
+	if err != nil {
+		app.logger.Error().Err(err).Msg("Failed to get master info")
+		return stateManager
+	}
 	app.logger.Info().Msgf("Active nodes: %v", activeNodes)
 	app.logger.Info().Msgf("Master: %s", master)
+	app.logger.Info().Msgf("Master info: %v", app.masterInfo)
 	app.logger.Info().Msgf("Shard state: %v", shardState)
 	app.logger.Info().Msgf("DCS shard state: %v", shardStateDcs)
 
@@ -240,6 +246,10 @@ func (app *App) stateManager() appState {
 		delete(app.nodeFailTime, master)
 	}
 	delete(app.splitTime, master)
+	err = app.updateMasterInfo(shardState[master])
+	if err != nil {
+		app.logger.Error().Err(err).Msg("Failed to update master info")
+	}
 	app.repairShard(shardState, activeNodes, master)
 
 	if updateActive {

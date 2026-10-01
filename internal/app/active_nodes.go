@@ -244,6 +244,10 @@ func (app *App) calcActiveNodes(state, stateDcs map[string]*HostState, oldActive
 			app.logger.Warn().Msgf("Calc active nodes: lost master %s", host)
 			continue
 		}
+		if app.lacksData(node) {
+			app.logger.Error().Msgf("Calc active nodes: %s has no data (%d keys) while master info has keys, deleting from active...", host, node.KeysCount)
+			continue
+		}
 		if (masterState.PingOk && masterState.PingStable) && !replicates(&masterState, replicaState, host, masterNode, false) {
 			app.logger.Error().Msgf("Calc active nodes: %s is not replicating from alive master, deleting from active...", host)
 			continue

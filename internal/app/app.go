@@ -38,6 +38,7 @@ type App struct {
 	timings        *TimingReporter
 	cache          *valkey.SentiCacheNode
 	daemonLock     *flock.Flock
+	masterInfo     *MasterInfo
 	primary        string
 	mode           appMode
 	aofMode        aofMode
@@ -261,6 +262,7 @@ func (app *App) runStateMachine() {
 		}
 		if nextState != stateManager {
 			app.primary = ""
+			app.masterInfo = nil
 		}
 		if nextState == stateLost && app.state != stateLost {
 			app.lostSince = time.Now()

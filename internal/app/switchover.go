@@ -15,11 +15,11 @@ const (
 	switchoverVersion = 1
 )
 
-func countAliveHAReplicasWithinNodes(nodes []string, shardState map[string]*HostState) int {
+func (app *App) countAliveHAReplicasWithinNodes(nodes []string, shardState map[string]*HostState) int {
 	cnt := 0
 	for _, hostname := range nodes {
 		state, ok := shardState[hostname]
-		if ok && state.PingOk && state.PingStable && state.ReplicaState != nil {
+		if ok && state.PingOk && state.PingStable && state.ReplicaState != nil && !app.lacksData(state) {
 			cnt++
 		}
 	}
@@ -48,7 +48,7 @@ func (app *App) approveSwitchover(switchover *Switchover, activeNodes []string, 
 	if switchover.RunCount > 0 {
 		return nil
 	}
-	permissibleReplicas := countAliveHAReplicasWithinNodes(activeNodes, shardState)
+	permissibleReplicas := app.countAliveHAReplicasWithinNodes(activeNodes, shardState)
 	failoverQuorum := app.getFailoverQuorum(activeNodes)
 	if permissibleReplicas < failoverQuorum {
 		return fmt.Errorf("no quorum, have %d replicas while %d is required", permissibleReplicas, failoverQuorum)
@@ -131,6 +131,53 @@ func filterOut(a, b []string) (res []string) {
 		}
 	}
 	return
+}
+
+func (app *App) selectNewMaster(switchover *Switchover, states, shardState map[string]*HostState, activeNodes []string) (string, string, error) {
+	candidates := make(map[string]*HostState, len(states))
+	for host, state := range states {
+		if app.lacksData(state) {
+			app.logger.Warn().Msgf("Switchover: skipping %s as candidate: no data (%d keys)", host, state.KeysCount)
+			continue
+		}
+		candidates[host] = state
+	}
+	mostRecent := app.findMostRecentNode(candidates)
+	if mostRecent == "" {
+		return "", "", fmt.Errorf("no candidates with data for new master")
+	}
+	var newMaster string
+	if switchover.To != "" {
+		newMaster = switchover.To
+	} else if switchover.From != "" {
+		var err error
+		newMaster, err = app.getMostDesirableNode(candidates, switchover.From)
+		if err != nil {
+			errsResume := runParallel(func(host string) error {
+				if !shardState[host].PingOk {
+					err := fmt.Errorf("host %s is not healthy", host)
+					app.logger.Error().Err(err).Msg("Resume replication")
+					return err
+				}
+				node := app.shard.Get(host)
+				err := node.ResumeReplication(app.ctx)
+				if err != nil {
+					app.logger.Error().Err(err).Msgf("Resume replication on %s", host)
+					return err
+				}
+				app.logger.Info().Msgf("Switchover: replication on %s is now resumed", host)
+				return nil
+			}, activeNodes)
+			combined := combineErrors(errsResume)
+			if combined != nil {
+				app.logger.Error().Err(combined).Msg("Resuming replication on desirable host get fail")
+			}
+			return "", "", fmt.Errorf("get desirable node for switchover: %s", err.Error())
+		}
+	} else {
+		newMaster = mostRecent
+	}
+	return mostRecent, newMaster, nil
 }
 
 func (app *App) performSwitchover(shardState map[string]*HostState, activeNodes []string, switchover *Switchover, oldMaster string) error {
@@ -240,6 +287,10 @@ func (app *App) performSwitchover(shardState map[string]*HostState, activeNodes 
 
 	for _, host := range activeNodes {
 		if errsRO[host] == nil && errsPause[host] == nil {
+			if app.lacksData(shardState[host]) {
+				app.logger.Warn().Msgf("Switchover: skipping %s as alive active node: no data", host)
+				continue
+			}
 			aliveActiveNodes = append(aliveActiveNodes, host)
 		}
 	}
@@ -262,35 +313,9 @@ func (app *App) performSwitchover(shardState map[string]*HostState, activeNodes 
 		mostRecent = switchover.Progress.MostRecent
 		newMaster = switchover.Progress.NewMaster
 	} else {
-		mostRecent = app.findMostRecentNode(states)
-		if switchover.To != "" {
-			newMaster = switchover.To
-		} else if switchover.From != "" {
-			newMaster, err = app.getMostDesirableNode(states, switchover.From)
-			if err != nil {
-				errsResume := runParallel(func(host string) error {
-					if !shardState[host].PingOk {
-						err := fmt.Errorf("host %s is not healthy", host)
-						app.logger.Error().Err(err).Msg("Resume replication")
-						return err
-					}
-					node := app.shard.Get(host)
-					err := node.ResumeReplication(app.ctx)
-					if err != nil {
-						app.logger.Error().Err(err).Msgf("Resume replication on %s", host)
-						return err
-					}
-					app.logger.Info().Msgf("Switchover: replication on %s is now resumed", host)
-					return nil
-				}, activeNodes)
-				combined := combineErrors(errsResume)
-				if combined != nil {
-					app.logger.Error().Err(combined).Msg("Resuming replication on desirable host get fail")
-				}
-				return fmt.Errorf("get desirable node for switchover: %s", err.Error())
-			}
-		} else {
-			newMaster = mostRecent
+		mostRecent, newMaster, err = app.selectNewMaster(switchover, states, shardState, activeNodes)
+		if err != nil {
+			return err
 		}
 		switchover.Progress.MostRecent = mostRecent
 		switchover.Progress.NewMaster = newMaster
@@ -334,6 +359,9 @@ func (app *App) performSwitchover(shardState map[string]*HostState, activeNodes 
 	app.logger.Info().Msg("Switchover: phase 5: promote selected host")
 
 	if switchover.Progress.Phase != 6 {
+		if app.lacksData(shardState[newMaster]) {
+			return fmt.Errorf("new master %s has no data (%d keys) while master info has keys", newMaster, shardState[newMaster].KeysCount)
+		}
 		switchover.Progress.Phase = 5
 		err := app.updateSwitchover(switchover)
 		if err != nil {
