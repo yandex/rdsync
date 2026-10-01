@@ -252,6 +252,15 @@ func (app *App) repairLocalNode(master string) bool {
 		return true
 	}
 	if master == local.FQDN() && len(shardState) != 1 {
+		masterInfo, err := app.getMasterInfo()
+		if err != nil {
+			app.logger.Error().Err(err).Msg("Unable to get master info for local node repair")
+			return false
+		}
+		if masterInfo != nil && masterInfo.HasKeys && masterInfo.RunID != state.RunID && !app.hasData(state) {
+			app.logger.Error().Msgf("Not making local node online: it was restarted (run_id %s -> %s) and lost its data (%d keys)", masterInfo.RunID, state.RunID, state.KeysCount)
+			return false
+		}
 		activeNodes, err := app.GetActiveNodes()
 		if err != nil {
 			app.logger.Error().Err(err).Msg("Unable to get active nodes for local node repair")

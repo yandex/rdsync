@@ -553,33 +553,38 @@ func (tctx *testContext) stepSentinelShardIsUpAndRunning() error {
 func (tctx *testContext) stepPersistenceDisabled() error {
 	for _, service := range tctx.composer.Services() {
 		if strings.HasPrefix(service, valkeyName) {
-			_, _, err := tctx.composer.RunCommand(service, "sed -i /OnReplicas/d /etc/rdsync.yaml", 10*time.Second)
-			if err != nil {
-				return err
-			}
-			_, _, err = tctx.composer.RunCommand(service, "supervisorctl restart rdsync", 10*time.Second)
-			if err != nil {
-				return err
-			}
-			_, err = tctx.runValkeyCmd(service, []string{"CONFIG", "SET", "appendonly", "no"})
-			if err != nil {
-				return err
-			}
-			_, err = tctx.runValkeyCmd(service, []string{"CONFIG", "SET", "save", ""})
-			if err != nil {
-				return err
-			}
-			_, _, err = tctx.composer.RunCommand(service, "echo 'appendonly no' >> /etc/valkey/valkey.conf", 10*time.Second)
-			if err != nil {
-				return err
-			}
-			_, _, err = tctx.composer.RunCommand(service, "echo 'save \\'\\'' >> /etc/valkey/valkey.conf", 10*time.Second)
+			err := tctx.stepPersistenceDisabledOnHost(service)
 			if err != nil {
 				return err
 			}
 		}
 	}
 	return nil
+}
+
+func (tctx *testContext) stepPersistenceDisabledOnHost(host string) error {
+	_, _, err := tctx.composer.RunCommand(host, "sed -i /OnReplicas/d /etc/rdsync.yaml", 10*time.Second)
+	if err != nil {
+		return err
+	}
+	_, _, err = tctx.composer.RunCommand(host, "supervisorctl restart rdsync", 10*time.Second)
+	if err != nil {
+		return err
+	}
+	_, err = tctx.runValkeyCmd(host, []string{"CONFIG", "SET", "appendonly", "no"})
+	if err != nil {
+		return err
+	}
+	_, err = tctx.runValkeyCmd(host, []string{"CONFIG", "SET", "save", ""})
+	if err != nil {
+		return err
+	}
+	_, _, err = tctx.composer.RunCommand(host, "echo 'appendonly no' >> /etc/valkey/valkey.conf", 10*time.Second)
+	if err != nil {
+		return err
+	}
+	_, _, err = tctx.composer.RunCommand(host, "echo 'save \\'\\'' >> /etc/valkey/valkey.conf", 10*time.Second)
+	return err
 }
 
 func (tctx *testContext) stepHostIsStopped(host string) error {
@@ -1173,6 +1178,7 @@ func InitializeScenario(s *godog.ScenarioContext) {
 	s.Step(`^clustered shard is up and running$`, tctx.stepClusteredShardIsUpAndRunning)
 	s.Step(`^sentinel shard is up and running$`, tctx.stepSentinelShardIsUpAndRunning)
 	s.Step(`^persistence is disabled$`, tctx.stepPersistenceDisabled)
+	s.Step(`^persistence is disabled on host "([^"]*)"$`, tctx.stepPersistenceDisabledOnHost)
 	s.Step(`^host "([^"]*)" is stopped$`, tctx.stepHostIsStopped)
 	s.Step(`^host "([^"]*)" is detached from the network$`, tctx.stepHostIsDetachedFromTheNetwork)
 	s.Step(`^host "([^"]*)" is started$`, tctx.stepHostIsStarted)

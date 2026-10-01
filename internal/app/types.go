@@ -101,6 +101,9 @@ const (
 
 	pathMasterNode = "master"
 
+	// structure: single MasterInfo
+	pathMasterInfo = "master_info"
+
 	// activeNodes are master + alive running HA replicas
 	// structure: list of hosts(strings)
 	pathActiveNodes = "active_nodes"
@@ -146,6 +149,7 @@ type HostState struct {
 	MasterReplicationOffset int64            `json:"master_replication_offset"`
 	ReplicationBacklogSize  int64            `json:"replication_backlog_size"`
 	MinReplicasToWrite      int64            `json:"min_replicas_to_write"`
+	KeysCount               int64            `json:"keys_count"`
 	IsReplPaused            bool             `json:"is_repl_paused"`
 	IsReadOnly              bool             `json:"is_read_only"`
 	IsOffline               bool             `json:"is_offline"`
@@ -174,6 +178,15 @@ func (hs *HostState) String() string {
 		offset = hs.ReplicaState.ReplicationOffset
 	}
 	return fmt.Sprintf("<ping=%s repl=%s offset=%d>", ping, repl, offset)
+}
+
+type MasterInfo struct {
+	RunID   string `json:"runid"`
+	HasKeys bool   `json:"has_keys"`
+}
+
+func (m *MasterInfo) String() string {
+	return fmt.Sprintf("<runid=%s keys=%t>", m.RunID, m.HasKeys)
 }
 
 // ReplicaState contains replica specific info.

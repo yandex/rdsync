@@ -15,6 +15,34 @@ func (app *App) setStateError(state *HostState, fqdn, message string) {
 	state.Error = message
 }
 
+func parseKeysCount(info map[string]string) (int64, error) {
+	var total int64
+	for key, value := range info {
+		db, ok := strings.CutPrefix(key, "db")
+		if !ok || db == "" || strings.Trim(db, "0123456789") != "" {
+			continue
+		}
+		found := false
+		for field := range strings.SplitSeq(value, ",") {
+			keys, ok := strings.CutPrefix(field, "keys=")
+			if !ok {
+				continue
+			}
+			count, err := strconv.ParseInt(keys, 10, 64)
+			if err != nil {
+				return 0, fmt.Errorf("unable to parse keys count of %s: %s", key, value)
+			}
+			total += count
+			found = true
+			break
+		}
+		if !found {
+			return 0, fmt.Errorf("no keys count in %s: %s", key, value)
+		}
+	}
+	return total, nil
+}
+
 func (app *App) getHostState(fqdn string) *HostState {
 	node := app.shard.Get(fqdn)
 	var state HostState
@@ -183,6 +211,11 @@ func (app *App) getHostState(fqdn string) *HostState {
 	state.IsReadOnly = isReadOnly
 	state.IsOffline = isOffline
 	state.IsReplPaused = isReplPaused
+	state.KeysCount, err = parseKeysCount(info)
+	if err != nil {
+		app.setStateError(&state, fqdn, err.Error())
+		return &state
+	}
 	err = node.RefreshAddrs()
 	if err != nil {
 		app.setStateError(&state, fqdn, err.Error())

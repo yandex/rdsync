@@ -49,7 +49,7 @@ func (app *App) approveFailover(shardState map[string]*HostState, activeNodes []
 	}
 
 	app.logger.Info().Msgf("Approve failover: active nodes are %v", activeNodes)
-	permissibleReplicas := countAliveHAReplicasWithinNodes(activeNodes, shardState)
+	permissibleReplicas := app.countAliveHAReplicasWithinNodes(activeNodes, shardState)
 	failoverQuorum := app.getFailoverQuorum(activeNodes)
 	if permissibleReplicas < failoverQuorum {
 		return fmt.Errorf("no quorum, have %d replicas while %d is required", permissibleReplicas, failoverQuorum)

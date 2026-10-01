@@ -163,3 +163,89 @@ Feature: Cluster mode local node repair
         """
         And I wait for "420" seconds
         Then valkey host "valkey1" should become available within "60" seconds
+
+    Scenario: Cluster mode restarted empty master is not opened
+        Given clustered shard is up and running
+        And persistence is disabled on host "valkey1"
+        Then valkey host "valkey1" should be master
+        And valkey host "valkey2" should become replica of "valkey1" within "15" seconds
+        And replication on valkey host "valkey2" should run fine within "15" seconds
+        And valkey host "valkey3" should become replica of "valkey1" within "15" seconds
+        And replication on valkey host "valkey3" should run fine within "15" seconds
+        And zookeeper node "/test/active_nodes" should match json_exactly within "30" seconds
+        """
+            ["valkey1","valkey2","valkey3"]
+        """
+        When I run command on valkey host "valkey1"
+        """
+            SET MYKEY TESTVALUE
+        """
+        Then zookeeper node "/test/master_info" should match json within "30" seconds
+        """
+        {
+            "has_keys": true
+        }
+        """
+        When I wait for "5" seconds
+        And valkey on host "valkey1" is killed
+        And valkey on host "valkey1" is started
+        And I wait for "30" seconds
+        And I run command on host "valkey1"
+        """
+            grep online /var/log/rdsync.log
+        """
+        Then command output should match regexp
+        """
+            .*Not making local node online: it was restarted.*
+        """
+
+    Scenario: Cluster mode empty replica is not active and is not promoted
+        Given clustered shard is up and running
+        Then valkey host "valkey1" should be master
+        And valkey host "valkey2" should become replica of "valkey1" within "15" seconds
+        And replication on valkey host "valkey2" should run fine within "15" seconds
+        And valkey host "valkey3" should become replica of "valkey1" within "15" seconds
+        And replication on valkey host "valkey3" should run fine within "15" seconds
+        And zookeeper node "/test/active_nodes" should match json_exactly within "30" seconds
+        """
+            ["valkey1","valkey2","valkey3"]
+        """
+        When I run command on valkey host "valkey1"
+        """
+            SET MYKEY TESTVALUE
+        """
+        Then zookeeper node "/test/master_info" should match json within "30" seconds
+        """
+        {
+            "has_keys": true
+        }
+        """
+        When I run command on valkey host "valkey3"
+        """
+            CONFIG SET replica-read-only no
+        """
+        And I run command on valkey host "valkey3"
+        """
+            FLUSHALL
+        """
+        Then zookeeper node "/test/active_nodes" should match json_exactly within "30" seconds
+        """
+            ["valkey1","valkey2"]
+        """
+        When host "valkey1" is stopped
+        Then valkey host "valkey1" should become unavailable within "10" seconds
+        And zookeeper node "/test/last_switch" should match json within "60" seconds
+        """
+        {
+            "cause": "auto",
+            "from": "valkey1",
+            "result": {
+                "ok": true
+            }
+        }
+        """
+        And zookeeper node "/test/master" should match regexp
+        """
+            .*valkey2.*
+        """
+        And valkey host "valkey2" should be master

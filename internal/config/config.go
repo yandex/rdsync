@@ -41,6 +41,7 @@ type ValkeyConfig struct {
 	MaxParallelSyncs                    int           `yaml:"max_parallel_syncs"`
 	ClusterBusPort                      int           `yaml:"cluster_bus_port"`
 	ReservedConnections                 int           `yaml:"reserved_connections"`
+	MinKeys                             int64         `yaml:"min_keys"`
 	TurnBeforeSwitchover                bool          `yaml:"turn_before_switchover"`
 	UseTLS                              bool          `yaml:"use_tls"`
 	AllowDataLoss                       bool          `yaml:"allow_data_loss"`
@@ -114,6 +115,7 @@ func DefaultValkeyConfig() ValkeyConfig {
 		SwitchoverTimeout:                   10 * time.Minute,
 		MaxParallelSyncs:                    1,
 		ReservedConnections:                 10,
+		MinKeys:                             0,
 		AllowDataLoss:                       false,
 		TurnBeforeSwitchover:                false,
 		RestartCommand:                      "systemctl restart valkey-server",

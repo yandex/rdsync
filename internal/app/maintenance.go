@@ -46,6 +46,14 @@ func (app *App) leaveMaintenance() error {
 	if err != nil {
 		return err
 	}
+	if isMasterInfoObservable(state[master]) {
+		err = app.setMasterInfo(MasterInfo{RunID: state[master].RunID, HasKeys: app.hasData(state[master])})
+	} else {
+		err = app.loadMasterInfo()
+	}
+	if err != nil {
+		return err
+	}
 	err = app.updateActiveNodes(state, stateDcs, []string{}, master)
 	if err != nil {
 		return err

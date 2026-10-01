@@ -109,6 +109,15 @@ func (app *App) CliInfo(verbose bool) int {
 			return 1
 		}
 		data[pathMasterNode] = master
+
+		masterInfo, err := app.getMasterInfo()
+		if err != nil {
+			app.logger.Error().Err(err).Msgf("Failed to get %s", pathMasterInfo)
+			return 1
+		}
+		if masterInfo != nil {
+			data[pathMasterInfo] = masterInfo.String()
+		}
 		tree = data
 	} else {
 		tree, err = app.dcs.GetTree("")
