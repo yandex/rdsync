@@ -258,8 +258,16 @@ func (app *App) repairLocalNode(master string) bool {
 			return false
 		}
 		if masterInfo != nil && masterInfo.HasKeys && masterInfo.RunID != state.RunID && !app.hasData(state) {
-			app.logger.Error().Msgf("Not making local node online: it was restarted (run_id %s -> %s) and lost its data (%d keys)", masterInfo.RunID, state.RunID, state.KeysCount)
-			return false
+			shardStateDcs, err := app.getShardStateFromDcs()
+			if err != nil {
+				app.logger.Error().Err(err).Msg("Unable to get shard state from dcs for local node repair")
+				return false
+			}
+			if !app.noDataInShard(shardStateDcs) {
+				app.logger.Error().Msgf("Not making local node online: it was restarted (run_id %s -> %s) and lost its data (%d keys)", masterInfo.RunID, state.RunID, state.KeysCount)
+				return false
+			}
+			app.logger.Warn().Msgf("Local node was restarted (run_id %s -> %s) and lost its data, but no host in shard has data. Making it online", masterInfo.RunID, state.RunID)
 		}
 		activeNodes, err := app.GetActiveNodes()
 		if err != nil {
