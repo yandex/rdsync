@@ -246,7 +246,7 @@ func (app *App) stateManager() appState {
 		delete(app.nodeFailTime, master)
 	}
 	delete(app.splitTime, master)
-	err = app.updateMasterInfo(shardState[master])
+	err = app.updateMasterInfo(shardState[master], shardStateDcs)
 	if err != nil {
 		app.logger.Error().Err(err).Msg("Failed to update master info")
 	}

@@ -15,6 +15,18 @@ func (app *App) lacksData(state *HostState) bool {
 	return app.masterInfo != nil && app.masterInfo.HasKeys && !app.hasData(state)
 }
 
+func (app *App) noDataInShard(shardStateDcs map[string]*HostState) bool {
+	if len(shardStateDcs) == 0 {
+		return false
+	}
+	for _, state := range shardStateDcs {
+		if state == nil || !state.PingOk || state.Error != "" || app.hasData(state) {
+			return false
+		}
+	}
+	return true
+}
+
 func (app *App) getMasterInfo() (*MasterInfo, error) {
 	var masterInfo MasterInfo
 	err := app.dcs.Get(pathMasterInfo, &masterInfo)
@@ -65,7 +77,7 @@ func isMasterInfoObservable(state *HostState) bool {
 	return state != nil && state.PingOk && state.Error == "" && state.IsMaster && !state.IsOffline
 }
 
-func (app *App) updateMasterInfo(state *HostState) error {
+func (app *App) updateMasterInfo(state *HostState, shardStateDcs map[string]*HostState) error {
 	if app.masterInfo == nil {
 		return fmt.Errorf("master info is not loaded")
 	}
@@ -73,12 +85,16 @@ func (app *App) updateMasterInfo(state *HostState) error {
 		return nil
 	}
 	observed := MasterInfo{RunID: state.RunID, HasKeys: app.hasData(state)}
-	if !masterInfoNeedsWrite(*app.masterInfo, observed) {
-		if *app.masterInfo != observed {
-			app.logger.Error().Msgf("Master was restarted and lost its data: %v -> %v. Keeping master info.", app.masterInfo, &observed)
-		}
+	if *app.masterInfo == observed {
 		return nil
 	}
-	app.logger.Info().Msgf("Updating master info: %v -> %v", app.masterInfo, &observed)
+	if masterInfoNeedsWrite(*app.masterInfo, observed) {
+		app.logger.Info().Msgf("Updating master info: %v -> %v", app.masterInfo, &observed)
+	} else if app.noDataInShard(shardStateDcs) {
+		app.logger.Warn().Msgf("Master was restarted and lost its data, but no host in shard has data: %v -> %v. Resetting master info.", app.masterInfo, &observed)
+	} else {
+		app.logger.Error().Msgf("Master was restarted and lost its data: %v -> %v. Keeping master info.", app.masterInfo, &observed)
+		return nil
+	}
 	return app.setMasterInfo(observed)
 }
