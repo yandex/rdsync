@@ -294,10 +294,11 @@ func (app *App) CliSwitch(switchFrom, switchTo string, waitTimeout time.Duration
 	var switchover Switchover
 	err = app.dcs.Get(pathCurrentSwitch, &switchover)
 	if err == nil {
-		app.logger.Error().Msgf("Another switchover in progress %v", switchover)
-		return 2
-	}
-	if !errors.Is(err, dcs.ErrNotFound) {
+		if !switchForce {
+			app.logger.Error().Msgf("Another switchover in progress %v", switchover)
+			return 2
+		}
+	} else if !errors.Is(err, dcs.ErrNotFound) {
 		app.logger.Error().Err(err).Msg("Unable to get current switchover status")
 		return 2
 	}
