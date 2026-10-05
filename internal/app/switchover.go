@@ -137,7 +137,7 @@ func filterOut(a, b []string) (res []string) {
 func (app *App) selectNewMaster(switchover *Switchover, states, shardState map[string]*HostState, activeNodes []string) (string, string, error) {
 	candidates := make(map[string]*HostState, len(states))
 	for host, state := range states {
-		if app.lacksData(state) {
+		if app.lacksData(state) && !app.noDataInShard(shardState) {
 			app.logger.Warn().Msgf("Switchover: skipping %s as candidate: no data (%d keys)", host, state.KeysCount)
 			continue
 		}
