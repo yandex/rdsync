@@ -17,9 +17,10 @@ const (
 
 func (app *App) countAliveHAReplicasWithinNodes(nodes []string, shardState map[string]*HostState) int {
 	cnt := 0
+	noData := app.noDataInShard(shardState)
 	for _, hostname := range nodes {
 		state, ok := shardState[hostname]
-		if ok && state.PingOk && state.PingStable && state.ReplicaState != nil && !app.lacksData(state) {
+		if ok && state.PingOk && state.PingStable && state.ReplicaState != nil && (!app.lacksData(state) || noData) {
 			cnt++
 		}
 	}
