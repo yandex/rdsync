@@ -288,7 +288,7 @@ func (app *App) performSwitchover(shardState map[string]*HostState, activeNodes 
 
 	for _, host := range activeNodes {
 		if errsRO[host] == nil && errsPause[host] == nil {
-			if app.lacksData(shardState[host]) {
+			if app.lacksData(shardState[host]) && !app.noDataInShard(shardState) {
 				app.logger.Warn().Msgf("Switchover: skipping %s as alive active node: no data", host)
 				continue
 			}
