@@ -671,7 +671,7 @@ func (app *App) processPriority(priority *int, dryRun bool, host string) (change
 			return false, err
 		}
 		if nc.Priority == targetConf.Priority {
-			fmt.Printf("dry run: node already has priority %d set\n", priority)
+			fmt.Printf("dry run: node already has priority %d set\n", targetConf.Priority)
 			return false, nil
 		}
 		fmt.Printf("dry run: node priority can be set to %d (current priority %d)\n", targetConf.Priority, nc.Priority)
