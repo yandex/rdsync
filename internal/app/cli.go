@@ -319,8 +319,16 @@ func (app *App) CliSwitch(switchFrom, switchTo string, waitTimeout time.Duration
 
 	err = app.dcs.Create(pathCurrentSwitch, switchover)
 	if errors.Is(err, dcs.ErrExists) {
-		app.logger.Error().Msg("Another switchover in progress")
-		return 2
+		if !switchForce {
+			app.logger.Error().Msg("Another switchover in progress")
+			return 2
+		}
+
+		err = app.dcs.Set(pathCurrentSwitch, switchover)
+		if err != nil {
+			app.logger.Error().Err(err).Msg("Unable to update switchover in dcs")
+			return 1
+		}
 	}
 	if err != nil {
 		app.logger.Error().Err(err).Msg("Unable to create switchover in dcs")
