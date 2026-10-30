@@ -77,6 +77,38 @@ func (app *App) stateManager() appState {
 	updateActive := app.repairLocalNode(master)
 
 	var switchover Switchover
+	if err := app.dcs.Get(pathScheduledSwitch, &switchover); err == nil {
+		err = app.dcs.Create(pathCurrentSwitch, switchover)
+		if err != nil && !errors.Is(err, dcs.ErrExists) {
+			app.logger.Error().Err(err).Msg("Making scheduled switchover current failed")
+			return stateManager
+		}
+		scheduledIsCurrent := err == nil
+		if !scheduledIsCurrent {
+			var currentSwitchover Switchover
+			if err := app.dcs.Get(pathCurrentSwitch, &currentSwitchover); err != nil {
+				app.logger.Error().Err(err).Msg("Getting current switchover for scheduled handoff failed")
+				return stateManager
+			}
+			scheduledIsCurrent = currentSwitchover.InitiatedBy == switchover.InitiatedBy &&
+				currentSwitchover.InitiatedAt.Equal(switchover.InitiatedAt)
+		}
+		if scheduledIsCurrent {
+			err = app.dcs.Delete(pathScheduledSwitch)
+			if err != nil {
+				app.logger.Error().Err(err).Msg("Deleting scheduled switchover failed")
+				return stateManager
+			}
+			activeNodes, err = app.GetActiveNodes()
+			if err != nil {
+				app.logger.Error().Err(err).Msg("Failed to refresh active nodes")
+				return stateManager
+			}
+		}
+	} else if !errors.Is(err, dcs.ErrNotFound) {
+		app.logger.Error().Err(err).Msg("Getting scheduled switchover failed")
+		return stateManager
+	}
 	if err := app.dcs.Get(pathCurrentSwitch, &switchover); err == nil {
 		if !switchover.InitiatedAt.IsZero() && time.Since(switchover.InitiatedAt) > app.config.Valkey.SwitchoverTimeout {
 			app.logger.Error().Msgf("Switchover: %s => %s timed out after %s", switchover.From, switchover.To, time.Since(switchover.InitiatedAt))

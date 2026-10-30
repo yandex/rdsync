@@ -337,6 +337,7 @@ func (z *zkDCS) retryGet(path string) (data []byte, stat *zk.Stat, err error) {
 	return
 }
 
+// nolint: unparam
 func (z *zkDCS) retrySet(path string, data []byte, version int32) (stat *zk.Stat, err error) {
 	z.retryRequest(func() error {
 		stat, err = z.conn.Set(path, data, version)
@@ -459,6 +460,30 @@ func (z *zkDCS) CreateEphemeral(path string, val any) error {
 	return z.create(path, val, zk.FlagEphemeral)
 }
 
+func (z *zkDCS) update(path string, val any) error {
+	fullPath := z.buildFullPath(path)
+	data, err := z.marshal(val)
+	if err != nil {
+		return err
+	}
+	_, stat, err := z.retryGet(fullPath)
+	if err != nil {
+		z.logger.Error().Err(err).Msgf("Failed to get node %s for update", fullPath)
+		if errors.Is(err, zk.ErrNoNode) {
+			return ErrNotFound
+		}
+		return err
+	}
+	_, err = z.retrySet(fullPath, data, stat.Version)
+	if err != nil {
+		z.logger.Error().Err(err).Msgf("Failed to update node %s to %+v", fullPath, val)
+		if errors.Is(err, zk.ErrNoNode) {
+			return ErrNotFound
+		}
+	}
+	return err
+}
+
 func (z *zkDCS) set(path string, val any, flags int32) error {
 	fullPath := z.buildFullPath(path)
 	data, err := z.marshal(val)
@@ -513,6 +538,10 @@ func (z *zkDCS) Set(path string, val any) error {
 
 func (z *zkDCS) SetEphemeral(path string, val any) error {
 	return z.set(path, val, zk.FlagEphemeral)
+}
+
+func (z *zkDCS) Update(path string, val any) error {
+	return z.update(path, val)
 }
 
 func (z *zkDCS) Delete(path string) error {

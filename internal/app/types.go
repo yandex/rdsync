@@ -115,6 +115,9 @@ const (
 	pathCurrentSwitch = "current_switch"
 
 	// structure: single Switchover
+	pathScheduledSwitch = "scheduled_switch"
+
+	// structure: single Switchover
 	pathLastSwitch = "last_switch"
 
 	// structure: single Switchover
