@@ -292,10 +292,26 @@ func (app *App) CliSwitch(switchFrom, switchTo string, waitTimeout time.Duration
 	}
 
 	var switchover Switchover
-	err = app.dcs.Get(pathCurrentSwitch, &switchover)
+	var switchoverTmp Switchover
+	needReplaceScheduled := false
+	err = app.dcs.Get(pathScheduledSwitch, &switchoverTmp)
 	if err == nil {
 		if !switchForce {
-			app.logger.Error().Msgf("Another switchover in progress %v", switchover)
+			app.logger.Error().Msgf("Another switchover is scheduled %v", switchoverTmp)
+			return 2
+		}
+		needReplaceScheduled = true
+	} else if !errors.Is(err, dcs.ErrNotFound) {
+		app.logger.Error().Err(err).Msg("Unable to get scheduled switchover status")
+		return 2
+	}
+	needAbort := false
+	err = app.dcs.Get(pathCurrentSwitch, &switchoverTmp)
+	if err == nil {
+		if switchForce {
+			needAbort = true
+		} else {
+			app.logger.Error().Msgf("Another switchover in progress %v", switchoverTmp)
 			return 2
 		}
 	} else if !errors.Is(err, dcs.ErrNotFound) {
@@ -317,7 +333,24 @@ func (app *App) CliSwitch(switchFrom, switchTo string, waitTimeout time.Duration
 		}
 	}
 
-	err = app.dcs.Create(pathCurrentSwitch, switchover)
+	var path = pathCurrentSwitch
+	if needReplaceScheduled {
+		err = app.dcs.Delete(pathScheduledSwitch)
+		if err != nil && !errors.Is(err, dcs.ErrNotFound) {
+			app.logger.Error().Err(err).Msg("Unable to remove old scheduled switchover path from dcs")
+			return 1
+		}
+		path = pathScheduledSwitch
+	}
+	if needAbort {
+		err = app.dcs.Delete(pathCurrentSwitch)
+		if err != nil && !errors.Is(err, dcs.ErrNotFound) {
+			app.logger.Error().Err(err).Msg("Unable to remove old switchover path from dcs")
+			return 1
+		}
+		path = pathScheduledSwitch
+	}
+	err = app.dcs.Create(path, switchover)
 	if errors.Is(err, dcs.ErrExists) {
 		app.logger.Error().Msg("Another switchover in progress")
 		return 2

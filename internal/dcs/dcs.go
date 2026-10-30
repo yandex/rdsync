@@ -24,6 +24,7 @@ type DCS interface {
 	CreateEphemeral(path string, value any) error
 	Set(path string, value any) error
 	SetEphemeral(path string, value any) error
+	Update(path string, value any) error
 	Get(path string, dest any) error
 	Delete(path string) error
 	GetTree(path string) (any, error)

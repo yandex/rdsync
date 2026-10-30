@@ -60,7 +60,7 @@ func (app *App) startSwitchover(switchover *Switchover) error {
 	app.logger.Info().Msgf("Switchover: %s => %s starting", switchover.From, switchover.To)
 	switchover.StartedAt = time.Now()
 	switchover.StartedBy = app.config.Hostname
-	return app.dcs.Set(pathCurrentSwitch, switchover)
+	return app.dcs.Update(pathCurrentSwitch, switchover)
 }
 
 func (app *App) failSwitchover(switchover *Switchover, err error) error {
@@ -72,7 +72,7 @@ func (app *App) failSwitchover(switchover *Switchover, err error) error {
 	switchover.Result.Error = err.Error()
 	switchover.Result.FinishedAt = time.Now()
 
-	return app.dcs.Set(pathCurrentSwitch, switchover)
+	return app.dcs.Update(pathCurrentSwitch, switchover)
 }
 
 func (app *App) updateSwitchover(switchover *Switchover) error {
@@ -80,7 +80,7 @@ func (app *App) updateSwitchover(switchover *Switchover) error {
 		return fmt.Errorf("update switchover without progress is not possible")
 	}
 
-	return app.dcs.Set(pathCurrentSwitch, switchover)
+	return app.dcs.Update(pathCurrentSwitch, switchover)
 }
 
 func (app *App) finishSwitchover(switchover *Switchover, switchErr error) error {
