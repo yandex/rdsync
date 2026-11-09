@@ -14,7 +14,7 @@ require (
 	github.com/moby/moby/client v0.6.2
 	github.com/rs/zerolog v1.35.1
 	github.com/spf13/cobra v1.10.2
-	github.com/spf13/pflag v1.0.10
+	github.com/spf13/pflag v1.1.0
 	github.com/stretchr/testify v1.12.1
 	github.com/valkey-io/valkey-go v1.0.79
 	gopkg.in/yaml.v2 v2.4.0
