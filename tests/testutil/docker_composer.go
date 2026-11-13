@@ -177,16 +177,20 @@ func (dc *DockerComposer) GetAddr(service string, port int) (string, error) {
 	return "", fmt.Errorf("service %s does not expose port %d", service, port)
 }
 
-// GetIP returns internal ip address of given service
+// GetIP returns the internal IPv4 address of the given service.
 func (dc *DockerComposer) GetIP(service string) (string, error) {
 	cont, ok := dc.containers[service]
 	if !ok {
 		return "", fmt.Errorf("no such service: %s", service)
 	}
-	for _, network := range cont.NetworkSettings.Networks {
-		return network.IPAddress.String(), nil
+	if cont.NetworkSettings != nil {
+		for _, network := range cont.NetworkSettings.Networks {
+			if network != nil && network.IPAddress.Is4() && !network.IPAddress.IsUnspecified() {
+				return network.IPAddress.String(), nil
+			}
+		}
 	}
-	return "", fmt.Errorf("no network for service: %s", service)
+	return "", fmt.Errorf("no IPv4 address for service: %s", service)
 }
 
 func (dc *DockerComposer) RunCommandAtHosts(cmd, hostSubstring string, timeout time.Duration) error {
@@ -305,6 +309,20 @@ func (dc *DockerComposer) Stop(service string) error {
 	return err
 }
 
+func runCheckedCommands(run func(string, string, time.Duration) (int, string, error), service string, cmds []string) error {
+	for _, cmd := range cmds {
+		code, output, err := run(service, cmd, defaultDockerTimeout)
+		output = demuxDockerLogs([]byte(output))
+		if err != nil {
+			return fmt.Errorf("command %q on %s failed: %w\n%s", cmd, service, err, output)
+		}
+		if code != 0 {
+			return fmt.Errorf("command %q on %s exited with status %d:\n%s", cmd, service, code, output)
+		}
+	}
+	return nil
+}
+
 // AttachToNet attaches container to network
 func (dc *DockerComposer) AttachToNet(service string) error {
 	_, ok := dc.containers[service]
@@ -317,13 +335,7 @@ func (dc *DockerComposer) AttachToNet(service string) error {
 		"ip6tables -D INPUT -i eth0 -j DROP",
 		"ip6tables -D OUTPUT -o eth0 -j DROP",
 	}
-	for _, cmd := range cmds {
-		_, _, err := dc.RunCommand(service, cmd, defaultDockerTimeout)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+	return runCheckedCommands(dc.RunCommand, service, cmds)
 }
 
 // DetachFromNet detaches container from network
@@ -338,13 +350,7 @@ func (dc *DockerComposer) DetachFromNet(service string) error {
 		"ip6tables -A INPUT -i eth0 -j DROP",
 		"ip6tables -A OUTPUT -o eth0 -j DROP",
 	}
-	for _, cmd := range cmds {
-		_, _, err := dc.RunCommand(service, cmd, defaultDockerTimeout)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+	return runCheckedCommands(dc.RunCommand, service, cmds)
 }
 
 // BlockPort blocks port for host
@@ -359,13 +365,7 @@ func (dc *DockerComposer) BlockPort(service string, port int) error {
 		fmt.Sprintf("ip6tables -A INPUT -i eth0 -p tcp --dport %d -j DROP", port),
 		fmt.Sprintf("ip6tables -A OUTPUT -o eth0 -p tcp --dport %d -j DROP", port),
 	}
-	for _, cmd := range cmds {
-		_, _, err := dc.RunCommand(service, cmd, defaultDockerTimeout)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+	return runCheckedCommands(dc.RunCommand, service, cmds)
 }
 
 // BlockHostPort blocks host/port for host
@@ -374,19 +374,15 @@ func (dc *DockerComposer) BlockHostPort(service, host string, port int) error {
 	if !ok {
 		return fmt.Errorf("no such service: %s", service)
 	}
+	ip, err := dc.GetIP(host)
+	if err != nil {
+		return fmt.Errorf("resolve firewall target: %w", err)
+	}
 	cmds := []string{
-		fmt.Sprintf("iptables -A INPUT -i eth0 -s %s -p tcp --dport %d -j DROP", host, port),
-		fmt.Sprintf("iptables -A OUTPUT -o eth0 -d %s -p tcp --dport %d -j DROP", host, port),
-		fmt.Sprintf("ip6tables -A INPUT -i eth0 -s %s -p tcp --dport %d -j DROP", host, port),
-		fmt.Sprintf("ip6tables -A OUTPUT -o eth0 -d %s -p tcp --dport %d -j DROP", host, port),
+		fmt.Sprintf("iptables -A INPUT -i eth0 -s %s -p tcp --dport %d -j DROP", ip, port),
+		fmt.Sprintf("iptables -A OUTPUT -o eth0 -d %s -p tcp --dport %d -j DROP", ip, port),
 	}
-	for _, cmd := range cmds {
-		_, _, err := dc.RunCommand(service, cmd, defaultDockerTimeout)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+	return runCheckedCommands(dc.RunCommand, service, cmds)
 }
 
 // BlockHostConnections blocks incoming connections from specified host
@@ -395,17 +391,14 @@ func (dc *DockerComposer) BlockHostConnections(service, host string) error {
 	if !ok {
 		return fmt.Errorf("no such service: %s", service)
 	}
+	ip, err := dc.GetIP(host)
+	if err != nil {
+		return fmt.Errorf("resolve firewall target: %w", err)
+	}
 	cmds := []string{
-		fmt.Sprintf("iptables -A INPUT -s %s -p tcp --tcp-flags SYN,ACK SYN -j DROP", host),
-		fmt.Sprintf("ip6tables -A INPUT -s %s -p tcp --tcp-flags SYN,ACK SYN -j DROP", host),
+		fmt.Sprintf("iptables -A INPUT -s %s -p tcp --tcp-flags SYN,ACK SYN -j DROP", ip),
 	}
-	for _, cmd := range cmds {
-		_, _, err := dc.RunCommand(service, cmd, defaultDockerTimeout)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+	return runCheckedCommands(dc.RunCommand, service, cmds)
 }
 
 // UnBlockPort removes blocking rules for port on host
@@ -420,13 +413,7 @@ func (dc *DockerComposer) UnBlockPort(service string, port int) error {
 		fmt.Sprintf("ip6tables -D INPUT -i eth0 -p tcp --dport %d -j DROP", port),
 		fmt.Sprintf("ip6tables -D OUTPUT -o eth0 -p tcp --dport %d -j DROP", port),
 	}
-	for _, cmd := range cmds {
-		_, _, err := dc.RunCommand(service, cmd, defaultDockerTimeout)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+	return runCheckedCommands(dc.RunCommand, service, cmds)
 }
 
 // UnblockHostPort removes blocking rules for host/port for host
@@ -435,19 +422,15 @@ func (dc *DockerComposer) UnBlockHostPort(service, host string, port int) error 
 	if !ok {
 		return fmt.Errorf("no such service: %s", service)
 	}
+	ip, err := dc.GetIP(host)
+	if err != nil {
+		return fmt.Errorf("resolve firewall target: %w", err)
+	}
 	cmds := []string{
-		fmt.Sprintf("iptables -D INPUT -i eth0 -s %s -p tcp --dport %d -j DROP", host, port),
-		fmt.Sprintf("iptables -D OUTPUT -o eth0 -d %s -p tcp --dport %d -j DROP", host, port),
-		fmt.Sprintf("ip6tables -D INPUT -i eth0 -s %s -p tcp --dport %d -j DROP", host, port),
-		fmt.Sprintf("ip6tables -D OUTPUT -o eth0 -d %s -p tcp --dport %d -j DROP", host, port),
+		fmt.Sprintf("iptables -D INPUT -i eth0 -s %s -p tcp --dport %d -j DROP", ip, port),
+		fmt.Sprintf("iptables -D OUTPUT -o eth0 -d %s -p tcp --dport %d -j DROP", ip, port),
 	}
-	for _, cmd := range cmds {
-		_, _, err := dc.RunCommand(service, cmd, defaultDockerTimeout)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+	return runCheckedCommands(dc.RunCommand, service, cmds)
 }
 
 // UnBlockHostConnections removes blocking incoming connections from host
@@ -456,17 +439,14 @@ func (dc *DockerComposer) UnBlockHostConnections(service, host string) error {
 	if !ok {
 		return fmt.Errorf("no such service: %s", service)
 	}
+	ip, err := dc.GetIP(host)
+	if err != nil {
+		return fmt.Errorf("resolve firewall target: %w", err)
+	}
 	cmds := []string{
-		fmt.Sprintf("iptables -D INPUT -s %s -p tcp --tcp-flags SYN,ACK SYN -j DROP", host),
-		fmt.Sprintf("ip6tables -D INPUT -s %s -p tcp --tcp-flags SYN,ACK SYN -j DROP", host),
+		fmt.Sprintf("iptables -D INPUT -s %s -p tcp --tcp-flags SYN,ACK SYN -j DROP", ip),
 	}
-	for _, cmd := range cmds {
-		_, _, err := dc.RunCommand(service, cmd, defaultDockerTimeout)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+	return runCheckedCommands(dc.RunCommand, service, cmds)
 }
 
 // GetLogs returns container stdout/stderr for given service
