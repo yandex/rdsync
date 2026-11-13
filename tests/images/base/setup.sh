@@ -30,8 +30,8 @@ apt install less \
 rm -rf /var/run
 ln -s /dev/shm /var/run
 
-ln -sf /usr/sbin/ip6tables-legacy /usr/sbin/ip6tables
-ln -sf /usr/sbin/iptables-legacy /usr/sbin/iptables
+update-alternatives --set iptables /usr/sbin/iptables-nft
+update-alternatives --set ip6tables /usr/sbin/ip6tables-nft
 
 mkdir -p /run/sshd
 cp /var/lib/dist/base/sshd_config /etc/ssh/sshd_config
