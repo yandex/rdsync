@@ -250,7 +250,7 @@ func (app *App) CliSwitch(switchFrom, switchTo string, waitTimeout time.Duration
 			fmt.Println("switchover done")
 			return 0
 		}
-		if !slices.Contains(activeNodes, toHost) {
+		if !slices.Contains(activeNodes, toHost) && !switchForce {
 			app.logger.Error().Msgf("%s is not active, can't switch to it", toHost)
 			return 1
 		}
