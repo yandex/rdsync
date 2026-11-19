@@ -1,8 +1,8 @@
 diff --git a/src/config.c b/src/config.c
-index 5c58b971f..0d852e730 100644
+index 1198a75a7..909a9e774 100644
 --- a/src/config.c
 +++ b/src/config.c
-@@ -631,6 +631,8 @@ void loadServerConfigFromString(sds config) {
+@@ -681,6 +681,8 @@ void loadServerConfigFromString(sds config) {
      if (server.hz < CONFIG_MIN_HZ) server.hz = CONFIG_MIN_HZ;
      if (server.hz > CONFIG_MAX_HZ) server.hz = CONFIG_MAX_HZ;
  
@@ -11,7 +11,7 @@ index 5c58b971f..0d852e730 100644
      sdsfreesplitres(lines, totlines);
      reading_config_file = 0;
      return;
-@@ -3276,6 +3278,31 @@ static int isValidDbHashSeed(sds val, const char **err) {
+@@ -3472,6 +3474,31 @@ static int isValidDbHashSeed(sds val, const char **err) {
      return 1;
  }
  
@@ -43,7 +43,7 @@ index 5c58b971f..0d852e730 100644
  standardConfig static_configs[] = {
      /* Bool configs */
      createBoolConfig("rdbchecksum", NULL, IMMUTABLE_CONFIG, server.rdb_checksum, 1, NULL, NULL),
-@@ -3536,6 +3563,7 @@ standardConfig static_configs[] = {
+@@ -3747,6 +3774,7 @@ standardConfig static_configs[] = {
      createSpecialConfig("rdma-bind", NULL, MODIFIABLE_CONFIG | MULTI_ARG_CONFIG, setConfigRdmaBindOption, getConfigRdmaBindOption, rewriteConfigRdmaBindOption, applyRdmaBind),
      createSpecialConfig("replicaof", "slaveof", IMMUTABLE_CONFIG | MULTI_ARG_CONFIG, setConfigReplicaOfOption, getConfigReplicaOfOption, rewriteConfigReplicaOfOption, NULL),
      createSpecialConfig("latency-tracking-info-percentiles", NULL, MODIFIABLE_CONFIG | MULTI_ARG_CONFIG, setConfigLatencyTrackingInfoPercentilesOutputOption, getConfigLatencyTrackingInfoPercentilesOutputOption, rewriteConfigLatencyTrackingInfoPercentilesOutputOption, NULL),
@@ -52,10 +52,10 @@ index 5c58b971f..0d852e730 100644
      /* NULL Terminator, this is dropped when we convert to the runtime array. */
      {NULL},
 diff --git a/src/server.c b/src/server.c
-index e018a6182..7594a672e 100644
+index 05f80cf0b..f3c6ee4d5 100644
 --- a/src/server.c
 +++ b/src/server.c
-@@ -2717,9 +2717,15 @@ int listenToPort(connListener *sfd) {
+@@ -2895,9 +2895,15 @@ int listenToPort(connListener *sfd) {
      int j;
      int port = sfd->port;
      char **bindaddr = sfd->bindaddr;
@@ -72,7 +72,7 @@ index e018a6182..7594a672e 100644
  
      for (j = 0; j < sfd->bindaddr_count; j++) {
          char *addr = bindaddr[j];
-@@ -7176,8 +7182,8 @@ void dismissMemoryInChild(void) {
+@@ -7675,8 +7681,8 @@ void dismissMemoryInChild(void) {
      /* madvise(MADV_DONTNEED) may not work if Transparent Huge Pages is enabled. */
      if (server.thp_enabled) return;
  
@@ -84,10 +84,10 @@ index e018a6182..7594a672e 100644
      listIter li;
      listNode *ln;
 diff --git a/src/server.h b/src/server.h
-index c8e03be25..d941665ea 100644
+index 03816786b..37016907f 100644
 --- a/src/server.h
 +++ b/src/server.h
-@@ -2206,6 +2206,9 @@ struct valkeyServer {
+@@ -2369,6 +2369,9 @@ struct valkeyServer {
      list *clients_waiting_acks; /* Clients waiting in WAIT or WAITAOF. */
      int get_ack_from_replicas;  /* If true we send REPLCONF GETACK. */
      int repl_paused;            /* If true we don't try to connect to master */
@@ -96,7 +96,7 @@ index c8e03be25..d941665ea 100644
 +    int offline_initial; /* Initial state of offline mode (from config) */
      /* Limits */
      unsigned int maxclients;                    /* Max number of simultaneous clients */
-     unsigned long long maxmemory;               /* Max number of memory bytes to use */
+     unsigned int maxclients_reserved;           /* Client connection slots reserved for priority subnets */
 diff --git a/tests/unit/yandex-cloud-patches.tcl b/tests/unit/yandex-cloud-patches.tcl
 new file mode 100644
 index 000000000..b8c3ba453
@@ -126,3 +126,6 @@ index 000000000..b8c3ba453
 +        }
 +    }
 +}
+-- 
+2.56.1
+
