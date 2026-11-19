@@ -1,8 +1,8 @@
 diff --git a/src/cluster_legacy.c b/src/cluster_legacy.c
-index 63cfc13a0..10adddf5c 100644
+index 01875b455..e3bd5b7e3 100644
 --- a/src/cluster_legacy.c
 +++ b/src/cluster_legacy.c
-@@ -8120,7 +8120,7 @@ int clusterCommandSpecial(client *c) {
+@@ -8989,7 +8989,7 @@ int clusterCommandSpecial(client *c) {
          }
  
          /* Can't replicate a replica. */
@@ -12,23 +12,37 @@ index 63cfc13a0..10adddf5c 100644
              return 1;
          }
 diff --git a/tests/unit/cluster/99-yandex-cloud-patches.tcl b/tests/unit/cluster/99-yandex-cloud-patches.tcl
-index ca4d2f5ec..bb7844a92 100644
+index 6d0c1007b..04b644128 100644
 --- a/tests/unit/cluster/99-yandex-cloud-patches.tcl
 +++ b/tests/unit/cluster/99-yandex-cloud-patches.tcl
-@@ -28,6 +28,16 @@ test "Replication pause on instance 1 works" {
+@@ -13,8 +13,8 @@ proc kill_clustered_redis {id} {
+     set ::pids [lsearch -all -inline -not -exact $::pids $pid]
+ }
+ 
+-test "Create a 2 node cluster (1 master and 1 replica)" {
+-    create_cluster 1 1
++test "Create a 3 node cluster (1 master and 2 replicas)" {
++    create_cluster 1 2
+ }
+ 
+ test "Cluster is up" {
+@@ -38,6 +38,16 @@ test "Replication pause on instance #1 works" {
      }
  }
  
 +test "Replication cascade with paused instance works" {
 +    assert {[R 2 config set cluster-slave-no-failover yes] eq {OK}}
-+    assert {[R 2 cluster replicate [R 1 cluster myid]] eq {OK}}
++    assert {[R 2 cluster replicate [R 1 CLUSTER MYID]] eq {OK}}
 +    wait_for_condition 1000 50 {
-+        [s -2 master_link_status] eq {up}
++        [RI 2 master_link_status] eq {up}
 +    } else {
-+        fail "Instance 2 master link status is not up"
++        fail "Instance #2 master link status is not up"
 +    }
 +}
 +
- test "Replication resume on instance 1 works" {
+ test "Replication resume on instance #1 works" {
      assert {[R 1 config set repl-paused no] eq {OK}}
      wait_for_condition 1000 50 {
+-- 
+2.56.1
+

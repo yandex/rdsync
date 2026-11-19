@@ -1,8 +1,8 @@
 diff --git a/src/config.c b/src/config.c
-index fcbaee7e9..5c58b971f 100644
+index 7b01b096f..1198a75a7 100644
 --- a/src/config.c
 +++ b/src/config.c
-@@ -2641,6 +2641,25 @@ static int updateExtendedRedisCompat(const char **err) {
+@@ -2819,6 +2819,25 @@ static int updateExtendedRedisCompat(const char **err) {
      return 1;
  }
  
@@ -28,7 +28,7 @@ index fcbaee7e9..5c58b971f 100644
  static int updateSighandlerEnabled(const char **err) {
      UNUSED(err);
      if (server.crashlog_enabled)
-@@ -3312,6 +3331,7 @@ standardConfig static_configs[] = {
+@@ -3508,6 +3527,7 @@ standardConfig static_configs[] = {
      createBoolConfig("lua-enable-insecure-api", "lua-enable-deprecated-api", MODIFIABLE_CONFIG | HIDDEN_CONFIG | PROTECTED_CONFIG, server.lua_enable_insecure_api, 0, NULL, updateLuaEnableInsecureApi),
      createBoolConfig("import-mode", NULL, DEBUG_CONFIG | MODIFIABLE_CONFIG, server.import_mode, 0, NULL, NULL),
      createBoolConfig("io-threads-always-active", NULL, MODIFIABLE_CONFIG | HIDDEN_CONFIG, server.io_threads_always_active, 0, NULL, NULL),
@@ -37,18 +37,18 @@ index fcbaee7e9..5c58b971f 100644
      /* String Configs */
      createStringConfig("aclfile", NULL, IMMUTABLE_CONFIG, ALLOW_EMPTY_STRING, server.acl_filename, "", NULL, NULL),
 diff --git a/src/replication.c b/src/replication.c
-index 13cbc4183..c30560b3d 100644
+index a0891a5aa..997f78317 100644
 --- a/src/replication.c
 +++ b/src/replication.c
-@@ -59,7 +59,6 @@ void replicationResurrectProvisionalPrimary(void);
+@@ -65,7 +65,6 @@ void replicationResurrectProvisionalPrimary(void);
  void replicationSendAck(void);
- int replicaPutOnline(client *replica);
- void replicaStartCommandStream(client *replica);
+ static int replicaPutOnline(client *replica);
+ static void replicaStartCommandStream(client *replica);
 -int cancelReplicationHandshake(int reconnect);
  void replicationSteadyStateInit(void);
  void dualChannelSetupMainConnForPsync(connection *conn);
  void dualChannelSyncHandleRdbLoadCompletion(void);
-@@ -1115,7 +1114,7 @@ void syncCommand(client *c) {
+@@ -1513,7 +1512,7 @@ void syncCommand(client *c) {
  
      /* Refuse SYNC requests if we are a replica but the link with our primary
       * is not ok... */
@@ -57,7 +57,7 @@ index 13cbc4183..c30560b3d 100644
          addReplyError(c, "-NOMASTERLINK Can't SYNC while not connected with my master");
          return;
      }
-@@ -5284,7 +5283,7 @@ void replicationCron(void) {
+@@ -5976,7 +5975,7 @@ void replicationCron(void) {
      }
  
      /* Check if we should connect to a PRIMARY */
@@ -67,18 +67,18 @@ index 13cbc4183..c30560b3d 100644
          connectWithPrimary();
      }
 diff --git a/src/server.h b/src/server.h
-index 351b1e43c..c8e03be25 100644
+index 61fd136c7..03816786b 100644
 --- a/src/server.h
 +++ b/src/server.h
-@@ -2205,6 +2205,7 @@ struct valkeyServer {
+@@ -2368,6 +2368,7 @@ struct valkeyServer {
      /* Synchronous replication. */
      list *clients_waiting_acks; /* Clients waiting in WAIT or WAITAOF. */
      int get_ack_from_replicas;  /* If true we send REPLCONF GETACK. */
 +    int repl_paused;            /* If true we don't try to connect to master */
      /* Limits */
      unsigned int maxclients;                    /* Max number of simultaneous clients */
-     unsigned long long maxmemory;               /* Max number of memory bytes to use */
-@@ -3240,6 +3241,8 @@ void updateFailoverStatus(void);
+     unsigned int maxclients_reserved;           /* Client connection slots reserved for priority subnets */
+@@ -3499,6 +3500,8 @@ void updateFailoverStatus(void);
  void abortFailover(const char *err);
  const char *getFailoverStateString(void);
  sds getReplicaPortString(void);
@@ -86,7 +86,7 @@ index 351b1e43c..c8e03be25 100644
 +int replicaIsInHandshakeState(void);
  int sendCurrentOffsetToReplica(client *replica);
  int replicaRdbVersion(client *replica);
- void addRdbReplicaToPsyncWait(client *replica);
+ /* Full-sync compression policy: select the codec and gate replica eligibility on capability. */
 diff --git a/tests/integration/yandex-cloud-patches.tcl b/tests/integration/yandex-cloud-patches.tcl
 new file mode 100644
 index 000000000..a2c9bb949
@@ -151,47 +151,58 @@ index 000000000..a2c9bb949
 +}
 diff --git a/tests/unit/cluster/99-yandex-cloud-patches.tcl b/tests/unit/cluster/99-yandex-cloud-patches.tcl
 new file mode 100644
-index 000000000..ca4d2f5ec
+index 000000000..6d0c1007b
 --- /dev/null
 +++ b/tests/unit/cluster/99-yandex-cloud-patches.tcl
-@@ -0,0 +1,40 @@
+@@ -0,0 +1,48 @@
 +# Test Yandex Cloud patches on cluster
 +
-+start_cluster 1 2 {tags {external:skip cluster}} {
++source "../tests/includes/init-tests.tcl"
++
++proc kill_clustered_redis {id} {
++    set pid [get_instance_attrib redis $id pid]
++
++    stop_instance $pid
++    set_instance_attrib redis $id pid -1
++    set_instance_attrib redis $id link you_tried_to_talk_with_killed_instance
++
++    # Remove the PID from the list of pids to kill at exit.
++    set ::pids [lsearch -all -inline -not -exact $::pids $pid]
++}
++
++test "Create a 2 node cluster (1 master and 1 replica)" {
++    create_cluster 1 1
++}
 +
 +test "Cluster is up" {
-+    wait_for_cluster_state ok
++    assert_cluster_state ok
 +}
 +
-+test "Instance 0 is master and 1 is replica" {
-+    assert {[s 0 role] eq {master}}
-+    assert {[s -1 role] eq {slave}}
-+}
-+
-+test "Instance 1 synced with the master" {
++test "Instance #1 synced with the master" {
 +    wait_for_condition 1000 50 {
-+        [s -1 master_link_status] eq {up}
++        [RI 1 master_link_status] eq {up}
 +    } else {
-+        fail "Instance 1 master link status is not up"
++        fail "Instance #1 master link status is not up"
 +    }
 +}
 +
-+test "Replication pause on instance 1 works" {
++test "Replication pause on instance #1 works" {
 +    assert {[R 1 config set repl-paused yes] eq {OK}}
 +    wait_for_condition 1000 50 {
-+        [s -1 master_link_status] eq {down}
++        [RI 1 master_link_status] eq {down}
 +    } else {
-+        fail "Instance 1 master link status is not down"
++        fail "Instance #1 master link status is not down"
 +    }
 +}
 +
-+test "Replication resume on instance 1 works" {
++test "Replication resume on instance #1 works" {
 +    assert {[R 1 config set repl-paused no] eq {OK}}
 +    wait_for_condition 1000 50 {
-+        [s -1 master_link_status] eq {up}
++        [RI 1 master_link_status] eq {up}
 +    } else {
-+        fail "Instance 1 master link status is not up"
++        fail "Instance #1 master link status is not up"
 +    }
 +}
-+
-+}
+-- 
+2.56.1
+

@@ -1,5 +1,5 @@
 diff --git a/.gitignore b/.gitignore
-index 636e29b86..4d96302d1 100644
+index 2603e9a96..d3325de06 100644
 --- a/.gitignore
 +++ b/.gitignore
 @@ -14,6 +14,8 @@ dump*.rdb
@@ -47,10 +47,10 @@ index 000000000..5e922cd9f
 +sentinel resolve-hostnames no
 +sentinel announce-hostnames no
 diff --git a/src/Makefile b/src/Makefile
-index 2812c4dba..1f14ad4aa 100644
+index 92bf77622..08c865c38 100644
 --- a/src/Makefile
 +++ b/src/Makefile
-@@ -462,6 +462,7 @@ endif
+@@ -503,6 +503,7 @@ endif
  ENGINE_NAME=valkey
  SERVER_NAME=$(ENGINE_NAME)-server$(PROG_SUFFIX)
  ENGINE_SENTINEL_NAME=$(ENGINE_NAME)-sentinel$(PROG_SUFFIX)
@@ -58,15 +58,15 @@ index 2812c4dba..1f14ad4aa 100644
  ENGINE_TRACE_OBJ = \
      trace/trace.o \
      trace/trace_aof.o \
-@@ -584,6 +585,7 @@ ENGINE_SERVER_OBJ = \
-     zmalloc.o \
-     queues.o
+@@ -640,6 +641,7 @@ ENGINE_SERVER_OBJ = \
+     throttle_repl.o \
+     throttle.o
  ENGINE_SERVER_OBJ+=$(ENGINE_TRACE_OBJ)
 +ENGINE_SENTICACHE_OBJ = $(patsubst sentinel.o,senticache.o,$(ENGINE_SERVER_OBJ))
  ENGINE_CLI_NAME=$(ENGINE_NAME)-cli$(PROG_SUFFIX)
  ENGINE_CLI_OBJ = \
      adlist.o \
-@@ -653,6 +655,7 @@ endif
+@@ -710,6 +712,7 @@ endif
  DEPENDENCY_TARGETS+= gtest-parallel
  
  ALL_BUILD_PREREQUISITES=$(SERVER_NAME) $(ENGINE_SENTINEL_NAME) $(ENGINE_CLI_NAME) $(ENGINE_BENCHMARK_NAME) $(ENGINE_CHECK_RDB_NAME) $(ENGINE_CHECK_AOF_NAME) $(TLS_MODULE) $(RDMA_MODULE)
@@ -74,18 +74,18 @@ index 2812c4dba..1f14ad4aa 100644
  
  all: $(ALL_BUILD_PREREQUISITES)
  	@echo ""
-@@ -719,6 +722,10 @@ $(ENGINE_LIB_NAME): $(ENGINE_SERVER_OBJ)
+@@ -781,6 +784,10 @@ $(ENGINE_LIB_NAME): $(ENGINE_SERVER_OBJ)
  $(ENGINE_SENTINEL_NAME): $(SERVER_NAME)
  	$(ENGINE_INSTALL) $(SERVER_NAME) $(ENGINE_SENTINEL_NAME)
  
 +# valkey-senticache
 +$(ENGINE_SENTICACHE_NAME): $(ENGINE_SENTICACHE_OBJ)
-+	$(SERVER_LD) -o $@ $^ ../deps/libvalkey/lib/libvalkey.a ../deps/hdr_histogram/libhdrhistogram.a ../deps/fpconv/libfpconv.a $(FINAL_LIBS) $(LUA_LDFLAGS)
++	$(SERVER_LD) -o $@ $^ ../deps/libvalkey/lib/libvalkey.a ../deps/hdr_histogram/libhdrhistogram.a ../deps/fpconv/libfpconv.a ../deps/lz4/liblz4.a $(FINAL_LIBS)
 +
  # valkey-check-rdb
  $(ENGINE_CHECK_RDB_NAME): $(SERVER_NAME)
  	$(ENGINE_INSTALL) $(SERVER_NAME) $(ENGINE_CHECK_RDB_NAME)
-@@ -775,6 +782,7 @@ commands.c: $(COMMANDS_DEF_FILENAME).def
+@@ -841,6 +848,7 @@ commands.c: $(COMMANDS_DEF_FILENAME).def
  
  clean:
  	rm -rf $(SERVER_NAME) $(ENGINE_SENTINEL_NAME) $(ENGINE_CLI_NAME) $(ENGINE_BENCHMARK_NAME) $(ENGINE_CHECK_RDB_NAME) $(ENGINE_CHECK_AOF_NAME) $(ENGINE_UNIT_GTESTS) $(ENGINE_LIB_NAME) trace/*.o trace/*.d *.o *.gcda *.gcno *.gcov valkey.info lcov-html Makefile.dep *.so
@@ -93,17 +93,17 @@ index 2812c4dba..1f14ad4aa 100644
  	rm -f $(DEP)
  	-(cd modules/lua && $(MAKE) clean)
  
-@@ -806,6 +814,9 @@ test-modules: $(SERVER_NAME)
+@@ -872,6 +880,9 @@ test-modules: $(SERVER_NAME)
  test-sentinel: $(ENGINE_SENTINEL_NAME) $(ENGINE_CLI_NAME)
- 	@(cd ..; ./runtest-sentinel)
+ 	@(cd ..; ./runtest-sentinel $(TEST_OPTIONS))
  
 +test-senticache: $(ENGINE_SENTICACHE_NAME) $(ENGINE_CLI_NAME)
 +	@(cd ..; ./runtest-senticache)
 +
  test-cluster: $(SERVER_NAME) $(ENGINE_CLI_NAME)
- 	@(cd ..; ./runtest-cluster)
+ 	@(cd ..; ./runtest-cluster $(TEST_OPTIONS))
  
-@@ -845,6 +856,7 @@ helgrind:
+@@ -911,6 +922,7 @@ helgrind:
  install: all $(LUA_MODULE_INSTALL)
  	@mkdir -p $(INSTALL_BIN)
  	$(call MAKE_INSTALL,$(SERVER_NAME),$(INSTALL_BIN))
@@ -112,10 +112,10 @@ index 2812c4dba..1f14ad4aa 100644
  	$(call MAKE_INSTALL,$(ENGINE_CLI_NAME),$(INSTALL_BIN))
  	@ln -sf $(SERVER_NAME) $(INSTALL_BIN)/$(ENGINE_CHECK_RDB_NAME)
 diff --git a/src/commands.def b/src/commands.def
-index 437e59948..b07106d81 100644
+index 4dcf968b0..01af34f2e 100644
 --- a/src/commands.def
 +++ b/src/commands.def
-@@ -6234,6 +6234,23 @@ struct COMMAND_STRUCT SCRIPT_Subcommands[] = {
+@@ -6711,6 +6711,23 @@ struct COMMAND_STRUCT SCRIPT_Subcommands[] = {
  #define SCRIPT_Keyspecs NULL
  #endif
  
@@ -139,7 +139,7 @@ index 437e59948..b07106d81 100644
  /********** SENTINEL CKQUORUM ********************/
  
  #ifndef SKIP_CMD_HISTORY_TABLE
-@@ -6802,6 +6819,7 @@ struct COMMAND_ARG SENTINEL_SLAVES_Args[] = {
+@@ -7279,6 +7296,7 @@ struct COMMAND_ARG SENTINEL_SLAVES_Args[] = {
  
  /* SENTINEL command table */
  struct COMMAND_STRUCT SENTINEL_Subcommands[] = {
@@ -177,10 +177,10 @@ index 000000000..e3a4b9129
 +}
 diff --git a/src/senticache.c b/src/senticache.c
 new file mode 100644
-index 000000000..39f8b2c6c
+index 000000000..8e910d550
 --- /dev/null
 +++ b/src/senticache.c
-@@ -0,0 +1,1750 @@
+@@ -0,0 +1,1755 @@
 +/* Valkey SentiCache implementation */
 +
 +#include "server.h"
@@ -361,13 +361,18 @@ index 000000000..39f8b2c6c
 + *
 + * also used for: sentinelValkeyInstance->sentinels dictionary that maps
 + * sentinels ip:port to last seen time in Pub/Sub hello message. */
++
++ static void dictEntryDestructorInstancesValue(void *entry) {
++    dictEntry *de = entry;
++    dictInstancesValDestructor(dictGetVal(de));
++    zfree(de);
++}
++
 +dictType instancesDictType = {
-+    dictSdsHash,                /* hash function */
-+    NULL,                       /* key dup */
-+    dictSdsKeyCompare,          /* key compare */
-+    NULL,                       /* key destructor */
-+    dictInstancesValDestructor, /* val destructor */
-+    NULL                        /* allow to expand */
++    .entryGetKey = dictEntryGetKey,
++    .hashFunction = dictSdsHash,
++    .keyCompare = dictSdsKeyCompare,
++    .entryDestructor = dictEntryDestructorInstancesValue,
 +};
 +
 +/* =========================== Initialization =============================== */
@@ -1767,7 +1772,7 @@ index 000000000..39f8b2c6c
 +         * a dictionary composed of just the primary groups the user
 +         * requested. */
 +        dictType copy_keeper = instancesDictType;
-+        copy_keeper.valDestructor = NULL;
++        copy_keeper.entryDestructor = zfree;
 +        dict *primaries_local = sentinel.primaries;
 +        if (c->argc > 2) {
 +            primaries_local = dictCreate(&copy_keeper);
@@ -1932,10 +1937,10 @@ index 000000000..39f8b2c6c
 +    /* just do nothing */
 +}
 diff --git a/src/server.c b/src/server.c
-index 60c8bbddd..2d1359cfd 100644
+index 21dc54759..3b2a3e1a0 100644
 --- a/src/server.c
 +++ b/src/server.c
-@@ -7219,6 +7219,8 @@ int checkForSentinelMode(int argc, char **argv, char *exec_name) {
+@@ -7718,6 +7718,8 @@ int checkForSentinelMode(int argc, char **argv, char *exec_name) {
      /* valkey may install symlinks like redis-sentinel -> valkey-sentinel. */
      if (strstr(exec_name, "redis-sentinel") != NULL) return 1;
  
@@ -1945,7 +1950,7 @@ index 60c8bbddd..2d1359cfd 100644
          if (!strcmp(argv[j], "--sentinel")) return 1;
      return 0;
 diff --git a/tests/instances.tcl b/tests/instances.tcl
-index 4782a5e49..e0871b646 100644
+index ccdf3fcf5..16196534c 100644
 --- a/tests/instances.tcl
 +++ b/tests/instances.tcl
 @@ -27,10 +27,12 @@ set ::failed 0
@@ -1970,7 +1975,7 @@ index 4782a5e49..e0871b646 100644
      } else {
          error "Unknown instance type."
      }
-@@ -596,6 +600,21 @@ proc S {n args} {
+@@ -657,6 +661,21 @@ proc S {n args} {
      [dict get $s link] {*}$args
  }
  
@@ -2210,10 +2215,10 @@ index 000000000..4944e0096
 @@ -0,0 +1 @@
 +senticache_*
 diff --git a/tests/sentinel/tests/00-base.tcl b/tests/sentinel/tests/00-base.tcl
-index 97cc6540a..787581138 100644
+index e13f2c320..b64234a21 100644
 --- a/tests/sentinel/tests/00-base.tcl
 +++ b/tests/sentinel/tests/00-base.tcl
-@@ -89,7 +89,7 @@ test "Basic failover works if the primary is down" {
+@@ -133,7 +133,7 @@ test "Basic failover works if the primary is down" {
      kill_instance valkey $master_id
      foreach_sentinel_id id {
          S $id sentinel debug ping-period 500
@@ -2234,3 +2239,6 @@ index 684f22952..35b5f9aff 100644
  
  # TLS module path: in CMake builds it's in lib/, in Make builds it's in src/
  if {[info exists ::env(VALKEY_BIN_DIR)]} {
+-- 
+2.56.1
+
